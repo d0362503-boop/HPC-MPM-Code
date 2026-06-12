@@ -39,29 +39,20 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-s.vtkhdf";
 
-    std::vector<std::array<double, 3>> points(this->num);
-    std::vector<std::array<double, 3>> velocity(this->num);
     std::vector<double> vm_stress(this->num);
-    std::vector<int> pid(this->num);
-    std::vector<int> mat_id(this->num);
-
     for (int i = 0; i < this->num; ++i) {
-        points[i] = this->coord[i];
-        velocity[i] = this->vel[i];
         vm_stress[i] = this->ComputeVMStress(i);
-        pid[i] = this->id[i];
-        mat_id[i] = this->matid[i];
     }
 
     vtkhdf::VTKHDFWriter writer(filename);
-    auto info = vtkhdf::WriteParticleTopology(writer, points);
+    auto info = vtkhdf::WriteParticleTopology(writer, this->coord);
     writer.SetTime(real_time);
 
     writer.CreatePointDataGroup();
-    writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, velocity);
+    writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, this->vel);
     writer.WritePointScalar("VMStress", info.total_npts, info.local_npts, info.global_offset, vm_stress);
-    writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, pid);
-    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, mat_id);
+    writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, this->id);
+    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, this->matid);
 #endif
 
     return;

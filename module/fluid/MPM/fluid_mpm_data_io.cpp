@@ -33,29 +33,15 @@ void StabilizedMPM::OutputPointDataVTKHDF(int iview, int istep) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
-    std::vector<std::array<double, 3>> points(this->num);
-    std::vector<std::array<double, 3>> velocity(this->num);
-    std::vector<double> pressure(this->num);
-    std::vector<int> pid(this->num);
-    std::vector<int> mat_id(this->num);
-
-    for (int i = 0; i < this->num; ++i) {
-        points[i] = this->coord[i];
-        velocity[i] = this->vel[i];
-        pressure[i] = this->pres[i];
-        pid[i] = this->id[i];
-        mat_id[i] = this->matid[i];
-    }
-
     vtkhdf::VTKHDFWriter writer(filename);
-    auto info = vtkhdf::WriteParticleTopology(writer, points);
+    auto info = vtkhdf::WriteParticleTopology(writer, this->coord);
     writer.SetTime(real_time);
 
     writer.CreatePointDataGroup();
-    writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, velocity);
-    writer.WritePointScalar("Pressure", info.total_npts, info.local_npts, info.global_offset, pressure);
-    writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, pid);
-    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, mat_id);
+    writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, this->vel);
+    writer.WritePointScalar("Pressure", info.total_npts, info.local_npts, info.global_offset, this->pres);
+    writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, this->id);
+    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, this->matid);
 #endif
 
     return;
