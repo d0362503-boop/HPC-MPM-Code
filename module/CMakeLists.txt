@@ -55,6 +55,18 @@ endif()
 target_link_libraries(mpm_modules PUBLIC petsc)
 
 # -----------------------------------------------------------------------------
+# HDF5
+# -----------------------------------------------------------------------------
+if(USE_HDF5)
+    add_dependencies(mpm_modules hdf5_lib_built)
+    target_include_directories(mpm_modules SYSTEM PUBLIC ${HDF5_INCLUDE_DIRS})
+    target_link_libraries(mpm_modules PUBLIC ${HDF5_LIBRARIES} ZLIB::ZLIB dl)
+    target_compile_definitions(mpm_modules PUBLIC HAVE_HDF5)
+    message(STATUS "HDF5 include: ${HDF5_INCLUDE_DIRS}")
+    message(STATUS "HDF5 library: ${HDF5_LIBRARIES}")
+endif()
+
+# -----------------------------------------------------------------------------
 # Add Subdirectories
 # -----------------------------------------------------------------------------
 add_subdirectory(solver)
