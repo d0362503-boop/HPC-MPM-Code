@@ -41,6 +41,7 @@ void StabilizedMPM::OutputPointDataVTKHDF(int iview, int istep) {
     writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, this->vel);
     writer.WritePointScalar("Pressure", info.total_npts, info.local_npts, info.global_offset, this->pres);
     writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, this->id);
+    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, this->matid);
 #endif
 
     return;
