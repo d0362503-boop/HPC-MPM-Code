@@ -2,6 +2,8 @@ build/
 build-cmake/
 res/
 vtk/
+external/
+NUL/
 
 # Compiled objects and binaries
 *.o
@@ -21,9 +23,9 @@ vtk/
 
 # Generated partitioned/sample runtime data
 data/**/myrank_data_*/
-data/**/grid.vtk
-data/**/wp.vtk
-data/**/sp.vtk
+data/**/grid.vtkhdf
+data/**/wp.vtkhdf
+data/**/sp.vtkhdf
 
 # Windows metadata
 *:Zone.Identifier
