@@ -2,6 +2,7 @@ build/
 res/
 stdout/
 stderr/
+.worktrees/
 
 # Compiled objects and binaries
 *.o
