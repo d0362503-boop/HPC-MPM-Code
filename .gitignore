@@ -1,8 +1,8 @@
 build/
 res/
+vtk/
 stdout/
 stderr/
-.worktrees/
 
 # Compiled objects and binaries
 *.o
