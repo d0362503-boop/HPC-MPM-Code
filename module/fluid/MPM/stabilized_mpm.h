@@ -98,6 +98,4 @@ class StabilizedMPM : public MaterialPoint {
 
     // void Cp2NodeVTK();
 };
-
-inline MaterialPoint wp;
 } // namespace stabilizedmpm

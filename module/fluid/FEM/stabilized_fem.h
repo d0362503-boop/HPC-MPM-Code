@@ -106,6 +106,4 @@ class StabilizedFEM : public MaterialPoint {
 
     void OutputMeshDataVTKHDF(int iview, int istep);
 };
-
-inline MaterialPoint wfem;
 } // namespace stabilizedfem

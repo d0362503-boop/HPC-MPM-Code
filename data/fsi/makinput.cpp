@@ -1,10 +1,3 @@
-#include "../../module/bc.h"
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/fluid/FEM/stabilized_fem.h"
-#include "../../module/material_point.h"
-#include "../../module/mesh.h"
-#include "../../module/solid/implicit/implicit_mpm_solid.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -14,18 +7,72 @@
 #include <string>
 #include <vector>
 
+#include "../../module/bc.h"
+#include "../../module/data_io.h"
+#include "../../module/dataset.h"
+#include "../../module/fluid/FEM/stabilized_fem.h"
+#include "../../module/material_point.h"
+#include "../../module/mesh.h"
+
+#ifdef HAVE_HDF5
+#include <mpi.h>
+#include "../../module/vtk_hdf5.h"
+#endif
+
 using namespace std;
-using namespace implicitmpm;
 using namespace stabilizedfem;
 
-void make_surface_point();
+MaterialPoint sp;
+StabilizedFEM wfem;
 
-void create_data() {
+void CreateData();
+void MakeSurfacePoint();
+void WriteGlobalMeshHeader(ofstream& outfile);
+void WriteGlobalBcData(ofstream& outfile);
+
+#ifdef HAVE_HDF5
+void WriteVtkHdf5Mesh(const string& filename);
+void WriteVtkHdf5Points(const string& filename, const MaterialPoint& point);
+#endif
+
+int main() {
+#ifdef HAVE_HDF5
+    MPI_Init(nullptr, nullptr);
+#endif
+
+    cout << " ---- Start making fsi data ----" << "\n";
+
+    CreateData();
+
+    cout << "Making grid file" << "\n";
+    ofstream gridfile;
+    gridfile.open("data/fsi/griddata.txt");
+    gridfile.flags(ios::right | ios::scientific);
+    WriteGlobalMeshHeader(gridfile);
+    WriteGlobalBcData(gridfile);
+    gridfile.close();
+
+#ifdef HAVE_HDF5
+    cout << "Making VTK HDF5 files" << "\n";
+    WriteVtkHdf5Mesh("data/fsi/grid.vtkhdf");
+    WriteVtkHdf5Points("data/fsi/sp.vtkhdf", sp);
+#endif
+
+    cout << " ---- Finish making fsi data ----" << "\n";
+
+#ifdef HAVE_HDF5
+    MPI_Finalize();
+#endif
+
+    return 0;
+}
+
+void CreateData() {
     ifstream infile;
-    infile.open("fsi/input.txt");
+    infile.open("data/fsi/input.txt");
 
     infile.ignore(1000, '\n');
-    std::string solswitch_str;
+    string solswitch_str;
     infile >> solswitch_str >> rstflag >> nlstep;
     sp.solswitch = ParseMapScheme(solswitch_str);
     infile.ignore(1000, '\n');
@@ -59,7 +106,8 @@ void create_data() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> sp.rho >> wfem.rhol >> wfem.rmul >> wfem.rhog >> wfem.rmug >> wfem.fs_height;
+    infile >> sp.rho >> wfem.rhol >> wfem.rmul >> wfem.rhog >> wfem.rmug >>
+        wfem.fs_height;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -92,6 +140,7 @@ void create_data() {
         xynode[i] = xyelem[i] + 1;
         xynodec[i] = xyelem[i] + idimc[i];
     }
+
     int xnode = xynode[0];
     int ynode = xynode[1];
     int znode = xynode[2];
@@ -116,17 +165,13 @@ void create_data() {
     nodec = xnodec * ynodec * znodec;
     int nspe = npxye[0] * npxye[1] * npxye[2];
     double volp = dx * dy * dz / double(nspe);
-    double mwp = wp.rho * volp;
     double msp = sp.rho * volp;
 
-    // --- Gaussian distribution ---
     array<array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
 
-    // --- build mesh ---
     BuildMesh();
-
-    BuildControlPoint(); // --- build control point ---
+    BuildControlPoint();
 
     wfem.ubc.nbc.resize(nodec);
     wfem.vbc.nbc.resize(nodec);
@@ -142,9 +187,6 @@ void create_data() {
     sp.wbc.fbc.resize(nodec);
     wfem.pbc.nbc.resize(nodec);
     wfem.pbc.fbc.resize(nodec);
-    uifbc.nbc.resize(nelem);
-    vifbc.nbc.resize(nelem);
-    wifbc.nbc.resize(nelem);
 
     sp.ubc.ibc = 0;
     sp.vbc.ibc = 0;
@@ -158,19 +200,8 @@ void create_data() {
             for (int i = 0; i < xnodec; i++) {
                 int id = i + xnodec * j + xnodec * ynodec * k;
                 if (i == xnodec - 1 && (k != 0 || k != znodec - 1)) {
-                    // --- Turek FSI ---
-                    double vel = 1.5e0 * (4.0e0 / pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
-                    // --- Beam in fluid channel ---
-                    // double vel = 1.5e-2 * (-pow(xyc[id][2]*100.0e0, 2) + 2.0e0 * xyc[id][2]*100.0e0);
-                    // --- Cavity hyperelastic wall ---
-                    // double vel = 1.0e-2;
-                    // if (xyc[id][0] >= 0.0e0 && xyc[id][0] <= 0.3e-2) {
-                    //     vel = pow(sin(M_PI * xyc[id][0] / 0.6e-2), 2) * 1.0e-2;
-                    // } else if (xyc[id][0] >= 1.7e-2 && xyc[id][0] <= 2.0e-2) {
-                    //     vel = pow(sin(M_PI * (xyc[0][id] - 2.0e-2) / 0.6e-2), 2) * 1.0e-2;
-                    // } else {
-                    //     vel = 1.0e-2;
-                    // }
+                    double vel = 1.5e0 * (4.0e0 / pow(zmax, 2)) * xyc[id][2] *
+                                 (zmax - xyc[id][2]);
                     wfem.ubc.nbc[wfem.ubc.ibc] = id;
                     wfem.ubc.fbc[wfem.ubc.ibc] = vel;
                     wfem.ubc.ibc++;
@@ -213,6 +244,7 @@ void create_data() {
 
     sp.coord.resize(nelem * nspe);
     sp.matid.resize(nelem * nspe);
+    sp.id.resize(nelem * nspe);
 
     sp.num = 0;
     for (int k = 0; k < zelem; k++) {
@@ -228,32 +260,30 @@ void create_data() {
                         double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ip++) {
                             double xp = ecx + dec2p[ip][0];
-                            // --- Beam ---
-                            // if (xp >= 1.0e-2 && xp <= 1.04e-2 && zp <= 8.0e-3) {
-                            // --- Cavity hyperelastic wall ---
-                            // if (zp <= 5.0e-3) {
-                            // --- Ball in Cavity ---
-                            // if (pow((xp - 6.0e-3), 2) + pow((zp - 5.0e-3), 2) <= pow(2.0e-3, 2)) {
-                            // --- Turek FSI ---
                             if (zp >= 0.21e0 || zp <= 0.19e0) {
-                                if (pow((xp - 0.2e0), 2) + pow((zp - 0.2e0), 2) < pow(0.05e0, 2)) {
+                                if (pow((xp - 0.2e0), 2) + pow((zp - 0.2e0), 2) <
+                                    pow(0.05e0, 2)) {
                                     sp.coord[sp.num][0] = xp;
                                     sp.coord[sp.num][1] = yp;
                                     sp.coord[sp.num][2] = zp;
                                     sp.matid[sp.num] = 0;
                                     sp.num++;
                                 }
-                            } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.15e0 && xp <= 0.25e0) {
-                                sp.coord[0][sp.num] = xp;
-                                sp.coord[1][sp.num] = yp;
-                                sp.coord[2][sp.num] = zp;
+                            } else if (zp >= 0.19e0 && zp <= 0.21e0 &&
+                                       xp >= 0.15e0 && xp <= 0.25e0) {
+                                sp.coord[sp.num][0] = xp;
+                                sp.coord[sp.num][1] = yp;
+                                sp.coord[sp.num][2] = zp;
                                 sp.matid[sp.num] = 0;
+                                sp.id[sp.num] = sp.num;
                                 sp.num++;
-                            } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.25e0 && xp <= 0.6e0) {
-                                sp.coord[0][sp.num] = xp;
-                                sp.coord[1][sp.num] = yp;
-                                sp.coord[2][sp.num] = zp;
+                            } else if (zp >= 0.19e0 && zp <= 0.21e0 &&
+                                       xp >= 0.25e0 && xp <= 0.6e0) {
+                                sp.coord[sp.num][0] = xp;
+                                sp.coord[sp.num][1] = yp;
+                                sp.coord[sp.num][2] = zp;
                                 sp.matid[sp.num] = 1;
+                                sp.id[sp.num] = sp.num;
                                 sp.num++;
                             }
                         }
@@ -263,35 +293,33 @@ void create_data() {
         }
     }
 
-    // --- surface point flag ---
+    sp.coord.resize(sp.num);
+    sp.matid.resize(sp.num);
+
     VectorAssign(sp.num, sp.surf_point);
-    make_surface_point();
+    MakeSurfacePoint();
 
     cout << "Making solid point file" << "\n";
     ofstream pointfile;
-    pointfile.open("fsi/pointdata.txt");
-
-    pointfile.flags(ios::right | ios::scientific); // output format
+    pointfile.open("data/fsi/pointdata.txt");
+    pointfile.flags(ios::right | ios::scientific);
     pointfile << setw(10) << sp.num << "\n";
-
-    // cout << "Solid point number: " << sp.num << "\n";
-
     OutputVector(pointfile, sp.num, sp.coord);
     for (int i = 0; i < sp.num; i++) {
-        pointfile << setw(15) << i << setw(15) << sp.matid[i] << setw(15) << sp.surf_point[i] << setw(15) << msp
-                  << setw(15) << volp << "\n";
+        pointfile << setw(15) << i << setw(15) << sp.matid[i] << setw(15)
+                  << sp.surf_point[i] << setw(15) << msp << setw(15) << volp
+                  << "\n";
     }
-
     pointfile.close();
 
     return;
 }
 
-void make_surface_point() {
-    double leftside = numeric_limits<double>::infinity();   // min x
-    double rightside = -numeric_limits<double>::infinity(); // max x
-    double bottside = numeric_limits<double>::infinity();   // min z
-    double upside = -numeric_limits<double>::infinity();    // max z
+void MakeSurfacePoint() {
+    double leftside = numeric_limits<double>::infinity();
+    double rightside = -numeric_limits<double>::infinity();
+    double bottside = numeric_limits<double>::infinity();
+    double upside = -numeric_limits<double>::infinity();
 
     for (int i = 0; i < sp.num; ++i) {
         const double x = sp.coord[i][0];
@@ -305,26 +333,44 @@ void make_surface_point() {
     for (int i = 0; i < sp.num; ++i) {
         const double x = sp.coord[i][0];
         const double z = sp.coord[i][2];
-
-        // if (abs(x - leftside)  <= mtol) {sp.surf_point[i] = 1; continue;}
-        // if (abs(z - bottside) <= mtol) {sp.surf_point[i] = 1; continue;}
-        // if (abs(x - rightside)<= mtol) {sp.surf_point[i] = 1; continue;}
         if (abs(z - upside) <= mtol) {
             sp.surf_point[i] = 1;
-            continue;
         }
     }
 
     return;
 }
 
-void global_bc_data_output(ofstream &outfile) {
-    // --- solid boundary condition ---
+void WriteGlobalMeshHeader(ofstream& outfile) {
+    for (int i = 0; i < 3; ++i) outfile << setw(10) << idimc[i];
+    outfile << "\n";
+
+    for (int i = 0; i < 3; ++i) outfile << setw(15) << xymin[i];
+    outfile << "\n";
+
+    for (int i = 0; i < 3; ++i) outfile << setw(15) << xymax[i];
+    outfile << "\n";
+
+    outfile << setw(10) << nelem;
+    for (int i = 0; i < 3; ++i) outfile << setw(10) << xyelem[i];
+    outfile << "\n";
+
+    outfile << setw(10) << node;
+    for (int i = 0; i < 3; ++i) outfile << setw(10) << xynode[i];
+    outfile << "\n";
+
+    outfile << setw(10) << nodec;
+    for (int i = 0; i < 3; ++i) outfile << setw(10) << xynodec[i];
+    outfile << "\n";
+
+    return;
+}
+
+void WriteGlobalBcData(ofstream& outfile) {
     sp.ubc.BCOutput(outfile, "usbc");
     sp.vbc.BCOutput(outfile, "vsbc");
     sp.wbc.BCOutput(outfile, "wsbc");
 
-    // --- water boundary condition ---
     wfem.ubc.BCOutput(outfile, "uwbc");
     wfem.vbc.BCOutput(outfile, "vwbc");
     wfem.wbc.BCOutput(outfile, "wwbc");
@@ -332,3 +378,27 @@ void global_bc_data_output(ofstream &outfile) {
 
     return;
 }
+
+#ifdef HAVE_HDF5
+void WriteVtkHdf5Mesh(const string& filename) {
+    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
+    vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
+    writer.SetTime(0.0e0);
+
+    return;
+}
+
+void WriteVtkHdf5Points(const string& filename, const MaterialPoint& point) {
+    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
+    auto info = vtkhdf::WriteParticleTopology(writer, point.coord);
+    writer.SetTime(0.0e0);
+
+    writer.CreatePointDataGroup();
+    writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, point.id);
+    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, point.matid);
+    writer.WritePointScalar("SurfFlag", info.total_npts, info.local_npts, info.global_offset,
+                            point.surf_point);
+
+    return;
+}
+#endif

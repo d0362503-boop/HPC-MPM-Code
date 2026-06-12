@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
-# Build PETSc from Ext/petsc-3.24.5.tar.gz into external/petsc
+# Build PETSc from Ext/petsc-3.24.5.tar.gz into ${PETSC_DIR}
 # This script is idempotent: if external/petsc already exists, it does nothing.
 # -----------------------------------------------------------------------------
 
 set(PETSC_TARBALL "${SRC_DIR}/Ext/petsc-3.24.5.tar.gz")
-set(PETSC_INSTALL_DIR "${SRC_DIR}/external/petsc")
+set(PETSC_INSTALL_DIR "${PETSC_DIR}")
 set(MARKER "${BIN_DIR}/petsc_is_built")
 
 if(EXISTS "${PETSC_INSTALL_DIR}/include/petsc.h")

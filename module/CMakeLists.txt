@@ -25,28 +25,38 @@ endif()
 # -----------------------------------------------------------------------------
 # Find PETSc
 # -----------------------------------------------------------------------------
-# Prefer project-local PETSc; fall back to PETSC_DIR environment variable.
-set(MPM_LOCAL_PETSC "${CMAKE_SOURCE_DIR}/external/petsc")
-if(EXISTS "${MPM_LOCAL_PETSC}/include/petsc.h")
-    set(PETSC_DIR "${MPM_LOCAL_PETSC}")
-    message(STATUS "Using project-local PETSc: ${PETSC_DIR}")
-elseif(DEFINED ENV{PETSC_DIR})
-    set(PETSC_DIR "$ENV{PETSC_DIR}")
-    set(PETSC_ARCH "$ENV{PETSC_ARCH}")
-    message(STATUS "Using PETSc from environment: ${PETSC_DIR}")
-else()
-    message(FATAL_ERROR "PETSc not found. Please install it to ${MPM_LOCAL_PETSC} or set PETSC_DIR.")
+# PETSC_DIR is expected to be set by cmake/options.cmake (default: external/petsc).
+# If it is empty, fall back to the PETSC_DIR environment variable.
+if(NOT PETSC_DIR OR PETSC_DIR STREQUAL "")
+    if(DEFINED ENV{PETSC_DIR})
+        set(PETSC_DIR "$ENV{PETSC_DIR}" CACHE PATH "PETSc installation directory" FORCE)
+    else()
+        message(FATAL_ERROR "PETSc not found. Set PETSC_DIR or enable BUILD_PETSC.")
+    endif()
 endif()
 
-# 设置 PETSc 包含目录和库
+if(NOT PETSC_ARCH AND DEFINED ENV{PETSC_ARCH})
+    set(PETSC_ARCH "$ENV{PETSC_ARCH}" CACHE STRING "PETSc architecture subdirectory" FORCE)
+endif()
+
+# If a PETSC_ARCH was picked up but the corresponding directory does not exist
+# (e.g., environment variable left over from a different install), ignore it.
+if(PETSC_ARCH AND NOT EXISTS "${PETSC_DIR}/${PETSC_ARCH}/include/petsc.h")
+    message(WARNING "PETSC_ARCH '${PETSC_ARCH}' not found under ${PETSC_DIR}; ignoring it.")
+    set(PETSC_ARCH "" CACHE STRING "PETSc architecture subdirectory" FORCE)
+endif()
+
+if(NOT EXISTS "${PETSC_DIR}/include/petsc.h")
+    message(FATAL_ERROR "PETSc header not found at ${PETSC_DIR}/include/petsc.h")
+endif()
+
+message(STATUS "Using PETSc: ${PETSC_DIR}")
+
+# PETSc include directories and libraries
 target_include_directories(mpm_modules SYSTEM PUBLIC ${PETSC_DIR}/include)
 if(PETSC_ARCH)
     target_include_directories(mpm_modules SYSTEM PUBLIC ${PETSC_DIR}/${PETSC_ARCH}/include)
     target_link_directories(mpm_modules PUBLIC ${PETSC_DIR}/${PETSC_ARCH}/lib)
-    # PETSc 可能通过 --prefix 安装到独立目录
-    if(EXISTS "${PETSC_DIR}-install/lib")
-        target_link_directories(mpm_modules PUBLIC ${PETSC_DIR}-install/lib)
-    endif()
 else()
     target_link_directories(mpm_modules PUBLIC ${PETSC_DIR}/lib)
 endif()

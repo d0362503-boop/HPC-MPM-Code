@@ -2,25 +2,12 @@
 # Data generators (makinput tools)
 # -----------------------------------------------------------------------------
 
-set(DATA_COMMON_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/data_main.cpp
-)
+add_executable(makinput_fluid fluid/makinput.cpp)
+add_executable(makinput_solid solid/makinput.cpp)
+add_executable(makinput_fsi fsi/makinput.cpp)
 
-function(add_makinput_target case_name)
-    set(target_name "makinput_${case_name}")
-    set(case_source "${CMAKE_CURRENT_SOURCE_DIR}/${case_name}/makinput.cpp")
-
-    if(NOT EXISTS ${case_source})
-        message(WARNING "makinput source not found: ${case_source}")
-        return()
-    endif()
-
-    add_executable(${target_name}
-        ${DATA_COMMON_SOURCES}
-        ${case_source}
-    )
-
-    target_include_directories(${target_name} PRIVATE
+foreach(target makinput_fluid makinput_solid makinput_fsi)
+    target_include_directories(${target} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/module
         ${CMAKE_SOURCE_DIR}/module/fluid/MPM
@@ -28,9 +15,5 @@ function(add_makinput_target case_name)
         ${CMAKE_SOURCE_DIR}/module/solid/implicit
     )
 
-    target_link_libraries(${target_name} PRIVATE mpm_modules)
-endfunction()
-
-add_makinput_target(fluid)
-add_makinput_target(solid)
-add_makinput_target(fsi)
+    target_link_libraries(${target} PRIVATE mpm_modules)
+endforeach()

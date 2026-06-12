@@ -93,7 +93,4 @@ class SolidMaterialPoint : public SolidMaterialPointBase {
 
     void UpdateNRIncrement() override;
 };
-
-// --- Solid Point object ---
-inline SolidMaterialPoint sp;
 } // namespace implicitmpm

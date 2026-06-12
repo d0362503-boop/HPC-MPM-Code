@@ -28,22 +28,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ----------------------------------------------------------------------------
 # Build options
 # ----------------------------------------------------------------------------
-option(USE_MPI "Enable MPI parallelism" ON)
-option(USE_HDF5 "Enable HDF5 for VTK HDF5 output" ON)
-option(HDF5_ENABLE_PARALLEL "Build parallel HDF5 (requires MPI)" ON)
-option(HDF5_BUILD_TOOLS "Build HDF5 tools" OFF)
-option(HDF5_BUILD_HL_LIB "Build HDF5 high-level library" OFF)
+include(cmake/options.cmake)
 
-set(USE_SRC_FLUID false CACHE BOOL "Use work/src_fluid sources")
-set(USE_SRC_SOLID false CACHE BOOL "Use work/src_solid sources")
-set(USE_SRC_FSI true CACHE BOOL "Use work/src_fsi sources")
-set(USE_SOLVER true CACHE BOOL "Build module/solver")
-set(USE_FLUID true CACHE BOOL "Build module/fluid")
-set(USE_SOLID true CACHE BOOL "Build module/solid")
-set(USE_FEM true CACHE BOOL "Use fluid FEM mode")
-set(USE_MPM false CACHE BOOL "Use fluid MPM mode")
-set(SOLID_METHOD "IMPLICIT" CACHE STRING "Solid solver method: EXPLICIT or IMPLICIT")
-set(FLUID_METHOD "FEM" CACHE STRING "Fluid solver method: FEM or MPM")
+# Only the 'build' directory is allowed as the CMake binary directory.
+get_filename_component(MPM_BUILD_DIR_NAME ${CMAKE_BINARY_DIR} NAME)
+if(NOT MPM_BUILD_DIR_NAME STREQUAL "build")
+    message(FATAL_ERROR "CMake binary directory must be named 'build'. Current: ${MPM_BUILD_DIR_NAME}")
+endif()
 
 # ----------------------------------------------------------------------------
 # MPI
@@ -65,13 +56,16 @@ if(USE_HDF5)
     add_custom_target(hdf5_lib_built DEPENDS hdf5_is_built)
 endif()
 
-include(cmake/BuildPETSc.cmake)
-add_custom_target(petsc_lib_built)
+if(BUILD_PETSC)
+    include(cmake/BuildPETSc.cmake)
+    add_custom_target(petsc_lib_built)
+endif()
 
 # ----------------------------------------------------------------------------
 # Subdirectories
 # ----------------------------------------------------------------------------
 add_subdirectory(module)
+add_subdirectory(data)
 add_subdirectory(work)
 
 # ----------------------------------------------------------------------------

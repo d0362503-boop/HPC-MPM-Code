@@ -1,5 +1,4 @@
 build/
-build-cmake/
 res/
 vtk/
 external/
