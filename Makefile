@@ -136,4 +136,11 @@ test-hdf5:
 	$(BUILD_DIR)/test_hdf5
 	@rm -f $(BUILD_DIR)/test_hdf5 $(BUILD_DIR)/test_hdf5.o test_hdf5.h5
 
-.PHONY: all clean test-hdf5
+# VTK HDF5 writer smoke test
+test-vtk-hdf5:
+	@echo "Testing VTK HDF5 writer..."
+	$(CXX) $(CXXFLAGS) -I$(MODULE_DIR) tests/test_vtk_hdf5.cpp -o $(BUILD_DIR)/test_vtk_hdf5 $(HDF5_LDFLAGS)
+	mpiexec -np 2 $(BUILD_DIR)/test_vtk_hdf5
+	@rm -f $(BUILD_DIR)/test_vtk_hdf5 test_grid.vtkhdf
+
+.PHONY: all clean test-hdf5 test-vtk-hdf5
