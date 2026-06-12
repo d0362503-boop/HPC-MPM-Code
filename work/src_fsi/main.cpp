@@ -56,7 +56,7 @@ void MPMBlockFSI() {
 
     fsi.fluid_.Cp2NodeVTK();
 
-    fsi.solid_.OutputPointData(iview, istep);
+    fsi.solid_.OutputPointDataVTKHDF(iview, istep);
 
     fsi.fluid_.OutputMeshData(iview, istep);
 
@@ -89,7 +89,7 @@ void MPMBlockFSI() {
 
         if (istep % iout == 0) {
             iview++;
-            fsi.solid_.OutputPointData(iview, istep);
+            fsi.solid_.OutputPointDataVTKHDF(iview, istep);
             fsi.fluid_.Cp2NodeVTK();
             fsi.fluid_.OutputMeshData(iview, istep);
 

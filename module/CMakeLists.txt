@@ -25,19 +25,17 @@ endif()
 # -----------------------------------------------------------------------------
 # Find PETSc
 # -----------------------------------------------------------------------------
-# 优先使用环境变量 PETSC_DIR 指定的版本，否则使用项目本地 3.24.5 版本
-if(DEFINED ENV{PETSC_DIR})
+# Prefer project-local PETSc; fall back to PETSC_DIR environment variable.
+set(MPM_LOCAL_PETSC "${CMAKE_SOURCE_DIR}/external/petsc")
+if(EXISTS "${MPM_LOCAL_PETSC}/include/petsc.h")
+    set(PETSC_DIR "${MPM_LOCAL_PETSC}")
+    message(STATUS "Using project-local PETSc: ${PETSC_DIR}")
+elseif(DEFINED ENV{PETSC_DIR})
     set(PETSC_DIR "$ENV{PETSC_DIR}")
     set(PETSC_ARCH "$ENV{PETSC_ARCH}")
     message(STATUS "Using PETSc from environment: ${PETSC_DIR}")
 else()
-    set(PETSC_DIR "/home/pan/petsc-3.24.5")
-    set(PETSC_ARCH "arch-linux-c-release")
-    if(EXISTS "${PETSC_DIR}/include/petsc.h")
-        message(STATUS "Using project-local PETSc: ${PETSC_DIR}")
-    else()
-        message(FATAL_ERROR "PETSc not found at ${PETSC_DIR}. Please set PETSC_DIR environment variable.")
-    endif()
+    message(FATAL_ERROR "PETSc not found. Please install it to ${MPM_LOCAL_PETSC} or set PETSC_DIR.")
 endif()
 
 # 设置 PETSc 包含目录和库
@@ -53,6 +51,10 @@ else()
     target_link_directories(mpm_modules PUBLIC ${PETSC_DIR}/lib)
 endif()
 target_link_libraries(mpm_modules PUBLIC petsc)
+
+if(TARGET petsc_lib_built)
+    add_dependencies(mpm_modules petsc_lib_built)
+endif()
 
 # -----------------------------------------------------------------------------
 # HDF5

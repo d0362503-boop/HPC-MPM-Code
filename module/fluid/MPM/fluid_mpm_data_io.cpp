@@ -8,6 +8,7 @@
 #include "../../material_point.h"
 #include "../../mesh.h"
 #include "../../mpi_data.h"
+#include "../../vtk_hdf5.h"
 #include "stabilized_mpm.h"
 
 using namespace stabilizedmpm;
@@ -28,26 +29,59 @@ void StabilizedMPM::InputPointData(std::ifstream &infile) {
     return;
 }
 
-void StabilizedMPM::OutputPointData(int iview, int istep) {
+void StabilizedMPM::OutputPointDataVTKHDF(int iview, int istep) {
+#ifdef HAVE_HDF5
+    std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
-    std::ofstream ofile;
-    ofile.flags(std::ios::right | std::ios::scientific);
-    std::string filename = outfile + std::to_string(myrank) + "-" + std::to_string(iview) + "-w.txt";
-    ofile.open(filename);
-    ofile << std::setw(15) << myrank << std::setw(15) << this->num //
-          << std::setw(15) << istep << std::setw(15) << iview << "\n";
+    hsize_t local_npts = static_cast<hsize_t>(this->num);
+    hsize_t global_offset = 0;
+    hsize_t total_npts = local_npts;
+    vtkhdf::VTKHDFWriter::ComputeGlobalInfo(local_npts, global_offset, total_npts);
 
-    for (int pid = 0; pid < this->num; pid++) {
-        ofile << std::setw(15) << this->id[pid]       //
-              << std::setw(15) << this->coord[pid][0] //
-              << std::setw(15) << this->coord[pid][1] //
-              << std::setw(15) << this->coord[pid][2] //
-              << std::setw(15) << this->vel[pid][0]   //
-              << std::setw(15) << this->vel[pid][1]   //
-              << std::setw(15) << this->vel[pid][2]   //
-              << std::setw(15) << this->pres[pid] << "\n";
+    std::vector<std::array<double, 3>> points(local_npts);
+    std::vector<std::array<double, 3>> velocity(local_npts);
+    std::vector<double> pressure(local_npts);
+    std::vector<int> pid(local_npts);
+    std::vector<int> mat_id(local_npts);
+
+    for (int i = 0; i < this->num; ++i) {
+        points[i] = this->coord[i];
+        velocity[i] = this->vel[i];
+        pressure[i] = this->pres[i];
+        pid[i] = this->id[i];
+        mat_id[i] = this->matid[i];
     }
-    ofile.close();
+
+    std::vector<long long> connectivity(local_npts);
+    std::vector<unsigned char> types(local_npts, 1); // VTK_VERTEX
+    for (hsize_t i = 0; i < local_npts; ++i) {
+        connectivity[i] = static_cast<long long>(global_offset + i);
+    }
+
+    bool is_last_rank = (myrank == nprocs - 1);
+    hsize_t local_offsets_count = local_npts + (is_last_rank ? 1 : 0);
+    std::vector<long long> offsets(local_offsets_count);
+    for (hsize_t i = 0; i < local_npts; ++i) {
+        offsets[i] = static_cast<long long>(global_offset + i);
+    }
+    if (is_last_rank) {
+        offsets[local_npts] = static_cast<long long>(global_offset + local_npts);
+    }
+
+    vtkhdf::VTKHDFWriter writer(filename);
+    writer.CreateUnstructuredGridGroup(total_npts, total_npts, total_npts);
+    writer.SetTime(real_time);
+    writer.WritePoints(total_npts, local_npts, global_offset, points);
+    writer.WriteConnectivity(total_npts, local_npts, global_offset, connectivity);
+    writer.WriteOffsets(total_npts + 1, local_offsets_count, global_offset, offsets);
+    writer.WriteTypes(total_npts, local_npts, global_offset, types);
+
+    writer.CreatePointDataGroup();
+    writer.WritePointVector("Velocity", total_npts, local_npts, global_offset, velocity);
+    writer.WritePointScalar("Pressure", total_npts, local_npts, global_offset, pressure);
+    writer.WritePointScalarInt("ID", total_npts, local_npts, global_offset, pid);
+    writer.WritePointScalarInt("MatID", total_npts, local_npts, global_offset, mat_id);
+#endif
 
     return;
 }

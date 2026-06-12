@@ -83,7 +83,7 @@ class StabilizedMPM : public MaterialPoint {
 
     void RestartInput() override;
 
-    void OutputPointData(int iview, int istep) override;
+    void OutputPointDataVTKHDF(int iview, int istep) override;
 
     void RestartOutput() override;
 

@@ -32,7 +32,7 @@ void StabilizedMixedMPM() {
     int iview = istep / iout;
     real_time = dt * double(istep);
 
-    wp.OutputPointData(iview, istep);
+    wp.OutputPointDataVTKHDF(iview, istep);
 
     for (istep = ista; istep <= iend; istep++) {
 
@@ -57,7 +57,7 @@ void StabilizedMixedMPM() {
 
         if (istep % iout == 0) {
             iview++;
-            wp.OutputPointData(iview, istep);
+            wp.OutputPointDataVTKHDF(iview, istep);
 
             if (rstflag == 2 || rstflag == 3) wp.RestartOutput();
         }

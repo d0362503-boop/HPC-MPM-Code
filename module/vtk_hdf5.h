@@ -307,14 +307,24 @@ class VTKHDFWriter {
                                        const std::vector<long long>& offsets,
                                        const std::vector<unsigned char>& types) {
         WritePoints(total_npts, local_npts, global_offset, points);
-        WriteConnectivity(total_npts, local_npts, global_offset, connectivity);
 
-        // Offsets size depends on whether this rank holds the closing boundary value.
-        bool is_last_rank = (my_rank == n_ranks - 1);
-        hsize_t local_offsets_count = local_npts + (is_last_rank ? 1 : 0);
-        WriteOffsets(total_npts + 1, local_offsets_count, global_offset, offsets);
+        hsize_t local_conn_count = connectivity.size();
+        hsize_t conn_global_offset = 0;
+        hsize_t total_conn_count = local_conn_count;
+        ComputeGlobalInfo(local_conn_count, conn_global_offset, total_conn_count, comm);
+        WriteConnectivity(total_conn_count, local_conn_count, conn_global_offset, connectivity);
 
-        WriteTypes(total_npts, local_npts, global_offset, types);
+        hsize_t local_offsets_count = offsets.size();
+        hsize_t offsets_global_offset = 0;
+        hsize_t total_offsets_count = local_offsets_count;
+        ComputeGlobalInfo(local_offsets_count, offsets_global_offset, total_offsets_count, comm);
+        WriteOffsets(total_offsets_count, local_offsets_count, offsets_global_offset, offsets);
+
+        hsize_t local_type_count = types.size();
+        hsize_t types_global_offset = 0;
+        hsize_t total_type_count = local_type_count;
+        ComputeGlobalInfo(local_type_count, types_global_offset, total_type_count, comm);
+        WriteTypes(total_type_count, local_type_count, types_global_offset, types);
     }
 
     // ------------------------------------------------------------------------

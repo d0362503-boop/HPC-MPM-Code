@@ -22,7 +22,7 @@ class SolidMaterialPointBase : public MaterialPoint {
     void RestartInput() override;
 
     // --- Data I/O ---
-    void OutputPointData(int iview, int istep) override;
+    void OutputPointDataVTKHDF(int iview, int istep) override;
 
     void RestartOutput() override;
 

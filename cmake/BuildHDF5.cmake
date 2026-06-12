@@ -5,6 +5,10 @@
 
 set(HDF5_TARBALL "${SRC_DIR}/Ext/hdf5-hdf5_1.14.5.tar.gz")
 set(HDF5_INSTALL_DIR "${SRC_DIR}/external/hdf5")
+set(HDF5_INCLUDE_DIRS "${HDF5_INSTALL_DIR}/include"
+    CACHE STRING "HDF5 include directories" FORCE)
+set(HDF5_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5.a"
+    CACHE STRING "HDF5 library" FORCE)
 set(MARKER "${BIN_DIR}/hdf5_is_built")
 
 if(EXISTS "${HDF5_INSTALL_DIR}/include/hdf5.h")

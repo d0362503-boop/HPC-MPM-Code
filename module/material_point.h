@@ -126,7 +126,7 @@ class MaterialPoint {
 
     virtual void RestartInput() {};
 
-    virtual void OutputPointData(int iview, int istep) {};
+    virtual void OutputPointDataVTKHDF(int iview, int istep) {};
 
     virtual void RestartOutput() {};
 

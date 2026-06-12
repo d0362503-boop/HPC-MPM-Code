@@ -39,7 +39,7 @@ void Solid_implicit_ULMPM () {
     int iview = istep / iout;
     real_time = dt * double(istep);
 
-    sp.OutputPointData(iview, istep);
+    sp.OutputPointDataVTKHDF(iview, istep);
     
     for (istep = ista; istep <= iend; istep++) {
 
@@ -65,7 +65,7 @@ void Solid_implicit_ULMPM () {
 
         if (istep/iout*iout == istep) {
             iview++;
-            sp.OutputPointData(iview, istep);
+            sp.OutputPointDataVTKHDF(iview, istep);
         }
 
         if (istep%100 == 0 && myrank == 0) {
