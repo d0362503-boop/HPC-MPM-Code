@@ -77,20 +77,13 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
     std::string filename = outfile + std::to_string(myrank) + "-" + std::to_string(iview) + "-w.vtkhdf";
 
     std::vector<std::array<double, 3>> velocity(node);
-    std::vector<std::array<long long, 8>> conn8(nelem);
 
     for (int n = 0; n < node; ++n) {
         velocity[n] = {this->nvel_vtk[n + nu], this->nvel_vtk[n + nv], this->nvel_vtk[n + nw]};
     }
 
-    for (int m = 0; m < nelem; ++m) {
-        for (int n = 0; n < 8; ++n) {
-            conn8[m][n] = static_cast<long long>(nc[m][n]);
-        }
-    }
-
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
-    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, conn8);
+    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
     writer.SetTime(real_time);
 
     writer.CreatePointDataGroup();

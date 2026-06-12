@@ -418,7 +418,7 @@ struct HexMeshTopologyInfo {
 
 inline HexMeshTopologyInfo WriteHexMeshTopology(VTKHDFWriter& writer,
                                                 const std::vector<std::array<double, 3>>& points,
-                                                const std::vector<std::array<long long, 8>>& conn8) {
+                                                const std::vector<std::array<int, 8>>& conn8) {
     HexMeshTopologyInfo info;
     info.local_npts = static_cast<hsize_t>(points.size());
     info.local_ncells = static_cast<hsize_t>(conn8.size());
