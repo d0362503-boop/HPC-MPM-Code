@@ -7,6 +7,7 @@
 #include "../../dataset.h"
 #include "../../mesh.h"
 #include "../../shape_function.h"
+#include "../../vtk_hdf5.h"
 #include "stabilized_fem.h"
 
 using namespace stabilizedfem;
@@ -71,31 +72,38 @@ void StabilizedFEM::RestartOutput() {
     return;
 }
 
-void StabilizedFEM::OutputMeshData(int iview, int istep) {
-    std::ofstream ofile;
-    ofile.flags(std::ios::right | std::ios::scientific);
-    std::string filename = outfile + std::to_string(myrank) + "-" + std::to_string(iview) + "-w.txt";
+void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
+#ifdef HAVE_HDF5
+    std::string filename = outfile + std::to_string(myrank) + "-" + std::to_string(iview) + "-w.vtkhdf";
 
-    ofile.open(filename);
-    ofile << std::setw(10) << myrank << std::setw(10) << node << std::setw(10) << istep << std::setw(10) << iview
-          << "\n";
-    for (int i = 0; i < 3; i++) ofile << std::setw(10) << xynodew[i];
-    ofile << "\n";
+    std::vector<std::array<double, 3>> points(node);
+    std::vector<std::array<double, 3>> velocity(node);
+    std::vector<double> pressure(node);
+    std::vector<double> phi(node);
+    std::vector<std::array<long long, 8>> conn8(nelem);
 
-    for (int i = 0; i < 3; i++) ofile << std::setw(15) << xyminw[i];
-    for (int i = 0; i < 3; i++) ofile << std::setw(15) << xymaxw[i];
-    ofile << "\n";
-
-    for (int i = 0; i < 3; i++) ofile << std::setw(10) << aelemmin[i];
-    for (int i = 0; i < 3; i++) ofile << std::setw(10) << aelemmax[i];
-    ofile << "\n";
-
-    for (int n = 0; n < node; n++) {
-        ofile << std::setw(15) << this->nvel_vtk[n + nu] << std::setw(15) << this->nvel_vtk[n + nv] << std::setw(15)
-              << this->nvel_vtk[n + nw] << std::setw(15) << this->npres_vtk[n] << std::setw(15) << this->nphi_vtk[n]
-              << "\n";
+    for (int n = 0; n < node; ++n) {
+        points[n] = xyn[n];
+        velocity[n] = {this->nvel_vtk[n + nu], this->nvel_vtk[n + nv], this->nvel_vtk[n + nw]};
+        pressure[n] = this->npres_vtk[n];
+        phi[n] = this->nphi_vtk[n];
     }
-    ofile.close();
+
+    for (int m = 0; m < nelem; ++m) {
+        for (int n = 0; n < 8; ++n) {
+            conn8[m][n] = static_cast<long long>(nc[m][n]);
+        }
+    }
+
+    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
+    auto info = vtkhdf::WriteHexMeshTopology(writer, points, conn8);
+    writer.SetTime(real_time);
+
+    writer.CreatePointDataGroup();
+    writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.point_global_offset, velocity);
+    writer.WritePointScalar("Pressure", info.total_npts, info.local_npts, info.point_global_offset, pressure);
+    writer.WritePointScalar("Phi", info.total_npts, info.local_npts, info.point_global_offset, phi);
+#endif
 
     return;
 }

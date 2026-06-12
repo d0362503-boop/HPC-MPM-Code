@@ -20,7 +20,7 @@ The solver uses a **SUPG/PSPG stabilized formulation** with **generalized-α tim
 | `stabilized_fem.h` | Class declaration, inline constructor, and global singleton `wfem` |
 | `solve_ns_fem.cpp` | Time integration, stabilization-coefficient calculation, system assembly, and linear solve |
 | `phase_field.cpp`  | Phase-field initialization, volume-fraction projection (`Particle2NodePhi`), material-property blending (`SetPFDomain`), liquid-volume calculation (`CalLiquidVol`) |
-| `fem_data_io.cpp`  | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshData`), VTK nodal interpolation (`Cp2NodeVTK`) |
+| `fem_data_io.cpp`  | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshDataVTKHDF`), VTK nodal interpolation (`Cp2NodeVTK`) |
 
 > **Note:** Fluid-specific boundary-condition overrides (`BuildPetscBCList`, `BCResidualSet`) are **declared** in `stabilized_fem.h` but **implemented** in `src_fsi/bc_setting.cpp` alongside the solid BC logic.
 
@@ -108,7 +108,7 @@ npres_old  ← npres
 | Routine | Format | Content |
 |---------|--------|---------|
 | `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`) | `naccel`, `nvel`, `nvel_old`, `nvel_older`, `npres`, `nphi` |
-| `OutputMeshData` | Plain text, per-rank & view (`*-w.txt`) | Rank, step, view ID, bounding box, `nvel_vtk`, `npres_vtk`, `nphi_vtk` |
+| `OutputMeshDataVTKHDF` | VTK HDF5, per-rank & view (`*-w.vtkhdf`) | `Points`, hexahedron cells, `Velocity`, `Pressure`, `Phi` |
 | `Cp2NodeVTK` | Internal interpolation | Copies cell-corner data to nodes for VTK output, with clipping of `nphi_vtk` near 0 or 1 |
 
 ---

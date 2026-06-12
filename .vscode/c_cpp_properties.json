@@ -12,31 +12,33 @@
                 "${workspaceFolder}/module/solid/explicit",
                 "${workspaceFolder}/module/solid/implicit",
                 "${workspaceFolder}/module/solver",
-                "${workspaceFolder}/src_fsi",
-                "${workspaceFolder}/src_fluid",
-                "${workspaceFolder}/src_solid",
-                "/home/pan/petsc-3.24.5/include",
-                "/home/pan/petsc-3.24.5/arch-linux-c-release/include",
+                "${workspaceFolder}/work/src_fsi",
+                "${workspaceFolder}/work/src_fluid",
+                "${workspaceFolder}/work/src_solid",
+                "${workspaceFolder}/external/petsc/include",
+                "${workspaceFolder}/external/hdf5/include",
                 "/usr/lib/x86_64-linux-gnu/openmpi/include",
                 "/usr/lib/x86_64-linux-gnu/openmpi/include/openmpi"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "HAVE_HDF5"
             ],
             "compilerPath": "/usr/bin/mpicxx",
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
             "browse": {
                 "path": [
                     "${workspaceFolder}/module",
-                    "${workspaceFolder}/src_fsi",
-                    "${workspaceFolder}/src_fluid",
-                    "${workspaceFolder}/src_solid",
-                    "/home/pan/petsc-3.24.5/include",
-                    "/home/pan/petsc-3.24.5/arch-linux-c-release/include"
+                    "${workspaceFolder}/work/src_fsi",
+                    "${workspaceFolder}/work/src_fluid",
+                    "${workspaceFolder}/work/src_solid",
+                    "${workspaceFolder}/external/petsc/include",
+                    "${workspaceFolder}/external/hdf5/include"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": "${workspaceFolder}/.vscode/browse.db"

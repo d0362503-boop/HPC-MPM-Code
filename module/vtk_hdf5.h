@@ -330,16 +330,11 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // Point / cell data helpers
     // ------------------------------------------------------------------------
+    template <typename T>
     void WritePointScalar(const char* name, hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
-                          const std::vector<double>& field) {
-        CreateAndWriteScalar(pointdata_group, name, total_npts, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_npts, global_offset);
-    }
-
-    void WritePointScalarInt(const char* name, hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
-                             const std::vector<int>& field) {
-        CreateAndWriteScalar(pointdata_group, name, total_npts, H5T_STD_I32LE, H5T_NATIVE_INT, field.data(), local_npts,
-                             global_offset);
+                          const std::vector<T>& field) {
+        CreateAndWriteScalar(pointdata_group, name, total_npts, HDF5TypeMap<T>::fileType(), HDF5TypeMap<T>::memType(),
+                             field.data(), local_npts, global_offset);
     }
 
     void WritePointVector(const char* name, hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
@@ -360,6 +355,110 @@ class VTKHDFWriter {
                              local_ncells, global_offset);
     }
 };
+
+// ----------------------------------------------------------------------------
+// Particle dataset helper: each point is written as a VTK_VERTEX cell.
+// ----------------------------------------------------------------------------
+struct ParticleTopologyInfo {
+    hsize_t total_npts = 0;
+    hsize_t local_npts = 0;
+    hsize_t global_offset = 0;
+};
+
+inline ParticleTopologyInfo WriteParticleTopology(VTKHDFWriter& writer,
+                                                  const std::vector<std::array<double, 3>>& points) {
+    ParticleTopologyInfo info;
+    info.local_npts = static_cast<hsize_t>(points.size());
+    info.total_npts = info.local_npts;
+    VTKHDFWriter::ComputeGlobalInfo(info.local_npts, info.global_offset, info.total_npts, writer.comm);
+
+    writer.CreateUnstructuredGridGroup(info.total_npts, info.total_npts, info.total_npts);
+    writer.WritePoints(info.total_npts, info.local_npts, info.global_offset, points);
+
+    std::vector<long long> connectivity(info.local_npts);
+    std::vector<unsigned char> types(info.local_npts, 1); // VTK_VERTEX
+    for (hsize_t i = 0; i < info.local_npts; ++i) {
+        connectivity[i] = static_cast<long long>(info.global_offset + i);
+    }
+    writer.WriteConnectivity(info.total_npts, info.local_npts, info.global_offset, connectivity);
+
+    bool is_last_rank = (writer.my_rank == writer.n_ranks - 1);
+    hsize_t local_offsets_count = info.local_npts + (is_last_rank ? 1 : 0);
+    std::vector<long long> offsets(local_offsets_count);
+    for (hsize_t i = 0; i < info.local_npts; ++i) {
+        offsets[i] = static_cast<long long>(info.global_offset + i);
+    }
+    if (is_last_rank) {
+        offsets[info.local_npts] = static_cast<long long>(info.global_offset + info.local_npts);
+    }
+    writer.WriteOffsets(info.total_npts + 1, local_offsets_count, info.global_offset, offsets);
+    writer.WriteTypes(info.total_npts, info.local_npts, info.global_offset, types);
+
+    return info;
+}
+
+// ----------------------------------------------------------------------------
+// Hexahedral mesh helper: each cell is an 8-node VTK_HEXAHEDRON.
+//
+// `conn8[m][n]` is the global (or per-rank, if writer.comm is MPI_COMM_SELF)
+// node ID for the n-th node of cell m.  The helper computes global counts and
+// offsets from writer.comm and writes Points/Connectivity/Offsets/Types.
+// ----------------------------------------------------------------------------
+struct HexMeshTopologyInfo {
+    hsize_t total_npts = 0;
+    hsize_t total_ncells = 0;
+    hsize_t total_conn_count = 0;
+    hsize_t local_npts = 0;
+    hsize_t local_ncells = 0;
+    hsize_t local_conn_count = 0;
+    hsize_t point_global_offset = 0;
+    hsize_t cell_global_offset = 0;
+    hsize_t conn_global_offset = 0;
+};
+
+inline HexMeshTopologyInfo WriteHexMeshTopology(VTKHDFWriter& writer,
+                                                const std::vector<std::array<double, 3>>& points,
+                                                const std::vector<std::array<long long, 8>>& conn8) {
+    HexMeshTopologyInfo info;
+    info.local_npts = static_cast<hsize_t>(points.size());
+    info.local_ncells = static_cast<hsize_t>(conn8.size());
+    info.local_conn_count = info.local_ncells * 8;
+
+    info.total_npts = info.local_npts;
+    info.total_ncells = info.local_ncells;
+    info.total_conn_count = info.local_conn_count;
+    VTKHDFWriter::ComputeGlobalInfo(info.local_npts, info.point_global_offset, info.total_npts, writer.comm);
+    VTKHDFWriter::ComputeGlobalInfo(info.local_ncells, info.cell_global_offset, info.total_ncells, writer.comm);
+    VTKHDFWriter::ComputeGlobalInfo(info.local_conn_count, info.conn_global_offset, info.total_conn_count, writer.comm);
+
+    writer.CreateUnstructuredGridGroup(info.total_npts, info.total_ncells, info.total_conn_count);
+    writer.WritePoints(info.total_npts, info.local_npts, info.point_global_offset, points);
+
+    std::vector<long long> connectivity(info.local_conn_count);
+    for (hsize_t m = 0; m < info.local_ncells; ++m) {
+        for (int n = 0; n < 8; ++n) {
+            connectivity[m * 8 + n] = conn8[m][n];
+        }
+    }
+    writer.WriteConnectivity(info.total_conn_count, info.local_conn_count, info.conn_global_offset, connectivity);
+
+    bool is_last_rank = (writer.my_rank == writer.n_ranks - 1);
+    hsize_t local_offsets_count = info.local_ncells + (is_last_rank ? 1 : 0);
+    std::vector<long long> offsets(local_offsets_count);
+    hsize_t base = info.cell_global_offset * 8;
+    for (hsize_t m = 0; m < info.local_ncells; ++m) {
+        offsets[m] = static_cast<long long>(base + m * 8);
+    }
+    if (is_last_rank) {
+        offsets[info.local_ncells] = static_cast<long long>(base + info.local_conn_count);
+    }
+    writer.WriteOffsets(info.total_ncells + 1, local_offsets_count, info.cell_global_offset, offsets);
+
+    std::vector<unsigned char> types(info.local_ncells, 12); // VTK_HEXAHEDRON
+    writer.WriteTypes(info.total_ncells, info.local_ncells, info.cell_global_offset, types);
+
+    return info;
+}
 
 }  // namespace vtkhdf
 

@@ -104,7 +104,7 @@ class StabilizedFEM : public MaterialPoint {
 
     void Cp2NodeVTK();
 
-    void OutputMeshData(int iview, int istep);
+    void OutputMeshDataVTKHDF(int iview, int istep);
 };
 
 inline MaterialPoint wfem;

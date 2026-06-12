@@ -39,16 +39,11 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-s.vtkhdf";
 
-    hsize_t local_npts = static_cast<hsize_t>(this->num);
-    hsize_t global_offset = 0;
-    hsize_t total_npts = local_npts;
-    vtkhdf::VTKHDFWriter::ComputeGlobalInfo(local_npts, global_offset, total_npts);
-
-    std::vector<std::array<double, 3>> points(local_npts);
-    std::vector<std::array<double, 3>> velocity(local_npts);
-    std::vector<double> vm_stress(local_npts);
-    std::vector<int> pid(local_npts);
-    std::vector<int> mat_id(local_npts);
+    std::vector<std::array<double, 3>> points(this->num);
+    std::vector<std::array<double, 3>> velocity(this->num);
+    std::vector<double> vm_stress(this->num);
+    std::vector<int> pid(this->num);
+    std::vector<int> mat_id(this->num);
 
     for (int i = 0; i < this->num; ++i) {
         points[i] = this->coord[i];
@@ -58,35 +53,15 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
         mat_id[i] = this->matid[i];
     }
 
-    std::vector<long long> connectivity(local_npts);
-    std::vector<unsigned char> types(local_npts, 1); // VTK_VERTEX
-    for (hsize_t i = 0; i < local_npts; ++i) {
-        connectivity[i] = static_cast<long long>(global_offset + i);
-    }
-
-    bool is_last_rank = (myrank == nprocs - 1);
-    hsize_t local_offsets_count = local_npts + (is_last_rank ? 1 : 0);
-    std::vector<long long> offsets(local_offsets_count);
-    for (hsize_t i = 0; i < local_npts; ++i) {
-        offsets[i] = static_cast<long long>(global_offset + i);
-    }
-    if (is_last_rank) {
-        offsets[local_npts] = static_cast<long long>(global_offset + local_npts);
-    }
-
     vtkhdf::VTKHDFWriter writer(filename);
-    writer.CreateUnstructuredGridGroup(total_npts, total_npts, total_npts);
+    auto info = vtkhdf::WriteParticleTopology(writer, points);
     writer.SetTime(real_time);
-    writer.WritePoints(total_npts, local_npts, global_offset, points);
-    writer.WriteConnectivity(total_npts, local_npts, global_offset, connectivity);
-    writer.WriteOffsets(total_npts + 1, local_offsets_count, global_offset, offsets);
-    writer.WriteTypes(total_npts, local_npts, global_offset, types);
 
     writer.CreatePointDataGroup();
-    writer.WritePointVector("Velocity", total_npts, local_npts, global_offset, velocity);
-    writer.WritePointScalar("VMStress", total_npts, local_npts, global_offset, vm_stress);
-    writer.WritePointScalarInt("ID", total_npts, local_npts, global_offset, pid);
-    writer.WritePointScalarInt("MatID", total_npts, local_npts, global_offset, mat_id);
+    writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, velocity);
+    writer.WritePointScalar("VMStress", info.total_npts, info.local_npts, info.global_offset, vm_stress);
+    writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, pid);
+    writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, mat_id);
 #endif
 
     return;
