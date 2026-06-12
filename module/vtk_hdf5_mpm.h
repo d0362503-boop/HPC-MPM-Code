@@ -28,7 +28,7 @@ inline void OutputMaterialPointsToVtkHdf(const std::string& filename, const Mate
     hsize_t local_npts = static_cast<hsize_t>(point.num);
     hsize_t global_offset = 0;
     hsize_t total_npts = 0;
-    Writer::ComputeGlobalInfo(local_npts, global_offset, total_npts, comm);
+    VTKHDFWriter::ComputeGlobalInfo(local_npts, global_offset, total_npts, comm);
 
     // Topology: each material point is a VTK_VERTEX cell.
     std::vector<long long> connectivity(local_npts);
@@ -44,7 +44,7 @@ inline void OutputMaterialPointsToVtkHdf(const std::string& filename, const Mate
     // Last offset value equals total number of points for vertex cells.
     offsets[local_npts] = static_cast<long long>(total_npts);
 
-    Writer writer(filename, comm);
+    VTKHDFWriter writer(filename, comm);
     writer.CreateUnstructuredGridGroup(total_npts, total_npts, total_npts);
     writer.SetTime(time);
     writer.WriteUnstructuredGridTopology(total_npts, local_npts, global_offset, points, connectivity, offsets, types);

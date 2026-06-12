@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
         hsize_t local_n = 4;
         hsize_t global_offset = 0;
         hsize_t total_n = 0;
-        vtkhdf::Writer::ComputeGlobalInfo(local_n, global_offset, total_n, MPI_COMM_WORLD);
+        vtkhdf::VTKHDFWriter::ComputeGlobalInfo(local_n, global_offset, total_n, MPI_COMM_WORLD);
 
         std::vector<long long> connectivity(local_n);
         std::vector<long long> offsets(local_n + 1);
@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
         offsets[local_n] = static_cast<long long>(total_n);
 
         std::string filename = "test_grid.vtkhdf";
-        vtkhdf::Writer writer(filename, MPI_COMM_WORLD);
+        vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_WORLD);
         writer.CreateUnstructuredGridGroup(total_n, total_n, total_n);
         writer.SetTime(0.0);
         writer.WriteUnstructuredGridTopology(total_n, local_n, global_offset, points, connectivity, offsets, types);

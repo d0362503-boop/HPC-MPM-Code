@@ -18,6 +18,9 @@
 // All members are public to match the requested style.  The class wraps an
 // HDF5 file and exposes helpers for writing VTK UnstructuredGrid data using
 // MPI-IO collective I/O.
+//
+// Output files (.vtkhdf) can be opened directly in ParaView 5.10+.
+// For multi-rank runs, all ranks write to a single shared file.
 // ----------------------------------------------------------------------------
 
 namespace vtkhdf {
@@ -50,7 +53,7 @@ struct HDF5TypeMap<unsigned char> {
     static hid_t memType() { return H5T_NATIVE_UCHAR; }
 };
 
-class Writer {
+class VTKHDFWriter {
   public:
     MPI_Comm comm = MPI_COMM_WORLD;
     int my_rank = 0;
@@ -61,17 +64,17 @@ class Writer {
     hid_t pointdata_group = -1;
     hid_t celldata_group = -1;
 
-    Writer() = default;
+    VTKHDFWriter() = default;
 
-    explicit Writer(const std::string& filename, MPI_Comm comm_arg = MPI_COMM_WORLD) { Open(filename, comm_arg); }
+    explicit VTKHDFWriter(const std::string& filename, MPI_Comm comm_arg = MPI_COMM_WORLD) { Open(filename, comm_arg); }
 
-    ~Writer() { Close(); }
+    ~VTKHDFWriter() { Close(); }
 
     // Disable copy; allow move.
-    Writer(const Writer&) = delete;
-    Writer& operator=(const Writer&) = delete;
-    Writer(Writer&& other) noexcept { *this = std::move(other); }
-    Writer& operator=(Writer&& other) noexcept {
+    VTKHDFWriter(const VTKHDFWriter&) = delete;
+    VTKHDFWriter& operator=(const VTKHDFWriter&) = delete;
+    VTKHDFWriter(VTKHDFWriter&& other) noexcept { *this = std::move(other); }
+    VTKHDFWriter& operator=(VTKHDFWriter&& other) noexcept {
         if (this != &other) {
             Close();
             comm = other.comm;
