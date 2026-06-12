@@ -1,0 +1,33 @@
+<nxyr>  !--- MPM FSI ---
+10  1  2
+<gridfile>
+./fsi/griddata.txt
+<pointfile>
+./fsi/pointdata.txt
+<gridoutfile>
+./fsi/myrank_data_Turek/griddata
+<pointoutfile>
+./fsi/myrank_data_Turek/pointdata
+
+<nxyr>  !---- Solid MPM ----
+1  1  1
+<gridfile>
+./solid/griddata.txt
+<pointfile>
+./solid/spdata.txt
+<gridoutfile>
+./solid/myrank_data_beam/griddata
+<pointoutfile>
+./solid/myrank_data_beam/spdata
+
+<nxyr>  !---- Stabilized Mixed MPM ----
+1  1  1
+<gridfile>
+./fluid/griddata.txt
+<pointfile>
+./fluid/wpdata.txt
+<gridoutfile>
+./fluid/myrank_data_slosh/griddata
+<pointoutfile>
+./fluid/myrank_data_slosh/wpdata
+

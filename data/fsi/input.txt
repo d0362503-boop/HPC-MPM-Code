@@ -1,0 +1,111 @@
+<sp.solswitch, rstflag, nlstep>  !Turek
+FLIP  2  1
+<ista, iend, iout>
+1  16000  20
+<dt, mtol, wfem.spec_rad, sp.spec_rad>
+2.5e-3  1.0e-7  0.5e0  0.5e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+2.5e0  0.0025e0  0.41e0
+<xyelem>
+1000  1  164
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+3  1  3
+<sp.rho, rhol, rmul, rhog, rmug, fs_height>
+1.0e4  1.0e3  1.0e0  1.205e0  1.81e-5  0.41e0
+<nmat, npropmax>
+2  2
+<iprop1, nprop1>
+-1  2    
+<mat_prop2>
+1.4e6  0.4e0
+<iprop2, nprop2>
+2  2    
+<mat_prop1>
+1.4e6  0.4e0
+<bb>
+0.0e0  0.0e0  0.0e0
+
+<sp.solswitch, rstflag, nlstep>  !disk
+FLIP  2  1
+<ista, iend, iout>
+1  10000  20
+<dt, mtol, wfem.spec_rad, sp.spec_rad>
+1.0e-3  1.0e-12  0.5e0  0.25e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+1.0e-2  1.0e-4  1.0e-2
+<xyelem>
+200  1  200
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<sp.rho, rhol, rmul, rhog, rmug, fs_height>
+1.0e3  1.0e3  1.0e-3  1.205e0  1.81e-5  1.0e-2
+<nmat, npropmax>
+1  3
+<iprop1, nprop1>
+3  3    
+<mat_prop1>
+5.0e-3  0.0e0  5.0e0
+<bb>
+0.0e0  0.0e0  0.0e0
+
+<sp.solswitch, NR_flag, rstflag, nlstep>  !Beam
+TPIC  1  2  1
+<ista, iend, iout>
+1  3000  5
+<dt, th, mtol, sp.gamma_nb, sp.beta_nb>
+1.0e-3  0.5e0  1.0e-12  0.5e0  0.25e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+4.0e-2  8.0e-5  1.0e-2
+<xyelem>
+500  1  125
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<sp.rho, rhol, rmul, rhog, rmug, fs_height>
+7.8e3  1.0e3  1.0e-2  1.205e0  1.81e-5  1.0e-2
+<nmat, npropmax>
+1  2
+<iprop1, nprop1>
+2  2    
+<mat_prop1>
+1.0e4  0.3e0
+<bb>
+0.0e0  0.0e0  0.0e0
+
+<sp.solswitch, NR_flag, rstflag, nlstep>  !hyperelastic wall
+FLIP  1  2  1
+<ista, iend, iout>
+1  10000  20
+<dt, th, mtol, sp.gamma_nb, sp.beta_nb>
+1.0e-3  0.5e0  1.0e-11  0.5e0  0.25e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+2.0e-2  2.0e-4  2.0e-2
+<xyelem>
+100  1  100
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<sp.rho, rhol, rmul, rhog, rmug, fs_height>
+1.0e3  1.0e3  2.0e-2  1.205e0  1.81e-5  2.0e-2
+<nmat, npropmax>
+1  2
+<iprop1, nprop1>
+1  2    
+<mat_prop1>
+6.0e-2  0.49e0
+<bb>
+0.0e0  0.0e0  0.0e0

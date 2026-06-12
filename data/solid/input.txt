@@ -1,0 +1,72 @@
+<sp.solswitch, NR_flag, rstflag, nlstep>  !beam
+FLIP  0  2  1
+<ista, iend, iout>
+1  2  1
+<dt, mtol, sp.gamma_nb, sp.beta_nb>
+1.0e-3  1.0e-12  1.0e0  0.5e0 
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+5.0e0  0.5e0  5.0e0
+<xyelem>
+10  1  10
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<sp.rho, nmat, npropmax>
+2.5e3  1  2 
+<iprop1, nprop1>
+1  2
+<mat_prop1>
+1.0e7  0.3e0
+<bb>
+0.0e0  0.0e0  -9.81e0
+
+<solswitch, rstflag, nlstep>  !Cook membrane
+FLIP  2  1
+<ista, iend, iout>
+1  30000  200
+<dt, mtol>
+1.0e-4  1.0e-12
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+50.0e0  0.5e0  65.0e0
+<xyelem>
+100  1  130
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<nmat, nprop, matfalg, rho>
+1  2  2  1.0e0
+<mat_prop1>
+1.0e3  0.499e0
+<bb>
+0.0e0  0.0e0  0.0e0
+
+<solswitch, rstflag, nlstep>  !Collision of Two Rings
+FLIP  2  1
+<ista, iend, iout>
+1  4000  40
+<dt, mtol>
+1.0e-6  1.0e-12
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+0.2e0  0.1e-2  0.15e0
+<xyelem>
+200  1  150
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<nmat, nprop, matfalg, rho>
+2  2  2  1.01e3
+<mat_prop1>
+7.3e7  0.4e0
+<mat_prop2>
+7.3e7  0.4e0
+<bb>
+0.0e0  0.0e0  0.0e0

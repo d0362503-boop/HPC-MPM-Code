@@ -1,0 +1,111 @@
+# Google C++ Style Guide naming convention for MPM-Code
+# 
+# NOTE: This configuration enforces the core Google naming rules.
+#       Some project-specific exceptions (e.g. keeping FLIP/PIC/TPIC/APIC 
+#       fully capitalized as algorithm acronyms) cannot be expressed in
+#       clang-tidy and require manual code review.
+#
+# Usage:
+#   clang-tidy -p build <source-files>
+#   (requires a compile_commands.json or CMake with CMAKE_EXPORT_COMPILE_COMMANDS=ON)
+
+Checks: '
+  -*,
+  readability-identifier-naming,
+'
+
+CheckOptions:
+  # -------------------------------------------------
+  # Types: CamelCase (e.g. MyClass, MyStruct, MyEnum)
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key:   readability-identifier-naming.StructCase
+    value: CamelCase
+  - key:   readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key:   readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key:   readability-identifier-naming.TypeTemplateParameterCase
+    value: CamelCase
+
+  # -------------------------------------------------
+  # Functions: CamelCase (e.g. MyFunction, DoSomething)
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key:   readability-identifier-naming.MethodCase
+    value: CamelCase
+  - key:   readability-identifier-naming.VirtualMethodCase
+    value: CamelCase
+
+  # -------------------------------------------------
+  # Variables
+  # -------------------------------------------------
+  # Local / parameter variables: lower_case
+  - key:   readability-identifier-naming.VariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.ParameterCase
+    value: lower_case
+
+  # Class member variables: lower_case with trailing underscore
+  - key:   readability-identifier-naming.MemberCase
+    value: lower_case
+  - key:   readability-identifier-naming.MemberSuffix
+    value: '_'
+
+  # Struct member variables: lower_case (NO trailing underscore)
+  - key:   readability-identifier-naming.StructMemberCase
+    value: lower_case
+
+  # Global variables: prefix g_ + lower_case
+  - key:   readability-identifier-naming.GlobalVariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.GlobalVariablePrefix
+    value: 'g_'
+
+  # Class static members: lower_case with trailing underscore
+  - key:   readability-identifier-naming.ClassMemberCase
+    value: lower_case
+  - key:   readability-identifier-naming.ClassMemberSuffix
+    value: '_'
+
+  # -------------------------------------------------
+  # Constants: CamelCase with k prefix (e.g. kDaysInAWeek)
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.ConstantCase
+    value: CamelCase
+  - key:   readability-identifier-naming.ConstantPrefix
+    value: 'k'
+  - key:   readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key:   readability-identifier-naming.ConstexprVariablePrefix
+    value: 'k'
+  - key:   readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key:   readability-identifier-naming.EnumConstantPrefix
+    value: 'k'
+
+  # -------------------------------------------------
+  # Macros: UPPER_CASE (e.g. DEBUG_MODE)
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.MacroCase
+    value: UPPER_CASE
+
+  # -------------------------------------------------
+  # Namespaces: lower_case (e.g. mylibrary)
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.NamespaceCase
+    value: lower_case
+
+  # -------------------------------------------------
+  # Concepts (C++20): CamelCase
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.ConceptCase
+    value: CamelCase
+
+  # -------------------------------------------------
+  # Type alias: CamelCase
+  # -------------------------------------------------
+  - key:   readability-identifier-naming.TypeAliasCase
+    value: CamelCase

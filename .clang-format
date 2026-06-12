@@ -1,0 +1,11 @@
+# MPM-Code formatting style
+# Place this file in the project root so VS Code / clang-format uses it.
+# K&R brace style: { stays on the same line as if/for/while/function.
+
+BasedOnStyle: LLVM
+BreakBeforeBraces: Attach
+IndentWidth: 4
+ColumnLimit: 120
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: true

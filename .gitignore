@@ -1,0 +1,34 @@
+build/
+res/
+stdout/
+stderr/
+
+# Compiled objects and binaries
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.dylib
+*.exe
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# Generated partitioned/sample runtime data
+data/**/myrank_data_*/
+data/**/grid.vtk
+data/**/wp.vtk
+data/**/sp.vtk
+
+# Windows metadata
+*:Zone.Identifier
+
+# VS Code cache databases
+.vscode/browse.db
+.vscode/browse.db-shm
+.vscode/browse.db-wal

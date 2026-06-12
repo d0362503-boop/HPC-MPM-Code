@@ -1,0 +1,90 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build MPM (parallel)",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "-j$(nproc)"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Build the MPM solver using the root Makefile with all available cores.",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Build MPM (debug)",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "-j$(nproc)",
+                "CXXFLAGS=-g -O0 -std=c++17 -Wall -Wextra ${PETSC_CC_INCLUDES}"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Build with debug symbols and no optimization.",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Clean build",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "clean"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Remove all object files from build/.",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Run MPM (single process)",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/MPM.exe",
+            "args": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "detail": "Run the solver with a single MPI rank (working directory = build/).",
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            }
+        },
+        {
+            "label": "Run MPM (MPI, 4 ranks)",
+            "type": "shell",
+            "command": "mpiexec",
+            "args": [
+                "-np",
+                "4",
+                "--bind-to",
+                "core",
+                "--map-by",
+                "core",
+                "./MPM.exe"
+            ],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Run the solver with 4 MPI ranks (working directory = build/).",
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            }
+        }
+    ]
+}

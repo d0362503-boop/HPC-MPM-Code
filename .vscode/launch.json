@@ -1,0 +1,69 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug MPM (single rank)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/MPM.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [
+                {
+                    "name": "PETSC_DIR",
+                    "value": "/home/pan/petsc-3.24.5"
+                },
+                {
+                    "name": "PETSC_ARCH",
+                    "value": "arch-linux-c-release"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build MPM (debug)",
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Debug MPM (MPI, 2 ranks)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/usr/bin/mpiexec",
+            "args": [
+                "-np",
+                "2",
+                "${workspaceFolder}/build/MPM.exe"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [
+                {
+                    "name": "PETSC_DIR",
+                    "value": "/home/pan/petsc-3.24.5"
+                },
+                {
+                    "name": "PETSC_ARCH",
+                    "value": "arch-linux-c-release"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build MPM (debug)",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ]
+}
