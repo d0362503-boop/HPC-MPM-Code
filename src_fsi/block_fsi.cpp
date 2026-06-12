@@ -85,7 +85,7 @@ void BlockFSI::SolveFSISystem() {
         } else {
             this->CalFSIResidual(rkr_fsi_ref, rtr_fsi_abs, nvel_k);
         }
-        rtr_fsi_ref = (r0r_fsi_ref > mtol) ? (rkr_fsi_ref / r0r_fsi_ref) : 0.0e0;
+        rtr_fsi_ref = (r0r_fsi_ref > 1.0e-12) ? (rkr_fsi_ref / r0r_fsi_ref) : 0.0e0;
 
         // --- Convergence check ---
         if (rtr_fsi_ref < this->tol_ref || r0r_fsi_ref < this->tol_ref || //
