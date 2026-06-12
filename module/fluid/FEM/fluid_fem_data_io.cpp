@@ -76,17 +76,11 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + std::to_string(myrank) + "-" + std::to_string(iview) + "-w.vtkhdf";
 
-    std::vector<std::array<double, 3>> points(node);
     std::vector<std::array<double, 3>> velocity(node);
-    std::vector<double> pressure(node);
-    std::vector<double> phi(node);
     std::vector<std::array<long long, 8>> conn8(nelem);
 
     for (int n = 0; n < node; ++n) {
-        points[n] = xyn[n];
         velocity[n] = {this->nvel_vtk[n + nu], this->nvel_vtk[n + nv], this->nvel_vtk[n + nw]};
-        pressure[n] = this->npres_vtk[n];
-        phi[n] = this->nphi_vtk[n];
     }
 
     for (int m = 0; m < nelem; ++m) {
@@ -96,13 +90,13 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
     }
 
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
-    auto info = vtkhdf::WriteHexMeshTopology(writer, points, conn8);
+    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, conn8);
     writer.SetTime(real_time);
 
     writer.CreatePointDataGroup();
     writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.point_global_offset, velocity);
-    writer.WritePointScalar("Pressure", info.total_npts, info.local_npts, info.point_global_offset, pressure);
-    writer.WritePointScalar("Phi", info.total_npts, info.local_npts, info.point_global_offset, phi);
+    writer.WritePointScalar("Pressure", info.total_npts, info.local_npts, info.point_global_offset, this->npres_vtk);
+    writer.WritePointScalar("Phi", info.total_npts, info.local_npts, info.point_global_offset, this->nphi_vtk);
 #endif
 
     return;
