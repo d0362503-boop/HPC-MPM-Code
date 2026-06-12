@@ -10,6 +10,28 @@ include $(PETSC_DIR)/$(PETSC_ARCH)/lib/petsc/conf/petscvariables
 
 CXXFLAGS = -O3 -march=native -std=c++17 $(PETSC_CC_INCLUDES) #-g -Wall -Wextra -Wshadow #-fsanitize=address,undefined 
 
+# HDF5 设置（用于 VTK HDF5/XDMF 输出）
+# 默认启用；若不需要可改为 false
+USE_HDF5 = true
+
+HDF5_DIR = /usr
+HDF5_INC = $(HDF5_DIR)/include/hdf5/openmpi
+HDF5_LIB = -L$(HDF5_DIR)/lib/x86_64-linux-gnu/hdf5/openmpi -lhdf5 -lhdf5_cpp
+
+ifeq ($(USE_HDF5),true)
+    HAVE_HDF5 := $(shell test -f $(HDF5_INC)/hdf5.h && echo yes || echo no)
+    ifeq ($(HAVE_HDF5),yes)
+        CXXFLAGS += -I$(HDF5_INC) -DHAVE_HDF5
+        HDF5_LDFLAGS = $(HDF5_LIB)
+    else
+        $(warning HDF5 header not found at $(HDF5_INC). Install with: sudo apt-get install -y libhdf5-openmpi-dev)
+        HDF5_LDFLAGS =
+    endif
+else
+    HDF5_LDFLAGS =
+endif
+
+
 # 目录设置
 BUILD_DIR = build
 MODULE_DIR = module
@@ -93,7 +115,7 @@ $(BUILD_DIR)/%.o: %.cpp
 
 # 链接最终可执行文件
 $(BUILD_DIR)/MPM.exe: $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(PETSC_WITH_EXTERNAL_LIB)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(PETSC_WITH_EXTERNAL_LIB) $(HDF5_LDFLAGS)
 
 # 清理
 clean:
@@ -104,3 +126,14 @@ clean:
 
 parallel:
 	@echo "Use 'make -jN' to compile with N parallel jobs, e.g., 'make -j8'"
+
+# HDF5 配置验证目标
+# 安装 HDF5 后运行：make test-hdf5
+test-hdf5:
+	@echo "Testing HDF5 configuration..."
+	$(CXX) $(CXXFLAGS) -c tests/test_hdf5.cpp -o $(BUILD_DIR)/test_hdf5.o
+	$(CXX) $(CXXFLAGS) $(BUILD_DIR)/test_hdf5.o -o $(BUILD_DIR)/test_hdf5 $(HDF5_LDFLAGS)
+	$(BUILD_DIR)/test_hdf5
+	@rm -f $(BUILD_DIR)/test_hdf5 $(BUILD_DIR)/test_hdf5.o test_hdf5.h5
+
+.PHONY: all clean test-hdf5
