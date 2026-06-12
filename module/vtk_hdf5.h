@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -92,6 +93,12 @@ class Writer {
         comm = comm_arg;
         MPI_Comm_rank(comm, &my_rank);
         MPI_Comm_size(comm, &n_ranks);
+
+        // Create parent directories if they do not exist.
+        std::filesystem::path p(filename);
+        if (p.has_parent_path()) {
+            std::filesystem::create_directories(p.parent_path());
+        }
 
         hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
         H5Pset_fapl_mpio(fapl, comm, MPI_INFO_NULL);
