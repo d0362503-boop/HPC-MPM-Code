@@ -1,7 +1,7 @@
+#include <array>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <array>
 #include <vector>
 
 #include "../../dataset.h"
@@ -74,7 +74,7 @@ void StabilizedFEM::RestartOutput() {
 
 void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
 #ifdef HAVE_HDF5
-    std::string filename = outfile + std::to_string(myrank) + "-" + std::to_string(iview) + "-w.vtkhdf";
+    std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
     std::vector<std::array<double, 3>> velocity(node);
 

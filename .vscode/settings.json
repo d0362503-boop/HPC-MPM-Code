@@ -7,16 +7,12 @@
         "**/.git/objects/**": true,
         "**/.git/subtree-cache/**": true,
         "**/build": true,
-        "**/res/**": true,
         "**/data/**/myrank_data_*": true,
-        "**/vtk/**": false,
         "**/*.o": true,
         "**/*.exe": true
     },
     "C_Cpp.files.exclude": {
-        "**/res/**": true,
         "**/data/**": true,
-        "**/vtk/**": false,
         "**/build/**": true,
         "**/.git/**": true,
         "**/*.o": true,
@@ -25,6 +21,12 @@
     },
     "C_Cpp.default.cppStandard": "c++17",
     "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/external/petsc/include",
+        "${workspaceFolder}/external/hdf5/include",
+        "/usr/lib/x86_64-linux-gnu/openmpi/include",
+        "/usr/lib/x86_64-linux-gnu/openmpi/include/openmpi"
+    ],
     "C_Cpp.clang_format_style": "file",
     "C_Cpp.clang_format_fallbackStyle": "Google",
     "C_Cpp.formatting": "clangFormat",
