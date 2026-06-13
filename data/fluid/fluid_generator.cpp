@@ -27,7 +27,7 @@ std::string FluidGenerator::CaseName() const { return "fluid"; }
 void FluidGenerator::Initialize() {}
 
 void FluidGenerator::LoadInput() {
-  std::ifstream infile = this->OpenInputFile("fluid/input.txt");
+  std::ifstream infile = this->OpenInputFile("input.txt");
 
   infile.ignore(1000, '\n');
   std::string solswitch_str;
@@ -179,10 +179,10 @@ void FluidGenerator::WriteBcData(std::ofstream& outfile) {
 
 void FluidGenerator::WriteTextOutputs() {
   std::cout << "Making grid file" << "\n";
-  this->WriteGridDataFile("fluid/griddata.txt");
+  this->WriteGridDataFile("griddata.txt");
 
   std::cout << "Making water point file" << "\n";
-  std::ofstream pointfile = this->OpenOutputFile("fluid/wpdata.txt");
+  std::ofstream pointfile = this->OpenOutputFile("wpdata.txt");
   pointfile << std::setw(10) << g_wp.num << "\n";
   OutputVector(pointfile, g_wp.num, g_wp.coord);
   for (int i = 0; i < g_wp.num; i++) {
@@ -194,8 +194,8 @@ void FluidGenerator::WriteTextOutputs() {
 void FluidGenerator::WriteVisualizationOutputs() {
 #ifdef HAVE_HDF5
   std::cout << "Making VTK HDF5 files" << "\n";
-  WriteVtkHdf5Mesh("fluid/grid.vtkhdf");
-  WriteVtkHdf5Points("fluid/wp.vtkhdf", g_wp);
+  WriteVtkHdf5Mesh("grid.vtkhdf");
+  WriteVtkHdf5Points("wp.vtkhdf", g_wp);
 #endif
 }
 

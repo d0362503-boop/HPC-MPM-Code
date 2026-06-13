@@ -55,7 +55,7 @@ std::string FsiGenerator::CaseName() const { return "fsi"; }
 void FsiGenerator::Initialize() {}
 
 void FsiGenerator::LoadInput() {
-    std::ifstream infile = this->OpenInputFile("fsi/input.txt");
+  std::ifstream infile = this->OpenInputFile("input.txt");
 
     infile.ignore(1000, '\n');
     std::string solswitch_str;
@@ -281,11 +281,11 @@ void FsiGenerator::WriteBcData(std::ofstream &outfile) {
 }
 
 void FsiGenerator::WriteTextOutputs() {
-    std::cout << "Making grid file" << "\n";
-    this->WriteGridDataFile("fsi/griddata.txt");
+  std::cout << "Making grid file" << "\n";
+  this->WriteGridDataFile("griddata.txt");
 
-    std::cout << "Making solid point file" << "\n";
-    std::ofstream pointfile = this->OpenOutputFile("fsi/pointdata.txt");
+  std::cout << "Making solid point file" << "\n";
+  std::ofstream pointfile = this->OpenOutputFile("pointdata.txt");
     pointfile << std::setw(10) << g_sp.num << "\n";
     OutputVector(pointfile, g_sp.num, g_sp.coord);
     for (int i = 0; i < g_sp.num; i++) {
@@ -296,9 +296,9 @@ void FsiGenerator::WriteTextOutputs() {
 
 void FsiGenerator::WriteVisualizationOutputs() {
 #ifdef HAVE_HDF5
-    std::cout << "Making VTK HDF5 files" << "\n";
-    WriteVtkHdf5Mesh("fsi/grid.vtkhdf");
-    WriteVtkHdf5Points("fsi/sp.vtkhdf", g_sp);
+  std::cout << "Making VTK HDF5 files" << "\n";
+  WriteVtkHdf5Mesh("grid.vtkhdf");
+  WriteVtkHdf5Points("sp.vtkhdf", g_sp);
 #endif
 }
 

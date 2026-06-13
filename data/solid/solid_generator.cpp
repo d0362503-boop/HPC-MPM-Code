@@ -31,7 +31,7 @@ std::string SolidGenerator::CaseName() const { return "solid"; }
 void SolidGenerator::Initialize() {}
 
 void SolidGenerator::LoadInput() {
-  std::ifstream infile = this->OpenInputFile("solid/input.txt");
+  std::ifstream infile = this->OpenInputFile("input.txt");
 
   infile.ignore(1000, '\n');
   std::string solswitch_str;
@@ -197,10 +197,10 @@ void SolidGenerator::WriteBcData(std::ofstream& outfile) {
 
 void SolidGenerator::WriteTextOutputs() {
   std::cout << "Making grid file" << "\n";
-  this->WriteGridDataFile("solid/griddata.txt");
+  this->WriteGridDataFile("griddata.txt");
 
   std::cout << "Making solid point file" << "\n";
-  std::ofstream pointfile = this->OpenOutputFile("solid/spdata.txt");
+  std::ofstream pointfile = this->OpenOutputFile("spdata.txt");
   pointfile << std::setw(10) << g_sp.num << "\n";
   OutputVector(pointfile, g_sp.num, g_sp.coord);
   for (int i = 0; i < g_sp.num; i++) {
@@ -212,8 +212,8 @@ void SolidGenerator::WriteTextOutputs() {
 void SolidGenerator::WriteVisualizationOutputs() {
 #ifdef HAVE_HDF5
   std::cout << "Making VTK HDF5 files" << "\n";
-  WriteVtkHdf5Mesh("solid/grid.vtkhdf");
-  WriteVtkHdf5Points("solid/sp.vtkhdf", g_sp);
+  WriteVtkHdf5Mesh("grid.vtkhdf");
+  WriteVtkHdf5Points("sp.vtkhdf", g_sp);
 #endif
 }
 
