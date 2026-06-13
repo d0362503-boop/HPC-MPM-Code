@@ -9,9 +9,10 @@ set(USE_SRC_FLUID false CACHE BOOL "Build work/src_fluid sources")
 set(USE_SRC_SOLID false CACHE BOOL "Build work/src_solid sources")
 
 # Data generator selection.
-option(USE_DATA_FLUID "Build makinput_fluid data generator" OFF)
-option(USE_DATA_SOLID "Build makinput_solid data generator" OFF)
-option(USE_DATA_FSI "Build makinput_fsi data generator" OFF)
+# Set exactly one of these to true to choose which input generator is compiled.
+set(USE_DATA_FSI true CACHE BOOL "Build makinput_fsi data generator")
+set(USE_DATA_FLUID false CACHE BOOL "Build makinput_fluid data generator")
+set(USE_DATA_SOLID false CACHE BOOL "Build makinput_solid data generator")
 
 # Solver method selection
 set(FLUID_METHOD "FEM" CACHE STRING "Fluid solver method: FEM or MPM")
