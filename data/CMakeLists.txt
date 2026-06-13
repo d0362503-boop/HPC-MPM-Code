@@ -2,12 +2,10 @@
 # Data generators (makinput tools)
 # -----------------------------------------------------------------------------
 
-add_executable(makinput_fluid fluid/makinput.cpp)
-add_executable(makinput_solid solid/makinput.cpp)
-add_executable(makinput_fsi fsi/makinput.cpp)
+function(configure_makinput_target target_name case_dir)
+    add_executable(${target_name} ${case_dir}/makinput.cpp)
 
-foreach(target makinput_fluid makinput_solid makinput_fsi)
-    target_include_directories(${target} PRIVATE
+    target_include_directories(${target_name} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/module
         ${CMAKE_SOURCE_DIR}/module/fluid/MPM
@@ -15,5 +13,20 @@ foreach(target makinput_fluid makinput_solid makinput_fsi)
         ${CMAKE_SOURCE_DIR}/module/solid/implicit
     )
 
-    target_link_libraries(${target} PRIVATE mpm_modules)
-endforeach()
+    target_link_libraries(${target_name} PRIVATE mpm_modules)
+
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${case_dir}/input.txt
+         DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/${case_dir})
+endfunction()
+
+if(USE_DATA_FLUID)
+    configure_makinput_target(makinput_fluid fluid)
+endif()
+
+if(USE_DATA_SOLID)
+    configure_makinput_target(makinput_solid solid)
+endif()
+
+if(USE_DATA_FSI)
+    configure_makinput_target(makinput_fsi fsi)
+endif()

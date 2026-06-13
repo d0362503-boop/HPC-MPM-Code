@@ -8,6 +8,11 @@ set(USE_SRC_FSI true CACHE BOOL "Build work/src_fsi sources")
 set(USE_SRC_FLUID false CACHE BOOL "Build work/src_fluid sources")
 set(USE_SRC_SOLID false CACHE BOOL "Build work/src_solid sources")
 
+# Data generator selection.
+option(USE_DATA_FLUID "Build makinput_fluid data generator" OFF)
+option(USE_DATA_SOLID "Build makinput_solid data generator" OFF)
+option(USE_DATA_FSI "Build makinput_fsi data generator" OFF)
+
 # Solver method selection
 set(FLUID_METHOD "FEM" CACHE STRING "Fluid solver method: FEM or MPM")
 set_property(CACHE FLUID_METHOD PROPERTY STRINGS "FEM" "MPM")

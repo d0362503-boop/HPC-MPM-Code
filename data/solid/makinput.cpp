@@ -38,7 +38,7 @@ int main() {
     cout << " ---- Start making solid data ----" << "\n";
 
     ifstream infile;
-    infile.open("data/solid/input.txt");
+    infile.open("solid/input.txt");
 
     infile.ignore(1000, '\n');
     string solswitch_str;
@@ -205,7 +205,7 @@ int main() {
 
     cout << "Making grid file" << "\n";
     ofstream gridfile;
-    gridfile.open("data/solid/griddata.txt");
+    gridfile.open("solid/griddata.txt");
     gridfile.flags(ios::right | ios::scientific);
     WriteGlobalMeshHeader(gridfile);
     WriteGlobalBcData(gridfile);
@@ -213,7 +213,7 @@ int main() {
 
     cout << "Making solid point file" << "\n";
     ofstream pointfile;
-    pointfile.open("data/solid/spdata.txt");
+    pointfile.open("solid/spdata.txt");
     pointfile.flags(ios::right | ios::scientific);
     pointfile << setw(10) << sp.num << "\n";
     OutputVector(pointfile, sp.num, sp.coord);
@@ -225,8 +225,8 @@ int main() {
 
 #ifdef HAVE_HDF5
     cout << "Making VTK HDF5 files" << "\n";
-    WriteVtkHdf5Mesh("data/solid/grid.vtkhdf");
-    WriteVtkHdf5Points("data/solid/sp.vtkhdf", sp);
+    WriteVtkHdf5Mesh("solid/grid.vtkhdf");
+    WriteVtkHdf5Points("solid/sp.vtkhdf", sp);
 #endif
 
     cout << " ---- Finish making solid data ----" << "\n";

@@ -34,7 +34,7 @@ int main() {
     cout << " ---- Start making fluid data ----" << "\n";
 
     ifstream infile;
-    infile.open("data/fluid/input.txt");
+    infile.open("fluid/input.txt");
 
     infile.ignore(1000, '\n');
     string solswitch_str;
@@ -188,7 +188,7 @@ int main() {
 
     cout << "Making grid file" << "\n";
     ofstream gridfile;
-    gridfile.open("data/fluid/griddata.txt");
+    gridfile.open("fluid/griddata.txt");
     gridfile.flags(ios::right | ios::scientific);
     WriteGlobalMeshHeader(gridfile);
     WriteGlobalBcData(gridfile);
@@ -196,7 +196,7 @@ int main() {
 
     cout << "Making water point file" << "\n";
     ofstream pointfile;
-    pointfile.open("data/fluid/wpdata.txt");
+    pointfile.open("fluid/wpdata.txt");
     pointfile.flags(ios::right | ios::scientific);
     pointfile << setw(10) << wp.num << "\n";
     OutputVector(pointfile, wp.num, wp.coord);
@@ -208,8 +208,8 @@ int main() {
 
 #ifdef HAVE_HDF5
     cout << "Making VTK HDF5 files" << "\n";
-    WriteVtkHdf5Mesh("data/fluid/grid.vtkhdf");
-    WriteVtkHdf5Points("data/fluid/wp.vtkhdf", wp);
+    WriteVtkHdf5Mesh("fluid/grid.vtkhdf");
+    WriteVtkHdf5Points("fluid/wp.vtkhdf", wp);
 #endif
 
     cout << " ---- Finish making fluid data ----" << "\n";
