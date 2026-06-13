@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/material_point.h"
-#include "../../module/mesh.h"
+#include "../../../module/data_io.h"
+#include "../../../module/dataset.h"
+#include "../../../module/material_point.h"
+#include "../../../module/mesh.h"
 
 namespace {
 

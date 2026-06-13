@@ -1,7 +1,7 @@
 add_executable(makinput_fsi
     makinput.cpp
     fsi_generator.cpp
-    $<TARGET_OBJECTS:mpm_data_common>
+    $<TARGET_OBJECTS:mpm_generate_common>
 )
 
 target_link_libraries(makinput_fsi PRIVATE mpm_modules)

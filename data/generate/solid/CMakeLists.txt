@@ -1,7 +1,7 @@
 add_executable(makinput_solid
     makinput.cpp
     solid_generator.cpp
-    $<TARGET_OBJECTS:mpm_data_common>
+    $<TARGET_OBJECTS:mpm_generate_common>
 )
 
 target_link_libraries(makinput_solid PRIVATE mpm_modules)

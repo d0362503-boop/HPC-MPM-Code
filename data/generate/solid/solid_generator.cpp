@@ -10,11 +10,11 @@
 #include <string>
 #include <vector>
 
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/material_point.h"
-#include "../../module/mesh.h"
-#include "../../module/solid/implicit/implicit_mpm_solid.h"
+#include "../../../module/data_io.h"
+#include "../../../module/dataset.h"
+#include "../../../module/material_point.h"
+#include "../../../module/mesh.h"
+#include "../../../module/solid/implicit/implicit_mpm_solid.h"
 
 using namespace implicitmpm;
 

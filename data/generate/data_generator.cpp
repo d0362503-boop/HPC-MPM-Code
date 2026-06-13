@@ -3,7 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "../module/dataset.h"
+#include "../../module/dataset.h"
 #include "output_util.h"
 
 int DataGenerator::Run() {

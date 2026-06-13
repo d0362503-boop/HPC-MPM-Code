@@ -4,7 +4,7 @@
 #include <fstream>
 #include <string>
 
-#include "../module/material_point.h"
+#include "../../module/material_point.h"
 
 void WriteGlobalMeshHeader(std::ofstream &outfile);
 

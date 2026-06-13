@@ -3,14 +3,14 @@
 #include <iomanip>
 #include <string>
 
-#include "../module/data_io.h"
-#include "../module/dataset.h"
-#include "../module/mesh.h"
+#include "../../module/data_io.h"
+#include "../../module/dataset.h"
+#include "../../module/mesh.h"
 
 #ifdef HAVE_HDF5
 #include <mpi.h>
 
-#include "../module/vtk_hdf5.h"
+#include "../../module/vtk_hdf5.h"
 #endif
 
 void WriteGlobalMeshHeader(std::ofstream &outfile) {
