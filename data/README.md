@@ -4,7 +4,7 @@
 
 ## Build
 
-Use the root CMake entry and select exactly one generator in [`cmake/options.cmake`](/home/pan/MPM-Code/cmake/options.cmake:1):
+Use the root CMake entry and select exactly one generator in `../cmake/options.cmake`:
 
 - `USE_DATA_FLUID`
 - `USE_DATA_SOLID`

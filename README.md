@@ -36,9 +36,9 @@ The top-level directories are:
 
 Important root files:
 
-- [`CMakeLists.txt`](/home/pan/MPM-Code/CMakeLists.txt:1): root CMake entry
-- [`cmake/options.cmake`](/home/pan/MPM-Code/cmake/options.cmake:1): central build switches
-- [`AGENTS.md`](/home/pan/MPM-Code/AGENTS.md:1): project-specific engineering rules and pitfalls
+- `CMakeLists.txt`: root CMake entry
+- `cmake/options.cmake`: central build switches
+- `AGENTS.md`: project-specific engineering rules and pitfalls
 
 ## Dependencies
 
@@ -88,7 +88,7 @@ build/MPM
 
 ## Build Options
 
-Most build switches live in [`cmake/options.cmake`](/home/pan/MPM-Code/cmake/options.cmake:1).
+Most build switches live in `cmake/options.cmake`.
 
 ### 1. Solver Source Selection
 
@@ -218,7 +218,7 @@ cd build/data
 
 This works because CMake copies the matching case `input.txt` into the expected subdirectory under `build/data/`.
 
-For more detail, see [`data/README.md`](/home/pan/MPM-Code/data/README.md:1).
+For more detail, see `data/README.md`.
 
 ## Output and Visualization
 
@@ -269,7 +269,7 @@ Several project rules are important enough to call out explicitly:
 - `dbc` stores overlap weights, not a boolean ownership mask
 - Shared control-point ownership uses the smallest `aelemmin` tie-break rule
 
-If you are touching parallel assembly or control-point communication, read [`AGENTS.md`](/home/pan/MPM-Code/AGENTS.md:1) first.
+If you are touching parallel assembly or control-point communication, read `AGENTS.md` first.
 
 ## Development Notes
 
@@ -291,4 +291,4 @@ Some older assumptions may still appear in historical notes or legacy subdirecto
 
 ## License
 
-This repository includes a [`LICENSE`](/home/pan/MPM-Code/LICENSE:1) file at the root. Check it before redistribution or external reuse.
+This repository includes a `LICENSE` file at the root. Check it before redistribution or external reuse.
