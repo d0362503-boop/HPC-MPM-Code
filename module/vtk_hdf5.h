@@ -58,6 +58,7 @@ class VTKHDFWriter {
     MPI_Comm comm = MPI_COMM_WORLD;
     int my_rank = 0;
     int n_ranks = 1;
+    bool mpi_active = false;
 
     hid_t file = -1;
     hid_t vtkhdf_group = -1;
@@ -80,10 +81,12 @@ class VTKHDFWriter {
             comm = other.comm;
             my_rank = other.my_rank;
             n_ranks = other.n_ranks;
+            mpi_active = other.mpi_active;
             file = other.file;
             vtkhdf_group = other.vtkhdf_group;
             pointdata_group = other.pointdata_group;
             celldata_group = other.celldata_group;
+            other.mpi_active = false;
             other.file = -1;
             other.vtkhdf_group = -1;
             other.pointdata_group = -1;
@@ -94,8 +97,18 @@ class VTKHDFWriter {
 
     void Open(const std::string& filename, MPI_Comm comm_arg = MPI_COMM_WORLD) {
         comm = comm_arg;
-        MPI_Comm_rank(comm, &my_rank);
-        MPI_Comm_size(comm, &n_ranks);
+
+        int mpi_initialized = 0;
+        MPI_Initialized(&mpi_initialized);
+        mpi_active = (mpi_initialized != 0);
+        if (mpi_active) {
+            MPI_Comm_rank(comm, &my_rank);
+            MPI_Comm_size(comm, &n_ranks);
+        } else {
+            comm = MPI_COMM_SELF;
+            my_rank = 0;
+            n_ranks = 1;
+        }
 
         // Create parent directories if they do not exist.
         std::filesystem::path p(filename);
@@ -104,10 +117,12 @@ class VTKHDFWriter {
         }
 
         hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
-        H5Pset_fapl_mpio(fapl, comm, MPI_INFO_NULL);
-        H5Pset_fclose_degree(fapl, H5F_CLOSE_STRONG);
-        H5Pset_all_coll_metadata_ops(fapl, false);
-        H5Pset_coll_metadata_write(fapl, false);
+        if (mpi_active) {
+            H5Pset_fapl_mpio(fapl, comm, MPI_INFO_NULL);
+            H5Pset_fclose_degree(fapl, H5F_CLOSE_STRONG);
+            H5Pset_all_coll_metadata_ops(fapl, false);
+            H5Pset_coll_metadata_write(fapl, false);
+        }
         file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
         H5Pclose(fapl);
         if (file < 0) throw std::runtime_error("H5Fcreate failed for " + filename);
@@ -137,6 +152,13 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     static void ComputeGlobalInfo(hsize_t local_count, hsize_t& global_offset, hsize_t& total_count,
                                   MPI_Comm comm = MPI_COMM_WORLD) {
+        int mpi_initialized = 0;
+        MPI_Initialized(&mpi_initialized);
+        if (!mpi_initialized) {
+            global_offset = 0;
+            total_count = local_count;
+            return;
+        }
         global_offset = 0;
         MPI_Exscan(&local_count, &global_offset, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, comm);
         total_count = local_count;
@@ -183,7 +205,9 @@ class VTKHDFWriter {
     void WriteArrayCollective(hid_t dset, hid_t filespace, const void* data, hsize_t local_count,
                               hsize_t global_offset, hid_t h5type) {
         hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
-        H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE);
+        if (mpi_active) {
+            H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE);
+        }
 
         if (local_count > 0) {
             H5Sselect_hyperslab(filespace, H5S_SELECT_SET, &global_offset, nullptr, &local_count, nullptr);
@@ -218,7 +242,9 @@ class VTKHDFWriter {
         if (dset < 0) throw std::runtime_error(std::string("H5Dcreate failed for ") + name);
 
         hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
-        H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE);
+        if (mpi_active) {
+            H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE);
+        }
 
         if (local_npts > 0) {
             hsize_t start[2] = {global_offset, 0};

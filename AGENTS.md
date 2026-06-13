@@ -35,6 +35,8 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 | Constants | `k` prefix | `kDaysInAWeek` |
 | Macros | `UPPER_CASE` | `DEBUG_MODE` |
 
+- In class member functions, call other member functions with explicit `this->`.
+
 ## 5. Critical Parallel Rules
 
 **`node` vs `nodec`:** Computations and PETSc must use `nodec` (control points), never `node` (visualization nodes). Mixing them causes `MatAssemblyEnd` crashes.
