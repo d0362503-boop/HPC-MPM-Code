@@ -28,10 +28,8 @@ double g_volp = 0.0;
 
 std::string SolidGenerator::CaseName() const { return "solid"; }
 
-void SolidGenerator::Initialize() {}
-
 void SolidGenerator::LoadInput() {
-  std::ifstream infile = this->OpenInputFile("input.txt");
+  std::ifstream infile = OpenInputFile("input.txt");
 
   infile.ignore(1000, '\n');
   std::string solswitch_str;
@@ -200,7 +198,7 @@ void SolidGenerator::WriteTextOutputs() {
   this->WriteGridDataFile("griddata.txt");
 
   std::cout << "Making solid point file" << "\n";
-  std::ofstream pointfile = this->OpenOutputFile("spdata.txt");
+  std::ofstream pointfile = OpenOutputFile("spdata.txt");
   pointfile << std::setw(10) << g_sp.num << "\n";
   OutputVector(pointfile, g_sp.num, g_sp.coord);
   for (int i = 0; i < g_sp.num; i++) {
@@ -216,5 +214,3 @@ void SolidGenerator::WriteVisualizationOutputs() {
   WriteVtkHdf5Points("sp.vtkhdf", g_sp);
 #endif
 }
-
-void SolidGenerator::Finalize() {}

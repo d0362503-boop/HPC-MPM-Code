@@ -27,10 +27,6 @@ class DataPartitioner {
 
     virtual void WritePointData(std::ofstream &outfile) = 0;
 
-    std::ifstream OpenInputFile(const std::string &filename) const;
-
-    std::ofstream OpenOutputFile(const std::string &filename) const;
-
     void InputMeshData(std::ifstream &infile);
 
     void OutputMeshData(std::ofstream &outfile, int rank_id) const;

@@ -1,41 +1,31 @@
 #include "data_generator.h"
 
 #include <iostream>
-#include <stdexcept>
 
+#include "../../module/data_io.h"
 #include "../../module/dataset.h"
 #include "output_util.h"
 
 int DataGenerator::Run() {
+
     std::cout << " ---- Start making " << this->CaseName() << " data ----"
               << "\n";
 
-    this->Initialize();
     this->LoadInput();
+
     this->BuildData();
+
     this->WriteTextOutputs();
+
     this->WriteVisualizationOutputs();
-    this->Finalize();
 
     std::cout << " ---- Finish making " << this->CaseName() << " data ----"
               << "\n";
     return 0;
 }
 
-std::ifstream DataGenerator::OpenInputFile(const std::string &filename) const {
-    std::ifstream infile(filename);
-    if (!infile.is_open()) { throw std::runtime_error("Failed to open input file: " + filename); }
-    return infile;
-}
-
-std::ofstream DataGenerator::OpenOutputFile(const std::string &filename) const {
-    std::ofstream outfile(filename);
-    if (!outfile.is_open()) { throw std::runtime_error("Failed to open output file: " + filename); }
-    outfile.flags(std::ios::right | std::ios::scientific);
-    return outfile;
-}
-
 void DataGenerator::InitializeGridGeometry() {
+
     for (int i = 0; i < 3; ++i) {
         dxy[i] = (xymax[i] - xymin[i]) / static_cast<double>(xyelem[i]);
         aelemmin[i] = 0;
@@ -49,7 +39,8 @@ void DataGenerator::InitializeGridGeometry() {
 }
 
 void DataGenerator::WriteGridDataFile(const std::string &filename) {
-    std::ofstream outfile = this->OpenOutputFile(filename);
+
+    std::ofstream outfile = OpenOutputFile(filename);
     WriteGlobalMeshHeader(outfile);
     this->WriteBcData(outfile);
 }

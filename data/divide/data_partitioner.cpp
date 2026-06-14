@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
-#include <stdexcept>
 #include <vector>
 
 #include "../../module/data_io.h"
@@ -16,14 +15,14 @@ int DataPartitioner::Run() {
     std::cout << " ---- Start dividing " << this->CaseName() << " data ----"
               << "\n";
 
-    std::ifstream para_infile = this->OpenInputFile("para_input_data.txt");
+    std::ifstream para_infile = OpenInputFile("para_input_data.txt");
     this->LoadPartitionParameters(para_infile);
 
-    std::ifstream grid_infile = this->OpenInputFile(this->grid_input_file_);
+    std::ifstream grid_infile = OpenInputFile(this->grid_input_file_);
     this->InputMeshData(grid_infile);
     this->LoadBoundaryData(grid_infile);
 
-    std::ifstream point_infile = this->OpenInputFile(this->point_input_file_);
+    std::ifstream point_infile = OpenInputFile(this->point_input_file_);
     this->LoadPointData(point_infile);
 
     this->PartitionInitialDataset();
@@ -34,31 +33,18 @@ int DataPartitioner::Run() {
         this->PartitionProcess(rank_id);
 
         std::ofstream grid_outfile =
-            this->OpenOutputFile(this->grid_output_prefix_ + std::to_string(rank_id) + ".txt");
+            OpenOutputFile(this->grid_output_prefix_ + std::to_string(rank_id) + ".txt");
         this->OutputMeshData(grid_outfile, rank_id);
         this->WriteBoundaryData(grid_outfile);
 
         std::ofstream point_outfile =
-            this->OpenOutputFile(this->point_output_prefix_ + std::to_string(rank_id) + ".txt");
+            OpenOutputFile(this->point_output_prefix_ + std::to_string(rank_id) + ".txt");
         this->WritePointData(point_outfile);
     }
 
     std::cout << " ---- Finish dividing " << this->CaseName() << " data ----"
               << "\n";
     return 0;
-}
-
-std::ifstream DataPartitioner::OpenInputFile(const std::string &filename) const {
-    std::ifstream infile(filename);
-    if (!infile.is_open()) { throw std::runtime_error("Failed to open input file: " + filename); }
-    return infile;
-}
-
-std::ofstream DataPartitioner::OpenOutputFile(const std::string &filename) const {
-    std::ofstream outfile(filename);
-    if (!outfile.is_open()) { throw std::runtime_error("Failed to open output file: " + filename); }
-    outfile.flags(std::ios::right | std::ios::scientific);
-    return outfile;
 }
 
 void DataPartitioner::InputMeshData(std::ifstream &infile) {
@@ -87,17 +73,14 @@ void DataPartitioner::InputMeshData(std::ifstream &infile) {
 void DataPartitioner::OutputMeshData(std::ofstream &outfile, int rank_id) const {
     outfile << std::setw(15) << rank_id << "     --- myrank ---" << "\n";
 
-    outfile << std::setw(15) << nelem << std::setw(15) << xyelem[0]
-            << std::setw(15) << xyelem[1] << std::setw(15) << xyelem[2]
-            << "     --- rank element ---" << "\n";
+    outfile << std::setw(15) << nelem << std::setw(15) << xyelem[0] << std::setw(15) << xyelem[1] << std::setw(15)
+            << xyelem[2] << "     --- rank element ---" << "\n";
 
-    outfile << std::setw(15) << node << std::setw(15) << xynode[0]
-            << std::setw(15) << xynode[1] << std::setw(15) << xynode[2]
-            << "     --- rank node ---" << "\n";
+    outfile << std::setw(15) << node << std::setw(15) << xynode[0] << std::setw(15) << xynode[1] << std::setw(15)
+            << xynode[2] << "     --- rank node ---" << "\n";
 
-    outfile << std::setw(15) << nodec << std::setw(15) << xynodec[0]
-            << std::setw(15) << xynodec[1] << std::setw(15) << xynodec[2]
-            << "     --- rank control point ---" << "\n";
+    outfile << std::setw(15) << nodec << std::setw(15) << xynodec[0] << std::setw(15) << xynodec[1] << std::setw(15)
+            << xynodec[2] << "     --- rank control point ---" << "\n";
 
     for (int i = 0; i < 3; ++i) outfile << std::setw(15) << nxyr[i];
     outfile << "     --- rank number ---" << "\n";
@@ -118,8 +101,7 @@ void DataPartitioner::OutputMeshData(std::ofstream &outfile, int rank_id) const 
     if (isb != 0) {
         OutputVector(outfile, isb, naid);
 
-        outfile << std::setw(15) << isubc
-                << "     --- overlap control point number ---" << "\n";
+        outfile << std::setw(15) << isubc << "     --- overlap control point number ---" << "\n";
         OutputVector(outfile, isb, nsbc);
         OutputVector(outfile, isubc, nsubc);
         OutputVector(outfile, nodec, dbc);
@@ -139,8 +121,7 @@ void DataPartitioner::PartitionInitialDataset() {
         this->nr2_[i] = xyelemw[i] % nxyr[i];
         this->nr1_[i] = nxyr[i] - this->nr2_[i];
         dxy[i] = (xymaxw[i] - xyminw[i]) / double(xyelemw[i]);
-        this->drxy1_[i] =
-            (xymaxw[i] - xyminw[i] - dxy[i] * double(this->nr2_[i])) / double(nxyr[i]);
+        this->drxy1_[i] = (xymaxw[i] - xyminw[i] - dxy[i] * double(this->nr2_[i])) / double(nxyr[i]);
         this->drxy2_[i] = this->drxy1_[i] + dxy[i];
         this->nxyr1_[i] = this->nexyr1_[i] + 1;
         this->nxyr2_[i] = this->nexyr2_[i] + 1;
@@ -148,17 +129,12 @@ void DataPartitioner::PartitionInitialDataset() {
     }
 }
 
-void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc,
-                                 const BoundaryCondition &source_bc,
-                                 const std::vector<int> &local_counts,
-                                 const std::vector<int> &global_counts,
-                                 const std::vector<int> &local_min,
-                                 const std::vector<int> &local_max,
+void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc, const BoundaryCondition &source_bc,
+                                 const std::vector<int> &local_counts, const std::vector<int> &global_counts,
+                                 const std::vector<int> &local_min, const std::vector<int> &local_max,
                                  bool compute_values) const {
     partition_bc.nbc.resize(source_bc.ibc);
-    if (compute_values) {
-        partition_bc.fbc.resize(source_bc.ibc);
-    }
+    if (compute_values) { partition_bc.fbc.resize(source_bc.ibc); }
 
     std::vector<int> inxy(3), local_index(3);
     int nx = global_counts[0];
@@ -171,24 +147,19 @@ void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc,
         inxy[1] = (n - inxy[2] * (nx * ny)) / nx;
         inxy[0] = n - inxy[2] * (nx * ny) - inxy[1] * nx;
 
-        if (inxy[0] >= local_min[0] && inxy[0] <= local_max[0] &&
-            inxy[1] >= local_min[1] && inxy[1] <= local_max[1] &&
+        if (inxy[0] >= local_min[0] && inxy[0] <= local_max[0] && inxy[1] >= local_min[1] && inxy[1] <= local_max[1] &&
             inxy[2] >= local_min[2] && inxy[2] <= local_max[2]) {
-            for (int j = 0; j < 3; ++j) {
-                local_index[j] = inxy[j] - local_min[j];
-            }
-            int local_id = local_counts[0] * local_counts[1] * local_index[2] +
-                           local_counts[0] * local_index[1] + local_index[0];
+            for (int j = 0; j < 3; ++j) { local_index[j] = inxy[j] - local_min[j]; }
+            int local_id =
+                local_counts[0] * local_counts[1] * local_index[2] + local_counts[0] * local_index[1] + local_index[0];
             partition_bc.nbc[partition_bc.ibc] = local_id;
-            if (compute_values) {
-                partition_bc.fbc[partition_bc.ibc] = source_bc.fbc[i];
-            }
+            if (compute_values) { partition_bc.fbc[partition_bc.ibc] = source_bc.fbc[i]; }
             ++partition_bc.ibc;
         }
     }
 }
 
-void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id,
+void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id, //
                                     MaterialPoint &point, int rank_id) const {
     std::vector<int> irxy(3);
     global_id.resize(point.num);
@@ -202,8 +173,7 @@ void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id,
             if (point.coord[ip][i] < this->bound12_[i]) {
                 irxy[i] = floor((point.coord[ip][i] - xyminw[i]) / this->drxy1_[i]);
             } else {
-                irxy[i] = this->nr1_[i] +
-                          floor((point.coord[ip][i] - this->bound12_[i]) / this->drxy2_[i]);
+                irxy[i] = this->nr1_[i] + floor((point.coord[ip][i] - this->bound12_[i]) / this->drxy2_[i]);
             }
         }
         int point_rank = nrx * nry * irxy[2] + nrx * irxy[1] + irxy[0];
@@ -235,11 +205,9 @@ void DataPartitioner::MeshPartition(int rank_id) {
             aelemmax[ix] = aelemmin[ix] + this->nexyr1_[ix] - 1;
             xyelem[ix] = this->nexyr1_[ix];
         } else {
-            xymin[ix] =
-                this->bound12_[ix] + this->drxy2_[ix] * double(irxy[ix] - this->nr1_[ix]);
+            xymin[ix] = this->bound12_[ix] + this->drxy2_[ix] * double(irxy[ix] - this->nr1_[ix]);
             xymax[ix] = xymin[ix] + this->drxy2_[ix];
-            aelemmin[ix] = this->nexyr1_[ix] * this->nr1_[ix] +
-                           this->nexyr2_[ix] * (irxy[ix] - this->nr1_[ix]);
+            aelemmin[ix] = this->nexyr1_[ix] * this->nr1_[ix] + this->nexyr2_[ix] * (irxy[ix] - this->nr1_[ix]);
             aelemmax[ix] = aelemmin[ix] + this->nexyr2_[ix] - 1;
             xyelem[ix] = this->nexyr2_[ix];
         }
@@ -256,8 +224,7 @@ void DataPartitioner::MeshPartition(int rank_id) {
             }
         } else if (irxy[ix] == 0) {
             int temp_ijkl[] = {-1, -1, 0, xynode[ix] - 1, xynode[ix] - 1, xynode[ix] - 1};
-            int temp_ijkc[] = {-1, -1, 0, xynodec[ix] - 1,
-                               xynodec[ix] - idimc[ix], xynodec[ix] - 1};
+            int temp_ijkc[] = {-1, -1, 0, xynodec[ix] - 1, xynodec[ix] - idimc[ix], xynodec[ix] - 1};
             for (int i = 0; i < 6; ++i) {
                 ijkc[i][ix] = temp_ijkc[i];
                 ijkl[i][ix] = temp_ijkl[i];
@@ -273,8 +240,7 @@ void DataPartitioner::MeshPartition(int rank_id) {
             isb *= 2;
         } else {
             int temp_ijkl[] = {0, 0, 0, xynode[ix] - 1, xynode[ix] - 1, xynode[ix] - 1};
-            int temp_ijkc[] = {0, idimc[ix] - 1, 0, xynodec[ix] - 1,
-                               xynodec[ix] - idimc[ix], xynodec[ix] - 1};
+            int temp_ijkc[] = {0, idimc[ix] - 1, 0, xynodec[ix] - 1, xynodec[ix] - idimc[ix], xynodec[ix] - 1};
             for (int i = 0; i < 6; ++i) {
                 ijkc[i][ix] = temp_ijkc[i];
                 ijkl[i][ix] = temp_ijkl[i];
@@ -324,8 +290,7 @@ void DataPartitioner::MeshPartition(int rank_id) {
                 int iel = ijkl[2 * ii + 1][0];
                 if (isc == -1) continue;
 
-                naid[isb] = rank_id + (ii - 1) + (jj - 1) * nxyr[0] +
-                            (kk - 1) * nxyr[0] * nxyr[1];
+                naid[isb] = rank_id + (ii - 1) + (jj - 1) * nxyr[0] + (kk - 1) * nxyr[0] * nxyr[1];
                 nsbc[isb] = (iec - isc + 1) * (jec - jsc + 1) * (kec - ksc + 1);
                 nsbl[isb] = (iel - isl + 1) * (jel - jsl + 1) * (kel - ksl + 1);
 
@@ -355,9 +320,7 @@ void DataPartitioner::MeshPartition(int rank_id) {
 }
 
 void DataPartitioner::LoadPartitionParameters(std::ifstream &infile) {
-    for (int i = 0; i < 3; ++i) {
-        infile >> nxyr[i];
-    }
+    for (int i = 0; i < 3; ++i) { infile >> nxyr[i]; }
     infile >> this->grid_input_file_;
     infile >> this->point_input_file_;
     infile >> this->grid_output_prefix_;
@@ -365,15 +328,9 @@ void DataPartitioner::LoadPartitionParameters(std::ifstream &infile) {
 }
 
 void DataPartitioner::CreateOutputDirectories() const {
-    const std::filesystem::path grid_parent =
-        std::filesystem::path(this->grid_output_prefix_).parent_path();
-    if (!grid_parent.empty()) {
-        std::filesystem::create_directories(grid_parent);
-    }
+    const std::filesystem::path grid_parent = std::filesystem::path(this->grid_output_prefix_).parent_path();
+    if (!grid_parent.empty()) { std::filesystem::create_directories(grid_parent); }
 
-    const std::filesystem::path point_parent =
-        std::filesystem::path(this->point_output_prefix_).parent_path();
-    if (!point_parent.empty()) {
-        std::filesystem::create_directories(point_parent);
-    }
+    const std::filesystem::path point_parent = std::filesystem::path(this->point_output_prefix_).parent_path();
+    if (!point_parent.empty()) { std::filesystem::create_directories(point_parent); }
 }

@@ -52,10 +52,8 @@ void CheckSurfacePoint() {
 
 std::string FsiGenerator::CaseName() const { return "fsi"; }
 
-void FsiGenerator::Initialize() {}
-
 void FsiGenerator::LoadInput() {
-  std::ifstream infile = this->OpenInputFile("input.txt");
+    std::ifstream infile = OpenInputFile("input.txt");
 
     infile.ignore(1000, '\n');
     std::string solswitch_str;
@@ -92,7 +90,8 @@ void FsiGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> g_sp.rho >> g_wfem.rhol >> g_wfem.rmul >> g_wfem.rhog >> g_wfem.rmug >> g_wfem.fs_height;
+    infile >> g_sp.rho >> g_wfem.rhol >> g_wfem.rmul //
+        >> g_wfem.rhog >> g_wfem.rmug >> g_wfem.fs_height;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -281,11 +280,11 @@ void FsiGenerator::WriteBcData(std::ofstream &outfile) {
 }
 
 void FsiGenerator::WriteTextOutputs() {
-  std::cout << "Making grid file" << "\n";
-  this->WriteGridDataFile("griddata.txt");
+    std::cout << "Making grid file" << "\n";
+    this->WriteGridDataFile("griddata.txt");
 
-  std::cout << "Making solid point file" << "\n";
-  std::ofstream pointfile = this->OpenOutputFile("pointdata.txt");
+    std::cout << "Making solid point file" << "\n";
+    std::ofstream pointfile = OpenOutputFile("pointdata.txt");
     pointfile << std::setw(10) << g_sp.num << "\n";
     OutputVector(pointfile, g_sp.num, g_sp.coord);
     for (int i = 0; i < g_sp.num; i++) {
@@ -296,10 +295,8 @@ void FsiGenerator::WriteTextOutputs() {
 
 void FsiGenerator::WriteVisualizationOutputs() {
 #ifdef HAVE_HDF5
-  std::cout << "Making VTK HDF5 files" << "\n";
-  WriteVtkHdf5Mesh("grid.vtkhdf");
-  WriteVtkHdf5Points("sp.vtkhdf", g_sp);
+    std::cout << "Making VTK HDF5 files" << "\n";
+    WriteVtkHdf5Mesh("grid.vtkhdf");
+    WriteVtkHdf5Points("sp.vtkhdf", g_sp);
 #endif
 }
-
-void FsiGenerator::Finalize() {}

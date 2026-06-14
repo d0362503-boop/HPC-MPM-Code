@@ -6,15 +6,13 @@
 #include <string>
 
 class FsiGenerator : public DataGenerator {
- protected:
-  std::string CaseName() const override;
-  void Initialize() override;
-  void LoadInput() override;
-  void BuildData() override;
-  void WriteBcData(std::ofstream& outfile) override;
-  void WriteTextOutputs() override;
-  void WriteVisualizationOutputs() override;
-  void Finalize() override;
+  protected:
+    std::string CaseName() const override;
+    void LoadInput() override;
+    void BuildData() override;
+    void WriteBcData(std::ofstream &outfile) override;
+    void WriteTextOutputs() override;
+    void WriteVisualizationOutputs() override;
 };
 
-#endif  // DATA_FSI_FSI_GENERATOR_H_
+#endif // DATA_FSI_FSI_GENERATOR_H_

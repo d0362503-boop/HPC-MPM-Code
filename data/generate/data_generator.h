@@ -13,8 +13,6 @@ class DataGenerator {
   protected:
     virtual std::string CaseName() const = 0;
 
-    virtual void Initialize() {}
-
     virtual void LoadInput() = 0;
 
     virtual void BuildData() = 0;
@@ -24,12 +22,6 @@ class DataGenerator {
     virtual void WriteTextOutputs() = 0;
 
     virtual void WriteVisualizationOutputs() = 0;
-
-    virtual void Finalize() {}
-
-    std::ifstream OpenInputFile(const std::string &filename) const;
-
-    std::ofstream OpenOutputFile(const std::string &filename) const;
 
     void InitializeGridGeometry();
 

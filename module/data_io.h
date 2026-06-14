@@ -4,8 +4,13 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <string>
 #include <type_traits>
 #include <vector>
+
+std::ifstream OpenInputFile(const std::string &filename);
+
+std::ofstream OpenOutputFile(const std::string &filename);
 
 template <typename T> void InputVector(std::ifstream &infile, const int size0, std::vector<T> &variable) {
 

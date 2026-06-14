@@ -8,9 +8,25 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 using namespace std;
+
+ifstream OpenInputFile(const string &filename) {
+
+    ifstream infile(filename);
+    if (!infile.is_open()) { throw runtime_error("Failed to open input file: " + filename); }
+    return infile;
+}
+
+ofstream OpenOutputFile(const string &filename) {
+
+    ofstream outfile(filename);
+    if (!outfile.is_open()) { throw runtime_error("Failed to open output file: " + filename); }
+    outfile.flags(ios::right | ios::scientific);
+    return outfile;
+}
 
 void InputParaGriddata(ifstream &infile) {
 
