@@ -65,10 +65,7 @@ endif()
 # Subdirectories
 # ----------------------------------------------------------------------------
 add_subdirectory(module)
-
-if(USE_DATA_FLUID OR USE_DATA_SOLID OR USE_DATA_FSI)
-    add_subdirectory(data)
-endif()
+add_subdirectory(data)
 
 add_subdirectory(work)
 

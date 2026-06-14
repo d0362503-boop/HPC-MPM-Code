@@ -14,6 +14,12 @@ set(USE_DATA_FSI true CACHE BOOL "Build makinput_fsi data generator")
 set(USE_DATA_FLUID false CACHE BOOL "Build makinput_fluid data generator")
 set(USE_DATA_SOLID false CACHE BOOL "Build makinput_solid data generator")
 
+# Data partition selection.
+# Set exactly one of these to true to choose which divide tool is compiled.
+set(USE_DIVIDE_FSI false CACHE BOOL "Build makdivide_fsi partition tool")
+set(USE_DIVIDE_FLUID false CACHE BOOL "Build makdivide_fluid partition tool")
+set(USE_DIVIDE_SOLID false CACHE BOOL "Build makdivide_solid partition tool")
+
 # Solver method selection
 set(FLUID_METHOD "FEM" CACHE STRING "Fluid solver method: FEM or MPM")
 set_property(CACHE FLUID_METHOD PROPERTY STRINGS "FEM" "MPM")

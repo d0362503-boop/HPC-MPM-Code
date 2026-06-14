@@ -1,0 +1,5 @@
+1 1 1
+../../generate/solid/griddata.txt
+../../generate/solid/spdata.txt
+./myrank_data/griddata
+./myrank_data/spdata

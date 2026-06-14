@@ -1,0 +1,5 @@
+1 1 1
+../../generate/fluid/griddata.txt
+../../generate/fluid/wpdata.txt
+./myrank_data/griddata
+./myrank_data/wpdata
