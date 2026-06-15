@@ -273,12 +273,15 @@ class VTKHDFWriter {
         H5Dclose(dset);
     }
 
-    void CreateAndWriteVector(hid_t loc, const char* name, hsize_t npts, int ncomp, hid_t filetype, hid_t memtype,
-                              const void* data, hsize_t local_npts, hsize_t global_offset) {
-        hsize_t dims[2] = {npts, static_cast<hsize_t>(ncomp)};
+    template <typename T, std::size_t N>
+    void CreateAndWriteVector(hid_t loc, const char* name, hsize_t npts, const std::array<T, N>* data,
+                              hsize_t local_npts, hsize_t global_offset) {
+        constexpr hsize_t kNumComponents = static_cast<hsize_t>(N);
+        hsize_t dims[2] = {npts, kNumComponents};
         hid_t filespace = H5Screate_simple(2, dims, nullptr);
-        hid_t dcpl = CreateCompressedPlist2D(npts, ncomp);
-        hid_t dset = H5Dcreate(loc, name, filetype, filespace, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+        hid_t dcpl = CreateCompressedPlist2D(npts, static_cast<int>(N));
+        hid_t dset =
+            H5Dcreate(loc, name, HDF5TypeMap<T>::fileType(), filespace, H5P_DEFAULT, dcpl, H5P_DEFAULT);
         H5Pclose(dcpl);
         if (dset < 0) throw std::runtime_error(std::string("H5Dcreate failed for ") + name);
 
@@ -289,18 +292,18 @@ class VTKHDFWriter {
 
         if (local_npts > 0) {
             hsize_t start[2] = {global_offset, 0};
-            hsize_t count[2] = {local_npts, static_cast<hsize_t>(ncomp)};
+            hsize_t count[2] = {local_npts, kNumComponents};
             H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, nullptr, count, nullptr);
 
-            hsize_t mem_dims[2] = {local_npts, static_cast<hsize_t>(ncomp)};
+            hsize_t mem_dims[2] = {local_npts, kNumComponents};
             hid_t memspace = H5Screate_simple(2, mem_dims, nullptr);
-            H5Dwrite(dset, memtype, memspace, filespace, dxpl, data);
+            H5Dwrite(dset, HDF5TypeMap<T>::memType(), memspace, filespace, dxpl, data);
             H5Sclose(memspace);
         } else {
             H5Sselect_none(filespace);
             hsize_t zero = 0;
             hid_t memspace = H5Screate_simple(1, &zero, nullptr);
-            H5Dwrite(dset, memtype, memspace, filespace, dxpl, nullptr);
+            H5Dwrite(dset, HDF5TypeMap<T>::memType(), memspace, filespace, dxpl, nullptr);
             H5Sclose(memspace);
         }
 
@@ -346,8 +349,7 @@ class VTKHDFWriter {
 
     void WritePoints(hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
                      const std::vector<std::array<double, 3>>& points) {
-        CreateAndWriteVector(vtkhdf_group, "Points", total_npts, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, points.data(),
-                             local_npts, global_offset);
+        this->CreateAndWriteVector(vtkhdf_group, "Points", total_npts, points.data(), local_npts, global_offset);
     }
 
     void WriteConnectivity(hsize_t total_size, hsize_t local_count, hsize_t global_offset,
@@ -404,22 +406,23 @@ class VTKHDFWriter {
                              field.data(), local_npts, global_offset);
     }
 
+    template <typename T, std::size_t N>
     void WritePointVector(const char* name, hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
-                          const std::vector<std::array<double, 3>>& field) {
-        CreateAndWriteVector(pointdata_group, name, total_npts, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_npts, global_offset);
+                          const std::vector<std::array<T, N>>& field) {
+        this->CreateAndWriteVector(pointdata_group, name, total_npts, field.data(), local_npts, global_offset);
     }
 
+    template <typename T>
     void WriteCellScalar(const char* name, hsize_t total_ncells, hsize_t local_ncells, hsize_t global_offset,
-                         const std::vector<double>& field) {
-        CreateAndWriteScalar(celldata_group, name, total_ncells, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_ncells, global_offset);
+                         const std::vector<T>& field) {
+        CreateAndWriteScalar(celldata_group, name, total_ncells, HDF5TypeMap<T>::fileType(), HDF5TypeMap<T>::memType(),
+                             field.data(), local_ncells, global_offset);
     }
 
+    template <typename T, std::size_t N>
     void WriteCellVector(const char* name, hsize_t total_ncells, hsize_t local_ncells, hsize_t global_offset,
-                         const std::vector<std::array<double, 3>>& field) {
-        CreateAndWriteVector(celldata_group, name, total_ncells, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_ncells, global_offset);
+                         const std::vector<std::array<T, N>>& field) {
+        this->CreateAndWriteVector(celldata_group, name, total_ncells, field.data(), local_ncells, global_offset);
     }
 };
 
