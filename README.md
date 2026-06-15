@@ -8,7 +8,7 @@ This repository currently supports three top-level solver modes:
 - `SOLID`
 - `FSI`
 
-It also contains standalone data generators for building input files for those cases.
+It also contains standalone data generators and partitioners for building the input files consumed by those cases.
 
 ## Features
 
@@ -16,10 +16,11 @@ It also contains standalone data generators for building input files for those c
 - PETSc-backed sparse linear algebra
 - Fluid solvers in both `FEM` and `MPM` variants
 - Solid solvers in both `EXPLICIT` and `IMPLICIT` variants
-- Partitioned FSI workflow
+- Partitioned strong-coupling FSI workflow
 - Built-in third-party dependency bootstrap through CMake
-- Standalone data generators under `data/`
+- Standalone data generators and partitioners under `data/`
 - VTK HDF5 output for mesh and particle visualization
+- Compiler optimization enabled by default (`Release` build with `-march=native`)
 
 ## Repository Layout
 
@@ -27,18 +28,20 @@ The top-level directories are:
 
 - `module/`: shared core modules, data structures, IO, solver wrappers, fluid modules, solid modules
 - `work/`: top-level solver source selections for `FLUID`, `SOLID`, and `FSI`
-- `data/`: standalone input generators for `fluid`, `solid`, and `fsi`
+- `data/`: standalone input generators (`data/generate/`) and partitioners (`data/divide/`) for `fluid`, `solid`, and `fsi`
 - `cmake/`: build options and third-party dependency bootstrap logic
 - `Ext/`: bundled source tarballs for external dependencies
 - `external/`: installed third-party dependencies after CMake bootstrap
 - `docs/`: notes, plans, and developer-facing documents
-- `res/`: resource files
+- `res/`: resource files referenced at runtime (e.g., `res/Turek/`)
+- `build/`: required CMake binary directory
 
 Important root files:
 
 - `CMakeLists.txt`: root CMake entry
-- `cmake/options.cmake`: central build switches
+- `cmake/options.cmake`: central build option definitions
 - `AGENTS.md`: project-specific engineering rules and pitfalls
+- `MPM_main.cpp`: root solver entry point that dispatches to the selected driver
 
 ## Dependencies
 
@@ -64,7 +67,7 @@ If those installs already exist, the CMake bootstrap logic skips rebuilding them
 
 ## Build System
 
-The project now uses the root CMake workflow.
+The project uses the root CMake workflow. There is no root `Makefile`; the root `CMakeLists.txt` is the primary build path.
 
 One important repository convention is that the CMake binary directory must be named exactly `build`. Configuring into any other directory is rejected by the root `CMakeLists.txt`.
 
@@ -86,27 +89,49 @@ This produces the main solver executable:
 build/MPM
 ```
 
+The default build type is `Release`, and `-march=native` is added to the C++ flags, so the default compile flags are effectively `-O3 -DNDEBUG -march=native`.
+
 ## Build Options
 
 Most build switches live in `cmake/options.cmake`.
 
 ### 1. Solver Source Selection
 
-Solver source trees under `work/` are selected directly in:
+The actual solver source tree is selected by uncommenting exactly one `add_subdirectory(...)` line in `work/CMakeLists.txt`:
 
-- `work/CMakeLists.txt`
+```cmake
+# add_subdirectory(src_fluid)
+# add_subdirectory(src_solid)
+add_subdirectory(src_fsi)
+```
 
-by commenting or uncommenting the relevant `add_subdirectory(...)` lines.
+The `USE_SRC_FSI`, `USE_SRC_FLUID`, and `USE_SRC_SOLID` options in `cmake/options.cmake` are legacy toggles and are **not** the active selection mechanism.
 
-### 2. Data Generator Selection
+You must also keep the call in `MPM_main.cpp` consistent with the selected source tree. For example, when building `work/src_fsi`, `MPM_main.cpp` should call `MPMBlockFSI()`:
 
-Standalone data generators and divide tools are always configured through
-`data/CMakeLists.txt`. Select cases directly in:
+```cpp
+MPMBlockFSI();
+```
 
-- `data/generate/CMakeLists.txt`
-- `data/divide/CMakeLists.txt`
+### 2. Data Generator / Partitioner Selection
 
-by commenting or uncommenting the relevant `add_subdirectory(...)` lines.
+Similarly, data generators are selected in `data/generate/CMakeLists.txt`:
+
+```cmake
+# add_subdirectory(fluid)
+# add_subdirectory(solid)
+add_subdirectory(fsi)
+```
+
+And partitioners are selected in `data/divide/CMakeLists.txt`:
+
+```cmake
+# add_subdirectory(divide_fluid fluid)
+# add_subdirectory(divide_solid solid)
+add_subdirectory(divide_fsi fsi)
+```
+
+The `USE_DATA_*` and `USE_DIVIDE_*` options in `cmake/options.cmake` are legacy toggles and are **not** the active selection mechanism.
 
 ### 3. Solver Method Selection
 
@@ -120,6 +145,8 @@ Solid solver method:
 - `SOLID_METHOD=EXPLICIT`
 - `SOLID_METHOD=IMPLICIT`
 
+When building from `work/src_solid`, keep the uncommented subdirectory in `work/src_solid/CMakeLists.txt` consistent with `SOLID_METHOD`.
+
 ### 4. Dependency and Feature Toggles
 
 - `BUILD_PETSC`: build PETSc from bundled tarball
@@ -129,7 +156,7 @@ Solid solver method:
 
 ## Common Build Examples
 
-### Build the default solver configuration
+### Build the default FSI solver configuration
 
 ```bash
 cmake -S . -B build
@@ -138,6 +165,8 @@ cmake --build build -j8
 
 ### Build a fluid solver configuration
 
+Edit `work/CMakeLists.txt` to uncomment `add_subdirectory(src_fluid)` and edit `MPM_main.cpp` to call `StabilizedMixedMPM()`. Then:
+
 ```bash
 cmake -S . -B build -DFLUID_METHOD=FEM
 cmake --build build -j8
@@ -145,13 +174,12 @@ cmake --build build -j8
 
 ### Build a solid implicit configuration
 
+Edit `work/CMakeLists.txt` to uncomment `add_subdirectory(src_solid)` and edit `MPM_main.cpp` to call `Solid_implicit_ULMPM()`. Then:
+
 ```bash
 cmake -S . -B build -DSOLID_METHOD=IMPLICIT
 cmake --build build -j8
 ```
-
-When building from `work/src_solid`, keep the uncommented subdirectory in
-`work/src_solid/CMakeLists.txt` consistent with `SOLID_METHOD`.
 
 ### Build the FSI data generator
 
@@ -168,42 +196,66 @@ The main executable is intended to run under MPI:
 mpiexec -np 4 ./build/MPM
 ```
 
-The solver expects input files such as:
+At runtime the solver reads an orchestration file, conventionally named `file.dat`, containing four lines:
 
-- `griddata.txt`
-- `pointdata.txt` or case-specific point data file
-- `input.txt`
+1. Parameter file path (e.g., `input.txt`)
+2. Grid file prefix (e.g., `griddata`)
+3. Point file prefix (e.g., `pointdata`)
+4. Output file prefix
+
+The parameter file (`input.txt`) contains:
+
+- Mapping scheme (`PIC`/`FLIP`/`TPIC`/`APIC`), restart flag, nonlinear-step count
+- Start/end/output-step indices
+- Time step, tolerance, spectral radius / Newmark parameters
+- Domain bounds, element counts, B-spline orders (`idimc`)
+- Particles per element per direction (`npxye`)
+- Material densities, constitutive model flags and properties
+- Body-force vector (`bb`)
+
+Per-rank grid and point data are read from files such as:
+
+- `griddata<rank>.txt`
+- `pointdata<rank>.txt` or `wpdata<rank>.txt` / `spdata<rank>.txt`
 
 The exact required files depend on the selected case and workflow.
 
-## Data Generator Workflow
+## Data Generator / Partitioner Workflow
 
-The `data/` directory contains standalone tools for generating input files for the three main case families:
+The `data/generate/` directory contains tools for generating input files for the three main case families:
 
-- `data/fluid`
-- `data/solid`
-- `data/fsi`
+- `data/generate/fluid`
+- `data/generate/solid`
+- `data/generate/fsi`
 
-The generators are built through the root CMake workflow and produce executables in:
+The partitioners in `data/divide/` split generated inputs into per-rank files under `myrank_data/`.
+
+### Generator workflow
+
+1. Edit `data/generate/CMakeLists.txt` to uncomment the desired case.
+2. Build the target:
 
 ```bash
-build/data/
+cmake --build build --target makinput_<case> -j8
 ```
 
-Typical targets are:
-
-- `makinput_fluid`
-- `makinput_solid`
-- `makinput_fsi`
-
-Typical run pattern:
+3. Run from the case build directory, for example:
 
 ```bash
-cd build/data
+cd build/data/generate/fsi
 ./makinput_fsi
 ```
 
-This works because CMake copies the matching case `input.txt` into the expected subdirectory under `build/data/`.
+### Partitioner workflow
+
+1. Edit `data/divide/CMakeLists.txt` to uncomment the desired case.
+2. Build the target:
+
+```bash
+cmake --build build --target makdivide_<case> -j8
+```
+
+3. Run from the case build directory; it reads generator outputs and writes rank-split files under `myrank_data/`.
 
 For more detail, see `data/README.md`.
 
@@ -214,7 +266,7 @@ The project uses VTK HDF5 for visualization output.
 Typical generated files include:
 
 - mesh output: `grid.vtkhdf`
-- particle/material point output: `wp.vtkhdf` or `sp.vtkhdf`
+- particle/material point output: `wp.vtkhdf` (fluid) or `sp.vtkhdf` (solid)
 
 The `data/` generators also emit text input files such as:
 
@@ -223,29 +275,33 @@ The `data/` generators also emit text input files such as:
 - `spdata.txt`
 - `pointdata.txt`
 
+Restart output is written as plain-text per-rank files (`*_re.txt`) containing nodal/particle state.
+
 Legacy `.vtk`, `.vtu`, `.pvtu`, and `.pvd` outputs are not the standard path in the current `data/` workflow.
 
 ## Architecture Notes
 
 Some project-specific design choices matter a lot when modifying the code:
 
-- A large amount of shared state lives in inline global variables declared in headers such as `dataset.h`, `mesh.h`, and `mpi_data.h`
+- A large amount of shared state lives in inline global variables declared in headers such as `module/dataset.h`, `module/mesh.h`, and `module/mpi_data.h`
 - Many functions operate directly on this shared global state
 - Refactoring those globals into class members without a broader redesign can easily break behavior or introduce ODR issues
 
-There are also mode-specific source trees:
+The solver mode source trees are:
 
 - `work/src_fluid`
 - `work/src_solid`
 - `work/src_fsi`
 
-And lower-level module trees:
+And the lower-level module trees are:
 
 - `module/fluid/FEM`
 - `module/fluid/MPM`
 - `module/solid/explicit`
 - `module/solid/implicit`
 - `module/solver`
+
+FSI is a partitioned strong-coupling solver with block iterations, Anderson relaxation, and FSI interface detection based on solid volume fraction.
 
 ## Parallel and Numerical Caveats
 
@@ -269,10 +325,11 @@ If you are touching parallel assembly or control-point communication, read `AGEN
 
 At the repository level, the current direction is:
 
-- root CMake is the primary build path
+- root CMake is the primary and only build path
 - bundled tarballs in `Ext/` are the primary dependency source
-- `data/` generators are class-based and built through root CMake
+- `data/` generators and partitioners are built through root CMake
 - visualization output is centered on VTK HDF5
+- solver source selection is done by uncommenting the relevant `add_subdirectory(...)` lines in `work/CMakeLists.txt` and keeping `MPM_main.cpp` consistent
 
 Some older assumptions may still appear in historical notes or legacy subdirectories, so prefer the current root CMake workflow over older ad hoc build paths when in doubt.
 
