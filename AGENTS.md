@@ -14,6 +14,10 @@ Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
 **Future:** CMake prepared but not active. `data/` and `vtk/` have standalone Makefiles.
 Run: `mpiexec -np N ./MPM`. Inputs: `griddata.txt`, `pointdata.txt`, `input.txt`.
 
+`build/file.dat` is read from the `build/` working directory at runtime.
+Paths inside `file.dat` should point to files under `build/` such as `./data/generate/...`, `./data/divide/...`, and `./res/...`.
+Do not point `file.dat` back at source-tree paths under `../data/...`.
+
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
