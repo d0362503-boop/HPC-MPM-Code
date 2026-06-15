@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -195,9 +196,45 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // Dataset creation / collective write helpers
     // ------------------------------------------------------------------------
-    static hid_t CreateDataset1D(hid_t loc, const char* name, hsize_t total_size, hid_t h5type, hid_t& out_filespace) {
+    static bool DeflateAvailable() {
+        static bool checked = false;
+        static bool available = false;
+        if (!checked) {
+            available = (H5Zfilter_avail(H5Z_FILTER_DEFLATE) > 0);
+            checked = true;
+        }
+        return available;
+    }
+
+    static hid_t CreateCompressedPlist1D(hsize_t total_size, hsize_t preferred_chunk = 65536) {
+        hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+        if (total_size > 0 && DeflateAvailable()) {
+            hsize_t chunk_size = total_size < preferred_chunk ? total_size : preferred_chunk;
+            if (chunk_size < 1) chunk_size = 1;
+            H5Pset_chunk(dcpl, 1, &chunk_size);
+            H5Pset_deflate(dcpl, 6);
+        }
+        return dcpl;
+    }
+
+    static hid_t CreateCompressedPlist2D(hsize_t dim0, int dim1, hsize_t preferred_chunk = 65536) {
+        hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+        if (dim0 > 0 && dim1 > 0 && DeflateAvailable()) {
+            hsize_t ncomp = static_cast<hsize_t>(dim1);
+            hsize_t chunk0 = preferred_chunk / ncomp;
+            if (chunk0 < 1) chunk0 = 1;
+            if (chunk0 > dim0) chunk0 = dim0;
+            hsize_t chunks[2] = {chunk0, ncomp};
+            H5Pset_chunk(dcpl, 2, chunks);
+            H5Pset_deflate(dcpl, 6);
+        }
+        return dcpl;
+    }
+
+    static hid_t CreateDataset1D(hid_t loc, const char* name, hsize_t total_size, hid_t h5type, hid_t& out_filespace,
+                                 hid_t dcpl = H5P_DEFAULT) {
         out_filespace = H5Screate_simple(1, &total_size, nullptr);
-        hid_t dset = H5Dcreate(loc, name, h5type, out_filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dset = H5Dcreate(loc, name, h5type, out_filespace, H5P_DEFAULT, dcpl, H5P_DEFAULT);
         if (dset < 0) throw std::runtime_error(std::string("H5Dcreate failed for ") + name);
         return dset;
     }
@@ -228,7 +265,9 @@ class VTKHDFWriter {
     void CreateAndWriteScalar(hid_t loc, const char* name, hsize_t total_size, hid_t filetype, hid_t memtype,
                               const void* data, hsize_t local_count, hsize_t global_offset) {
         hid_t filespace;
-        hid_t dset = CreateDataset1D(loc, name, total_size, filetype, filespace);
+        hid_t dcpl = CreateCompressedPlist1D(total_size);
+        hid_t dset = CreateDataset1D(loc, name, total_size, filetype, filespace, dcpl);
+        H5Pclose(dcpl);
         WriteArrayCollective(dset, filespace, data, local_count, global_offset, memtype);
         H5Sclose(filespace);
         H5Dclose(dset);
@@ -238,7 +277,9 @@ class VTKHDFWriter {
                               const void* data, hsize_t local_npts, hsize_t global_offset) {
         hsize_t dims[2] = {npts, static_cast<hsize_t>(ncomp)};
         hid_t filespace = H5Screate_simple(2, dims, nullptr);
-        hid_t dset = H5Dcreate(loc, name, filetype, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dcpl = CreateCompressedPlist2D(npts, ncomp);
+        hid_t dset = H5Dcreate(loc, name, filetype, filespace, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+        H5Pclose(dcpl);
         if (dset < 0) throw std::runtime_error(std::string("H5Dcreate failed for ") + name);
 
         hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
@@ -444,7 +485,8 @@ struct HexMeshTopologyInfo {
 
 inline HexMeshTopologyInfo WriteHexMeshTopology(VTKHDFWriter& writer,
                                                 const std::vector<std::array<double, 3>>& points,
-                                                const std::vector<std::array<int, 8>>& conn8) {
+                                                const std::vector<std::array<int, 8>>& conn8,
+                                                hsize_t point_id_offset = 0) {
     HexMeshTopologyInfo info;
     info.local_npts = static_cast<hsize_t>(points.size());
     info.local_ncells = static_cast<hsize_t>(conn8.size());
@@ -461,9 +503,10 @@ inline HexMeshTopologyInfo WriteHexMeshTopology(VTKHDFWriter& writer,
     writer.WritePoints(info.total_npts, info.local_npts, info.point_global_offset, points);
 
     std::vector<long long> connectivity(info.local_conn_count);
+    long long point_offset_ll = static_cast<long long>(point_id_offset);
     for (hsize_t m = 0; m < info.local_ncells; ++m) {
         for (int n = 0; n < 8; ++n) {
-            connectivity[m * 8 + n] = conn8[m][n];
+            connectivity[m * 8 + n] = static_cast<long long>(conn8[m][n]) + point_offset_ll;
         }
     }
     writer.WriteConnectivity(info.total_conn_count, info.local_conn_count, info.conn_global_offset, connectivity);

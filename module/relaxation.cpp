@@ -15,11 +15,11 @@
 #include "mpi_data.h"
 #include "shape_function.h"
 
-void Anderson_relaxation_M2(int block_it, const vector<double> &nvel_k, vector<double> &u_s_old,
-                            vector<double> &u_s_older, vector<double> &r_k_old, vector<double> &r_k_older,
-                            BoundaryCondition &fsi_intf) {
+void Anderson_relaxation_M2(int block_it, const std::vector<double> &nvel_k, std::vector<double> &u_s_old,
+                            std::vector<double> &u_s_older, std::vector<double> &r_k_old,
+                            std::vector<double> &r_k_older, BoundaryCondition &fsi_intf) {
     int num = fsi_intf.ibc;
-    vector<double> u_s_new(num * 3, 0.0e0), r_k_new(num * 3, 0.0e0);
+    std::vector<double> u_s_new(num * 3, 0.0e0), r_k_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
         int nid = fsi_intf.nbc[i];
         u_s_new[i + 0 * num] = nvel_k[nid + nuc];
@@ -32,14 +32,14 @@ void Anderson_relaxation_M2(int block_it, const vector<double> &nvel_k, vector<d
     }
 
     // F0 = R_n - R_{n-1}, F1 = R_{n-1} - R_{n-2}
-    vector<double> F0(num * 3), F1(num * 3);
+    std::vector<double> F0(num * 3), F1(num * 3);
     for (int i = 0; i < num * 3; i++) {
         F0[i] = r_k_new[i] - r_k_old[i];
         F1[i] = r_k_old[i] - r_k_older[i];
     }
 
-    vector<double> M(4, 0.0e0); // M[0]=M00, M[1]=M01, M[2]=M10, M[3]=M11
-    vector<double> rhs(2, 0.0e0);
+    std::vector<double> M(4, 0.0e0); // M[0]=M00, M[1]=M01, M[2]=M10, M[3]=M11
+    std::vector<double> rhs(2, 0.0e0);
 
     for (int i = 0; i < num; i++) {
         int nid = fsi_intf.nbc[i];
@@ -59,7 +59,7 @@ void Anderson_relaxation_M2(int block_it, const vector<double> &nvel_k, vector<d
         }
     }
 
-    vector<double> M_all(4, 0.0e0), rhs_all(2, 0.0e0);
+    std::vector<double> M_all(4, 0.0e0), rhs_all(2, 0.0e0);
     MPI_Allreduce(M.data(), M_all.data(), 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(rhs.data(), rhs_all.data(), 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
@@ -85,10 +85,10 @@ void Anderson_relaxation_M2(int block_it, const vector<double> &nvel_k, vector<d
     return;
 }
 
-void Anderson_relaxation_M1(int block_it, vector<double> &u_s_old, const vector<double> &nvel_k,
-                            vector<double> &r_k_old, BoundaryCondition &fsi_intf) {
+void Anderson_relaxation_M1(int block_it, std::vector<double> &u_s_old, const std::vector<double> &nvel_k,
+                            std::vector<double> &r_k_old, BoundaryCondition &fsi_intf) {
     int num = fsi_intf.ibc;
-    vector<double> u_s_new(num * 3, 0.0e0), r_k_new(num * 3, 0.0e0);
+    std::vector<double> u_s_new(num * 3, 0.0e0), r_k_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
         int nid = fsi_intf.nbc[i];
         u_s_new[i + 0 * num] = nvel_k[nid + nuc];
@@ -101,7 +101,7 @@ void Anderson_relaxation_M1(int block_it, vector<double> &u_s_old, const vector<
     }
 
     // F0 = R_n - R_{n-1}
-    vector<double> F0(num * 3);
+    std::vector<double> F0(num * 3);
     for (int i = 0; i < num * 3; i++) { F0[i] = r_k_new[i] - r_k_old[i]; }
 
     double M = 0.0e0, rhs = 0.0e0;
@@ -134,13 +134,13 @@ void Anderson_relaxation_M1(int block_it, vector<double> &u_s_old, const vector<
     return;
 }
 
-void Aitken_relaxation(int block_it, double &omega, const vector<double> &nvel_k, vector<double> &r_k_old,
+void Aitken_relaxation(int block_it, double &omega, const std::vector<double> &nvel_k, std::vector<double> &r_k_old,
                        BoundaryCondition &fsi_intf) {
     const double omega_min = 0.05e0;
     const double omega_max = 0.8e0;
 
     int num = fsi_intf.ibc;
-    vector<double> r_k_new(num * 3, 0.0e0);
+    std::vector<double> r_k_new(num * 3, 0.0e0);
 
     for (int i = 0; i < num; i++) {
         int nid = fsi_intf.nbc[i];

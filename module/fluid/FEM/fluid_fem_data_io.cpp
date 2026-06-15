@@ -83,7 +83,14 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
     }
 
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_WORLD);
-    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
+
+    // Compute global point offset so local connectivity is written as global node IDs.
+    hsize_t local_npts = static_cast<hsize_t>(xyn.size());
+    hsize_t point_global_offset = 0;
+    hsize_t total_npts = local_npts;
+    vtkhdf::VTKHDFWriter::ComputeGlobalInfo(local_npts, point_global_offset, total_npts, MPI_COMM_WORLD);
+
+    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc, point_global_offset);
     writer.SetTime(real_time);
 
     writer.CreatePointDataGroup();
