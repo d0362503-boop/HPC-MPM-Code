@@ -26,6 +26,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ----------------------------------------------------------------------------
+# Optimization flags
+# ----------------------------------------------------------------------------
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+
+# ----------------------------------------------------------------------------
 # Build options
 # ----------------------------------------------------------------------------
 include(cmake/options.cmake)
@@ -82,12 +90,12 @@ endif()
 
 target_link_libraries(MPM PRIVATE mpm_modules)
 
-if(USE_SRC_FSI)
+if(TARGET mpm_src_fsi)
     target_link_libraries(MPM PRIVATE mpm_src_fsi)
 endif()
-if(USE_SRC_FLUID)
+if(TARGET mpm_src_fluid)
     target_link_libraries(MPM PRIVATE mpm_src_fluid)
 endif()
-if(USE_SRC_SOLID)
+if(TARGET mpm_src_solid)
     target_link_libraries(MPM PRIVATE mpm_src_solid)
 endif()

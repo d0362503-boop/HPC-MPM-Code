@@ -82,7 +82,7 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
         velocity[n] = {this->nvel_vtk[n + nu], this->nvel_vtk[n + nv], this->nvel_vtk[n + nw]};
     }
 
-    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
+    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_WORLD);
     auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
     writer.SetTime(real_time);
 

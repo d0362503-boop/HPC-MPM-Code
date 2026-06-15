@@ -3,19 +3,25 @@
 # ----------------------------------------------------------------------------
 
 # Solver source selection.
-# Set exactly one of these to true to choose which driver code is compiled.
+# These legacy toggles are kept for compatibility, but work/ case selection is
+# now controlled directly in work/CMakeLists.txt by commenting or uncommenting
+# add_subdirectory(...) lines.
 set(USE_SRC_FSI true CACHE BOOL "Build work/src_fsi sources")
 set(USE_SRC_FLUID false CACHE BOOL "Build work/src_fluid sources")
 set(USE_SRC_SOLID false CACHE BOOL "Build work/src_solid sources")
 
 # Data generator selection.
-# Set exactly one of these to true to choose which input generator is compiled.
+# These legacy toggles are kept for compatibility, but data/generate case
+# selection is now controlled directly in data/generate/CMakeLists.txt by
+# commenting or uncommenting add_subdirectory(...) lines.
 set(USE_DATA_FSI true CACHE BOOL "Build makinput_fsi data generator")
 set(USE_DATA_FLUID false CACHE BOOL "Build makinput_fluid data generator")
 set(USE_DATA_SOLID false CACHE BOOL "Build makinput_solid data generator")
 
 # Data partition selection.
-# Set exactly one of these to true to choose which divide tool is compiled.
+# These legacy toggles are kept for compatibility, but data/divide case
+# selection is now controlled directly in data/divide/CMakeLists.txt by
+# commenting or uncommenting add_subdirectory(...) lines.
 set(USE_DIVIDE_FSI false CACHE BOOL "Build makdivide_fsi partition tool")
 set(USE_DIVIDE_FLUID false CACHE BOOL "Build makdivide_fluid partition tool")
 set(USE_DIVIDE_SOLID false CACHE BOOL "Build makdivide_solid partition tool")

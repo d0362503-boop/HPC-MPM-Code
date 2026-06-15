@@ -108,7 +108,7 @@ npres_old  ← npres
 | Routine | Format | Content |
 |---------|--------|---------|
 | `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`) | `naccel`, `nvel`, `nvel_old`, `nvel_older`, `npres`, `nphi` |
-| `OutputMeshDataVTKHDF` | VTK HDF5, per-rank & view (`*-w.vtkhdf`) | `Points`, hexahedron cells, `Velocity`, `Pressure`, `Phi` |
+| `OutputMeshDataVTKHDF` | VTK HDF5, single shared file per view (`*-w.vtkhdf`) | Global `Points`, hexahedron cells, `Velocity`, `Pressure`, `Phi` written collectively over `MPI_COMM_WORLD` |
 | `Cp2NodeVTK` | Internal interpolation | Copies cell-corner data to nodes for VTK output, with clipping of `nphi_vtk` near 0 or 1 |
 
 ---

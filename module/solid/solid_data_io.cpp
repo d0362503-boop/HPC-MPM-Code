@@ -23,12 +23,8 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
         infile.ignore(1000, '\n');
     }
     for (int ip = 0; ip < this->num; ip++) {
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                this->def_grad[ip][i][j] = eye_mat[i][j];
-                if (this->Fbar_flag) this->def_grad_bar[ip][i][j] = eye_mat[i][j];
-            }
-        }
+        this->def_grad[ip] = eye_mat;
+        if (this->Fbar_flag) this->def_grad_bar[ip] = eye_mat;
         this->vol[ip] = this->vol0[ip];
     }
 
@@ -40,9 +36,7 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
     std::string filename = outfile + "-" + std::to_string(iview) + "-s.vtkhdf";
 
     std::vector<double> vm_stress(this->num);
-    for (int i = 0; i < this->num; ++i) {
-        vm_stress[i] = this->ComputeVMStress(i);
-    }
+    for (int i = 0; i < this->num; ++i) { vm_stress[i] = this->ComputeVMStress(i); }
 
     vtkhdf::VTKHDFWriter writer(filename);
     auto info = vtkhdf::WriteParticleTopology(writer, this->coord);

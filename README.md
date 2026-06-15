@@ -92,23 +92,21 @@ Most build switches live in `cmake/options.cmake`.
 
 ### 1. Solver Source Selection
 
-Exactly one of the following should be enabled:
+Solver source trees under `work/` are selected directly in:
 
-- `USE_SRC_FSI`
-- `USE_SRC_FLUID`
-- `USE_SRC_SOLID`
+- `work/CMakeLists.txt`
 
-These select which source tree under `work/` is linked into the final `MPM` executable.
+by commenting or uncommenting the relevant `add_subdirectory(...)` lines.
 
 ### 2. Data Generator Selection
 
-Exactly one of the following should be enabled when building standalone data generators:
+Standalone data generators and divide tools are always configured through
+`data/CMakeLists.txt`. Select cases directly in:
 
-- `USE_DATA_FSI`
-- `USE_DATA_FLUID`
-- `USE_DATA_SOLID`
+- `data/generate/CMakeLists.txt`
+- `data/divide/CMakeLists.txt`
 
-These control which `makinput_*` executable is emitted into `build/data/`.
+by commenting or uncommenting the relevant `add_subdirectory(...)` lines.
 
 ### 3. Solver Method Selection
 
@@ -141,35 +139,24 @@ cmake --build build -j8
 ### Build a fluid solver configuration
 
 ```bash
-cmake -S . -B build \
-  -DUSE_SRC_FLUID=ON \
-  -DUSE_SRC_FSI=OFF \
-  -DUSE_SRC_SOLID=OFF \
-  -DFLUID_METHOD=FEM
-
+cmake -S . -B build -DFLUID_METHOD=FEM
 cmake --build build -j8
 ```
 
 ### Build a solid implicit configuration
 
 ```bash
-cmake -S . -B build \
-  -DUSE_SRC_SOLID=ON \
-  -DUSE_SRC_FSI=OFF \
-  -DUSE_SRC_FLUID=OFF \
-  -DSOLID_METHOD=IMPLICIT
-
+cmake -S . -B build -DSOLID_METHOD=IMPLICIT
 cmake --build build -j8
 ```
+
+When building from `work/src_solid`, keep the uncommented subdirectory in
+`work/src_solid/CMakeLists.txt` consistent with `SOLID_METHOD`.
 
 ### Build the FSI data generator
 
 ```bash
-cmake -S . -B build \
-  -DUSE_DATA_FSI=ON \
-  -DUSE_DATA_FLUID=OFF \
-  -DUSE_DATA_SOLID=OFF
-
+cmake -S . -B build
 cmake --build build --target makinput_fsi -j8
 ```
 
