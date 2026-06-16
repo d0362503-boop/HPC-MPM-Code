@@ -3,8 +3,8 @@ res/
 vtk/
 external/
 NUL/
-.vscode/
-.agents/
+.vscode
+.agents
 
 
 # Compiled objects and binaries
@@ -32,5 +32,3 @@ data/**/sp.vtkhdf
 # Windows metadata
 *:Zone.Identifier
 
-# VS Code cache databases
-.vscode
