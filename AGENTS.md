@@ -10,9 +10,9 @@ Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
 
 ## 2. Build & Run
 
-**Current:** Root `Makefile` with boolean flags (`USE_SRC_FSI`, `USE_FEM`, etc.). Build: `make -j8` → `build/MPM.exe`.
-**Future:** CMake prepared but not active. `data/` and `vtk/` have standalone Makefiles.
-Run: `mpiexec -np N ./MPM`. Inputs: `griddata.txt`, `pointdata.txt`, `input.txt`.
+**Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
+**Legacy:** The old root `Makefile` and standalone `data/`/`vtk/` Makefiles are no longer the active build path.
+Run: `mpiexec -np N ./build/MPM`. Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
 
 ## 3. Code Architecture
 

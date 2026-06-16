@@ -105,7 +105,7 @@ The actual solver source tree is selected by uncommenting exactly one `add_subdi
 add_subdirectory(src_fsi)
 ```
 
-The `USE_SRC_FSI`, `USE_SRC_FLUID`, and `USE_SRC_SOLID` options in `cmake/options.cmake` are legacy toggles and are **not** the active selection mechanism.
+There are no CMake options for this; the active source tree is selected directly in `work/CMakeLists.txt`.
 
 You must also keep the call in `MPM_main.cpp` consistent with the selected source tree. For example, when building `work/src_fsi`, `MPM_main.cpp` should call `MPMBlockFSI()`:
 
@@ -131,7 +131,7 @@ And partitioners are selected in `data/divide/CMakeLists.txt`:
 add_subdirectory(divide_fsi fsi)
 ```
 
-The `USE_DATA_*` and `USE_DIVIDE_*` options in `cmake/options.cmake` are legacy toggles and are **not** the active selection mechanism.
+There are no CMake options for these; the active cases are selected directly in `data/generate/CMakeLists.txt` and `data/divide/CMakeLists.txt`.
 
 ### 3. Solver Method Selection
 

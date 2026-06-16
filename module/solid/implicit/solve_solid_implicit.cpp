@@ -118,7 +118,7 @@ void SolidMaterialPoint::AssembleSystem(const std::vector<double> &naccel_k, con
     VectorAssign(this->num, delta_def_grad);
     VectorAssign(this->num, def_grad_NR);
     VectorAssign(this->SM_.nmata, this->SM_.amat);
-    VectorAssign(nodec * 3, this->SM_.adiag);
+    // VectorAssign(nodec * 3, this->SM_.adiag);
     VectorAssign(nodec * 3, this->SM_.b_rhs);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
