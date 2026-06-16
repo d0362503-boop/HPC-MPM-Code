@@ -74,7 +74,6 @@ endif()
 # ----------------------------------------------------------------------------
 add_subdirectory(module)
 add_subdirectory(data)
-
 add_subdirectory(work)
 
 # ----------------------------------------------------------------------------
@@ -89,6 +88,10 @@ if(USE_MPI)
 endif()
 
 target_link_libraries(MPM PRIVATE mpm_modules)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+    target_link_libraries(MPM PRIVATE stdc++fs)
+endif()
 
 if(TARGET mpm_src_fsi)
     target_link_libraries(MPM PRIVATE mpm_src_fsi)
