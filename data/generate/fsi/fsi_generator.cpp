@@ -296,7 +296,7 @@ void FsiGenerator::WriteTextOutputs() {
 void FsiGenerator::WriteVisualizationOutputs() {
 #ifdef HAVE_HDF5
     std::cout << "Making VTK HDF5 files" << "\n";
-    WriteVtkHdf5Mesh("grid.vtkhdf");
-    WriteVtkHdf5Points("sp.vtkhdf", g_sp);
+    WriteVTKHDFMesh("grid.vtkhdf");
+    WriteVTKHDFPoints("sp.vtkhdf", g_sp);
 #endif
 }

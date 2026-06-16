@@ -37,13 +37,13 @@ void WriteGlobalMeshHeader(std::ofstream &outfile) {
 }
 
 #ifdef HAVE_HDF5
-void WriteVtkHdf5Mesh(const std::string &filename) {
+void WriteVTKHDFMesh(const std::string &filename) {
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
     vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
     writer.SetTime(0.0e0);
 }
 
-void WriteVtkHdf5Points(const std::string &filename, const MaterialPoint &point) {
+void WriteVTKHDFPoints(const std::string &filename, const MaterialPoint &point) {
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
     auto info = vtkhdf::WriteParticleTopology(writer, point.coord);
     writer.SetTime(0.0e0);

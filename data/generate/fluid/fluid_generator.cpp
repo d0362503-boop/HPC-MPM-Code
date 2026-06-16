@@ -193,7 +193,7 @@ void FluidGenerator::WriteTextOutputs() {
 void FluidGenerator::WriteVisualizationOutputs() {
 #ifdef HAVE_HDF5
     std::cout << "Making VTK HDF5 files" << "\n";
-    WriteVtkHdf5Mesh("grid.vtkhdf");
-    WriteVtkHdf5Points("wp.vtkhdf", g_wp);
+    WriteVTKHDFMesh("grid.vtkhdf");
+    WriteVTKHDFPoints("wp.vtkhdf", g_wp);
 #endif
 }
