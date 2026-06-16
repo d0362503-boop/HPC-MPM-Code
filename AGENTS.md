@@ -11,8 +11,9 @@ Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
 ## 2. Build & Run
 
 **Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
-**Legacy:** The old root `Makefile` and standalone `data/`/`vtk/` Makefiles are no longer the active build path.
+**Legacy:** The old root `Makefile` is no longer the active build path.
 Run: `mpiexec -np N ./build/MPM`. Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
+A convenience script `build/run.sh` exists but is gitignored; copy it elsewhere if you want to version it.
 
 ## 3. Code Architecture
 
@@ -49,8 +50,8 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 
 1. grep `inline` in `*.h` to find global variables before refactoring.
 2. Do not assume class encapsulation.
-3. When adding `.cpp` files, update both `CMakeLists.txt` and `Makefile`.
-4. `data/` and `vtk/` tools use old SoA→AoS data structures; check for transposed indices.
+3. When adding `.cpp` files, update the relevant `CMakeLists.txt`.
+4. `data/` tools use old SoA→AoS data structures; check for transposed indices.
 5. `data/divide_fsi/` is out of sync with global inline vars (`sp`, `wfem`).
 
 ## 7. Agent Discipline
