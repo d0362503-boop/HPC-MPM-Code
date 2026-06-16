@@ -26,6 +26,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ----------------------------------------------------------------------------
+# Compiler compatibility helpers
+# ----------------------------------------------------------------------------
+add_library(mpm_cxx_compat INTERFACE)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+    target_link_libraries(mpm_cxx_compat INTERFACE stdc++fs)
+endif()
+
+# ----------------------------------------------------------------------------
 # Optimization flags
 # ----------------------------------------------------------------------------
 if(NOT CMAKE_BUILD_TYPE)
@@ -88,10 +97,6 @@ if(USE_MPI)
 endif()
 
 target_link_libraries(MPM PRIVATE mpm_modules)
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
-    target_link_libraries(MPM PRIVATE stdc++fs)
-endif()
 
 if(TARGET mpm_src_fsi)
     target_link_libraries(MPM PRIVATE mpm_src_fsi)

@@ -17,6 +17,8 @@ target_include_directories(mpm_modules PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+target_link_libraries(mpm_modules PUBLIC mpm_cxx_compat)
+
 # Link MPI if available
 if(USE_MPI)
     target_link_libraries(mpm_modules PUBLIC MPI::MPI_CXX)

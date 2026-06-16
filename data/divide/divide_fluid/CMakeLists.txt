@@ -4,7 +4,7 @@ add_executable(makdivide_fluid
     $<TARGET_OBJECTS:mpm_divide_common>
 )
 
-target_link_libraries(makdivide_fluid PRIVATE mpm_modules)
+target_link_libraries(makdivide_fluid PRIVATE mpm_divide_common mpm_modules)
 
 set_target_properties(makdivide_fluid PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
