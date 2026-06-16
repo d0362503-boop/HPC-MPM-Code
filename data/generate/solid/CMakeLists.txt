@@ -4,7 +4,7 @@ add_executable(makinput_solid
     $<TARGET_OBJECTS:mpm_generate_common>
 )
 
-target_link_libraries(makinput_solid PRIVATE mpm_modules)
+target_link_libraries(makinput_solid PRIVATE mpm_generate_common mpm_modules)
 
 set_target_properties(makinput_solid PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
