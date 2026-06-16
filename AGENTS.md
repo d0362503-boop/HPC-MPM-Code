@@ -13,7 +13,14 @@ Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
 **Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
 **Legacy:** The old root `Makefile` is no longer the active build path.
 Run: `mpiexec -np N ./build/MPM`. Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
-A convenience script `build/run.sh` exists but is gitignored; copy it elsewhere if you want to version it.
+A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh [N]`.
+
+### CMake target dependency rules
+
+- Link `mpm_cxx_compat` (directly or via `mpm_modules`) for any target that needs C++17 / `std::filesystem`. GCC < 9 gets `stdc++fs` automatically from this single interface target.
+- `mpm_modules` is an `OBJECT` library; its PUBLIC dependencies propagate include directories and compile definitions, but final executables must still link `mpm_modules` to pull in the object files.
+- Data tools (`makinput_*`, `makdivide_*`) should be created with `mpm_add_data_tool()` / `mpm_add_divide_tool()` from `cmake/MPMTools.cmake` so link rules stay consistent.
+- The configuration stage prints an `MPM Configuration Summary` showing compiler, build type, active solver, MPI, PETSc, HDF5, and ZLIB.
 
 ## 3. Code Architecture
 

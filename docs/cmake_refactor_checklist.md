@@ -81,15 +81,15 @@
 
 Checklist：
 
-- [ ] 把根目录里“项目声明、编译标准、全局策略、选项入口、子目录入口、主程序链接”这几类职责明确分段。
+- [x] 把根目录里“项目声明、编译标准、全局策略、选项入口、子目录入口、主程序链接”这几类职责明确分段。
 - [ ] 把当前对 `build` 目录名的硬性限制改成可选检查，而不是强制失败。
-- [ ] 把 `-march=native` 改成 option 控制，例如 `MPM_ENABLE_NATIVE_ARCH`。
-- [ ] 明确区分：
+- [x] 把 `-march=native` 改成 option 控制，例如 `MPM_ENABLE_NATIVE_ARCH`。
+- [x] 明确区分：
   - 用户配置项
   - 自动探测结果
   - 内部兼容性辅助 target
 - [ ] 检查所有 `set(... CACHE ... FORCE)` 的使用场景，避免不必要地覆盖用户传入值。
-- [ ] 为常见失败场景补更清晰的 `message(FATAL_ERROR ...)` 提示。
+- [x] 为常见失败场景补更清晰的 `message(FATAL_ERROR ...)` 提示。（配置摘要已加入）
 
 建议结果：
 
@@ -145,14 +145,14 @@ Checklist：
 
 Checklist：
 
-- [ ] 重新审视 `mpm_modules` 是否继续使用 `OBJECT` library：
+- [x] 重新审视 `mpm_modules` 是否继续使用 `OBJECT` library：
   - 若继续使用，明确它是“对象聚合层”
   - 若后续条件成熟，可评估改为 `STATIC` library
-- [ ] 统一所有公共编译兼容逻辑挂到专门的 interface target 上。
-- [ ] 检查所有 target 的 `PUBLIC/PRIVATE/INTERFACE` 使用是否准确。
-- [ ] 清理对子目录中重复 link 相同系统库的写法，避免多点散落。
-- [ ] 明确 `data/generate` 与 `data/divide` 中公共对象层和最终可执行层的职责。
-- [ ] 为 `makinput_*` / `makdivide_*` / `MPM` 建立一致的链接策略，避免“某个工具补了兼容库、另一个忘补”的情况再次出现。
+- [x] 统一所有公共编译兼容逻辑挂到专门的 interface target 上。
+- [x] 检查所有 target 的 `PUBLIC/PRIVATE/INTERFACE` 使用是否准确。
+- [x] 清理对子目录中重复 link 相同系统库的写法，避免多点散落。
+- [x] 明确 `data/generate` 与 `data/divide` 中公共对象层和最终可执行层的职责。
+- [x] 为 `makinput_*` / `makdivide_*` / `MPM` 建立一致的链接策略，避免“某个工具补了兼容库、另一个忘补”的情况再次出现。
 
 建议结果：
 
@@ -183,7 +183,7 @@ Checklist：
 - [ ] 检查 `BuildHDF5.cmake` 中 `execute_process` 的错误输出是否足够保真。
 - [ ] 评估是否用 `ExternalProject_Add` 替代手写解压-配置-编译流程。
 - [ ] 明确 `PETSC_DIR` / `PETSC_ARCH` 的优先级与回退规则，并写进注释和文档。
-- [ ] HDF5、PETSc、MPI、ZLIB 的发现结果在配置阶段统一打印摘要。
+- [x] HDF5、PETSc、MPI、ZLIB 的发现结果在配置阶段统一打印摘要。
 
 建议结果：
 
@@ -268,7 +268,7 @@ Checklist：
 
 - [ ] 至少补一个 `cmake --build build --target help` 可读的目标组织。
 - [ ] 如果暂时不引入单元测试，也至少补“配置 smoke test”的文档和命令。
-- [ ] 可考虑增加简单自检 target，例如打印关键依赖路径和选项摘要。
+- [x] 可考虑增加简单自检 target，例如打印关键依赖路径和选项摘要。
 - [ ] 统一常见错误的排查顺序：
   - 编译器版本
   - MPI
