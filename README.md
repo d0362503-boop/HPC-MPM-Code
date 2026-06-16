@@ -29,7 +29,7 @@ mpiexec -np 4 ./build/MPM
 
 The CMake binary directory **must** be named `build`; anything else is rejected.
 
-Default compile flags are `-O3 -DNDEBUG -march=native` (Release build).
+Default compile flags are `-O3 -DNDEBUG` with `-march=native` enabled by default. Use `-DMPM_ENABLE_NATIVE_ARCH=OFF` for cross-architecture or cluster builds.
 
 ## Repository Layout
 
@@ -77,6 +77,7 @@ Active options in `cmake/options.cmake`:
 |--------|---------|---------|
 | `FLUID_METHOD` | `FEM` | `FEM` or `MPM` |
 | `SOLID_METHOD` | `IMPLICIT` | `EXPLICIT` or `IMPLICIT` |
+| `MPM_ENABLE_NATIVE_ARCH` | `ON` | Enable `-march=native` |
 | `BUILD_PETSC` | `ON` | Build PETSc from bundled tarball |
 | `USE_HDF5` | `ON` | Enable VTK HDF5 output |
 | `HDF5_ENABLE_PARALLEL` | `ON` | Build parallel HDF5 |
@@ -166,10 +167,10 @@ A convenience script is available at `build/run.sh` (gitignored; copy it if you 
 
 ```bash
 cd build
-./run.sh
+sh run.sh [NP]
 ```
 
-It runs `./MPM` under `nohup` with 20 MPI ranks and redirects to `stdout/output_<PID>_<NP>.txt` and `stderr/error_<PID>_<NP>.txt`.
+It runs `./MPM` under `nohup` in the background, uses all logical CPUs by default (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`), and redirects output to `stdout/out_<PID>_<NP>.log` and errors to `stderr/err_<PID>_<NP>.log`. The number of ranks can be passed as an argument or via the `NP` environment variable.
 
 ## Data Generator / Partitioner Workflow
 
