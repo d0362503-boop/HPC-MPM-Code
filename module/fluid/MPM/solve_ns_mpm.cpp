@@ -152,7 +152,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(this->NS_.nmata, this->NS_.amat);
-    VectorAssign(nodec * 4, this->NS_.adiag);
+    // VectorAssign(nodec * 4, this->NS_.adiag);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
 
     for (int m = 0; m < nelem; m++) {
@@ -228,9 +228,9 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                     double egty = this->mass[pid] * dsfi2 * sfj * t1;
                     double egtz = this->mass[pid] * dsfi3 * sfj * t1;
                     // --- Diffusion (Galerkin part) ---
-                    double su = this->vol[pid] * (2.0 * dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * this->rmu;
-                    double sv = this->vol[pid] * (dsfi1 * dsfj1 + 2.0 * dsfi2 * dsfj2 + dsfi3 * dsfj3) * this->rmu;
-                    double sw = this->vol[pid] * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + 2.0 * dsfi3 * dsfj3) * this->rmu;
+                    double su = this->vol[pid] * (2.0e0 * dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * this->rmu;
+                    double sv = this->vol[pid] * (dsfi1 * dsfj1 + 2.0e0 * dsfi2 * dsfj2 + dsfi3 * dsfj3) * this->rmu;
+                    double sw = this->vol[pid] * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + 2.0e0 * dsfi3 * dsfj3) * this->rmu;
                     double suv = this->vol[pid] * (dsfi2 * dsfj1) * this->rmu;
                     double suw = this->vol[pid] * (dsfi3 * dsfj1) * this->rmu;
                     double svu = this->vol[pid] * (dsfi1 * dsfj2) * this->rmu;

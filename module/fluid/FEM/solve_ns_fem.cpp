@@ -152,7 +152,7 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
     std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(this->NS_.nmata, this->NS_.amat);
-    VectorAssign(nodec * 4, this->NS_.adiag);
+    // VectorAssign(nodec * 4, this->NS_.adiag);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
     for (int m = 0; m < nelem; m++) {
         double t1 = this->tau1[m];

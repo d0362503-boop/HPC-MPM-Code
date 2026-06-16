@@ -3,22 +3,14 @@
 # ----------------------------------------------------------------------------
 
 # Solver source selection.
-# Set exactly one of these to true to choose which driver code is compiled.
-set(USE_SRC_FSI true CACHE BOOL "Build work/src_fsi sources")
-set(USE_SRC_FLUID false CACHE BOOL "Build work/src_fluid sources")
-set(USE_SRC_SOLID false CACHE BOOL "Build work/src_solid sources")
+# The active solver source tree is selected by uncommenting exactly one
+# add_subdirectory(...) line in work/CMakeLists.txt. Keep that file in sync
+# with the function call that is uncommented in MPM_main.cpp.
 
-# Data generator selection.
-# Set exactly one of these to true to choose which input generator is compiled.
-set(USE_DATA_FSI true CACHE BOOL "Build makinput_fsi data generator")
-set(USE_DATA_FLUID false CACHE BOOL "Build makinput_fluid data generator")
-set(USE_DATA_SOLID false CACHE BOOL "Build makinput_solid data generator")
-
-# Data partition selection.
-# Set exactly one of these to true to choose which divide tool is compiled.
-set(USE_DIVIDE_FSI false CACHE BOOL "Build makdivide_fsi partition tool")
-set(USE_DIVIDE_FLUID false CACHE BOOL "Build makdivide_fluid partition tool")
-set(USE_DIVIDE_SOLID false CACHE BOOL "Build makdivide_solid partition tool")
+# Data generator / partitioner selection.
+# The active generator and partitioner cases are selected by uncommenting the
+# relevant add_subdirectory(...) lines in data/generate/CMakeLists.txt and
+# data/divide/CMakeLists.txt, respectively.
 
 # Solver method selection
 set(FLUID_METHOD "FEM" CACHE STRING "Fluid solver method: FEM or MPM")
@@ -26,11 +18,6 @@ set_property(CACHE FLUID_METHOD PROPERTY STRINGS "FEM" "MPM")
 
 set(SOLID_METHOD "IMPLICIT" CACHE STRING "Solid solver method: EXPLICIT or IMPLICIT")
 set_property(CACHE SOLID_METHOD PROPERTY STRINGS "EXPLICIT" "IMPLICIT")
-
-# Module toggles
-option(USE_SOLVER "Build module/solver" ON)
-option(USE_FLUID "Build module/fluid" ON)
-option(USE_SOLID "Build module/solid" ON)
 
 # PETSc options
 option(BUILD_PETSC "Build PETSc from bundled Ext tarball" ON)

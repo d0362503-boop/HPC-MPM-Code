@@ -170,7 +170,7 @@ void FsiGenerator::BuildData() {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
                 int id = i + xnodec * j + xnodec * ynodec * k;
-                if (i == xnodec - 1 && (k != 0 || k != znodec - 1)) {
+                if (i == 0 && (k != 0 || k != znodec - 1)) {
                     double vel = 1.5e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
                     g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
                     g_wfem.ubc.fbc[g_wfem.ubc.ibc] = vel;

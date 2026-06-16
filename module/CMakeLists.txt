@@ -35,13 +35,19 @@ if(NOT PETSC_DIR OR PETSC_DIR STREQUAL "")
     endif()
 endif()
 
+# Only adopt PETSC_ARCH from the environment when PETSc is not already
+# installed in the flat prefix layout (${PETSC_DIR}/include, ${PETSC_DIR}/lib).
 if(NOT PETSC_ARCH AND DEFINED ENV{PETSC_ARCH})
-    set(PETSC_ARCH "$ENV{PETSC_ARCH}" CACHE STRING "PETSc architecture subdirectory" FORCE)
+    if(NOT EXISTS "${PETSC_DIR}/include/petsc.h")
+        set(PETSC_ARCH "$ENV{PETSC_ARCH}" CACHE STRING "PETSc architecture subdirectory" FORCE)
+    endif()
 endif()
 
-# If a PETSC_ARCH was picked up but the corresponding directory does not exist
-# (e.g., environment variable left over from a different install), ignore it.
-if(PETSC_ARCH AND NOT EXISTS "${PETSC_DIR}/${PETSC_ARCH}/include/petsc.h")
+# If PETSc is installed directly under the prefix, ignore any leftover
+# PETSC_ARCH from a source-tree build to avoid noisy warnings.
+if(EXISTS "${PETSC_DIR}/include/petsc.h")
+    set(PETSC_ARCH "" CACHE STRING "PETSc architecture subdirectory" FORCE)
+elseif(PETSC_ARCH AND NOT EXISTS "${PETSC_DIR}/${PETSC_ARCH}/include/petsc.h")
     message(WARNING "PETSC_ARCH '${PETSC_ARCH}' not found under ${PETSC_DIR}; ignoring it.")
     set(PETSC_ARCH "" CACHE STRING "PETSc architecture subdirectory" FORCE)
 endif()

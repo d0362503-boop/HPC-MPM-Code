@@ -176,6 +176,8 @@ void CrsMat::ApplyDiagonalScaling(int ndof) {
  * @param ndof Degrees of freedom per node.
  */
 void CrsMat::BuildDiagonalPreconditioner(int ndof) {
+
+    VectorAssign(nodec * ndof, this->adiag);
     this->ExtractDiagonal(ndof);
     this->ComputeDiagonalInverseSqrt(ndof);
     this->ApplyDiagonalScaling(ndof);

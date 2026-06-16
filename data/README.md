@@ -4,28 +4,25 @@
 
 ## Build
 
-Use the root CMake entry and select exactly one generator in `../cmake/options.cmake`:
+Use the root CMake entry. `data/CMakeLists.txt` always configures both
+`generate/` and `divide/`.
 
-- `USE_DATA_FLUID`
-- `USE_DATA_SOLID`
-- `USE_DATA_FSI`
+Choose which generator case to build by editing
+`data/generate/CMakeLists.txt` and commenting or uncommenting the
+`add_subdirectory(...)` lines.
 
-Use the same pattern for the divide tools:
-
-- `USE_DIVIDE_FLUID`
-- `USE_DIVIDE_SOLID`
-- `USE_DIVIDE_FSI`
+Choose which divide case to build by editing
+`data/divide/CMakeLists.txt` and commenting or uncommenting the
+`add_subdirectory(...)` lines.
 
 Example:
 
 ```bash
-cmake -S . -B build \
-  -DUSE_DATA_FLUID=OFF -DUSE_DATA_SOLID=OFF -DUSE_DATA_FSI=ON \
-  -DUSE_DIVIDE_FLUID=OFF -DUSE_DIVIDE_SOLID=OFF -DUSE_DIVIDE_FSI=ON
+cmake -S . -B build
 cmake --build build --target makinput_fsi makdivide_fsi -j4
 ```
 
-Only the selected case subdirectory is configured and built.
+Only the uncommented case subdirectories are configured and built.
 
 Generator executables are emitted as:
 
