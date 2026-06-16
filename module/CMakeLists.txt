@@ -17,9 +17,10 @@ target_include_directories(mpm_modules PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# All module code needs C++17 / compiler compatibility fixes.
 target_link_libraries(mpm_modules PUBLIC mpm_cxx_compat)
 
-# Link MPI if available
+# Link MPI if available. MPI usage is part of the public module API.
 if(USE_MPI)
     target_link_libraries(mpm_modules PUBLIC MPI::MPI_CXX)
 endif()
@@ -68,6 +69,7 @@ if(PETSC_ARCH)
 else()
     target_link_directories(mpm_modules PUBLIC ${PETSC_DIR}/lib)
 endif()
+# PETSc is part of the public module API (headers include petsc headers).
 target_link_libraries(mpm_modules PUBLIC petsc)
 
 if(TARGET petsc_lib_built)
@@ -79,6 +81,7 @@ endif()
 # -----------------------------------------------------------------------------
 if(USE_HDF5)
     add_dependencies(mpm_modules hdf5_lib_built)
+    # HDF5 is part of the public module API when enabled (headers use hdf5.h).
     target_include_directories(mpm_modules SYSTEM PUBLIC ${HDF5_INCLUDE_DIRS})
     target_link_libraries(mpm_modules PUBLIC ${HDF5_LIBRARIES} ZLIB::ZLIB dl)
     target_compile_definitions(mpm_modules PUBLIC HAVE_HDF5)
