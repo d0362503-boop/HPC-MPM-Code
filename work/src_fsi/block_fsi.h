@@ -59,6 +59,12 @@ class BlockFSI {
     std::vector<double> added_mass;
     std::vector<double> nfsi_force;
 
+    /**
+     * @brief Read and initialize the coupled FSI case input data.
+     *
+     * Loads shared global parameters, then dispatches fluid and solid
+     * boundary-condition/particle input to the corresponding sub-solvers.
+     */
     void DataInput();
 
     void DetectFSIInterface();

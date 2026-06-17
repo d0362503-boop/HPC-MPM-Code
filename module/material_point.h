@@ -36,6 +36,10 @@ class MaterialPoint {
     // --- Inflow BC ---
     BoundaryCondition uinfbc, vinfbc, winfbc;
 
+    /**
+     * @brief Read boundary-condition data for the current physics object from an input stream.
+     * @param infile Input stream positioned at the boundary-condition section.
+     */
     virtual void InputBCData(std::ifstream &infile) {};
     // ---------------
 

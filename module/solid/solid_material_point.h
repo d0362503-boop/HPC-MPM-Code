@@ -17,8 +17,8 @@ class SolidMaterialPointBase : public MaterialPoint {
     // --- Data Initialize ---
 
     /**
-     * @brief Read solid Boundary Condition data from input stream.
-     * @param inflie Input file stream .
+     * @brief Read solid boundary-condition data from an input stream.
+     * @param infile Input stream positioned at the solid boundary-condition section.
      */
     void InputBCData(std::ifstream &infile) override;
 

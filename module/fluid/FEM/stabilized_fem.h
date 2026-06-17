@@ -37,8 +37,8 @@ class StabilizedFEM : public MaterialPoint {
     }
 
     /**
-     * @brief Read fluid Boundary Condition data from input stream.
-     * @param inflie Input file stream.
+     * @brief Read fluid boundary-condition data from an input stream.
+     * @param infile Input stream positioned at the fluid boundary-condition section.
      */
     void InputBCData(std::ifstream &infile) override;
 

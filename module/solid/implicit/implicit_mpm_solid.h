@@ -27,6 +27,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         this->SM_.owner_ = this;
     }
 
+    /**
+     * @brief Read and initialize the standalone implicit-solid case input data.
+     *
+     * Loads global control parameters, mesh/time derived quantities, boundary
+     * conditions, and particle data for the implicit solid solver path.
+     */
     void DataInput();
 
     void SetTracForce() {

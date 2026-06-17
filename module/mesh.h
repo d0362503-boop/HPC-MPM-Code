@@ -22,6 +22,12 @@ inline std::vector<std::vector<int>> ncc;
 inline std::vector<std::array<double, 3>> xyc;
 // ----------------------------
 
+/**
+ * @brief Initialize mesh spacings and time-integration scalars derived from the global input parameters.
+ *
+ * Computes `dti`, `dxy`, `xynodew`, `xynodecw`, and `dlstep` from the
+ * already-populated global mesh/time input state.
+ */
 inline void InitalizeMeshAndTimeParameters() {
 
     dti = 1.0e0 / dt;
