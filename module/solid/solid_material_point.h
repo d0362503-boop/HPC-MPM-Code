@@ -15,18 +15,39 @@ class SolidMaterialPointBase : public MaterialPoint {
   public:
     bool Fbar_flag = false;
     // --- Data Initialize ---
+    /**
+     * @brief Read solid point data (coordinates, material IDs, velocities, etc.) from input stream.
+     * @param inflie Input file stream positioned at the point-data section.
+     */
     void InputPointData(std::ifstream &inflie) override;
 
+    /**
+     * @brief Initialize solid particle state (mass, volume, stress, deformation gradient) after input is read.
+     */
     void InitializePointData() override;
 
+    /**
+     * @brief Read solid restart data from per-rank `*_re.txt` files.
+     */
     void RestartInput() override;
 
     // --- Data I/O ---
+    /**
+     * @brief Write solid particle data to VTK HDF5 visualization files.
+     * @param iview Output view index.
+     * @param istep Current time step.
+     */
     void OutputPointDataVTKHDF(int iview, int istep) override;
 
+    /**
+     * @brief Write solid restart data to per-rank `*_re.txt` files.
+     */
     void RestartOutput() override;
 
     // --- MPI Particle move ---
+    /**
+     * @brief Move particles that have crossed rank boundaries and exchange them via MPI.
+     */
     void Moveparticle() override;
 
     // --- Stress computation ---
@@ -74,11 +95,22 @@ class SolidMaterialPointBase : public MaterialPoint {
 
     virtual void SolveSolid() = 0;
 
+    /**
+     * @brief Identify particles whose material ID corresponds to a rigid body and tag them in `rigid_bc`.
+     */
     void DetermineRigidBC();
 
     // --- Constitutive model ---
     ConstitutiveModel cm_;
 
+    /**
+     * @brief Update the stress and (if implicit) tangent stiffness for particle `pid`.
+     * @param pid              Particle index.
+     * @param stress           Particle stress vector (updated in-place).
+     * @param det_def_grad_bar F-bar corrected determinant of deformation gradient for each particle.
+     * @param def_grad         Total deformation-gradient tensor for each particle.
+     * @param delta_def_grad   Incremental deformation-gradient tensor for each particle.
+     */
     void UpdateConstitutiveModel(int pid, std::vector<std::array<double, 6>> &stress,
                                  const std::vector<double> &det_def_grad_bar,
                                  const std::vector<std::array<std::array<double, 3>, 3>> &def_grad,

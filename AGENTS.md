@@ -11,8 +11,9 @@ Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
 ## 2. Build & Run
 
 **Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
-**Legacy:** The old root `Makefile` is no longer the active build path.
-Run: `mpiexec -np N ./build/MPM`. Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
+
+**Never delete `build/`:** The `build/` directory contains generated runtime files, partitioned input data, job outputs, and local working state. Deleting it can destroy an ongoing or future simulation setup. If a clean configure is needed, remove only `CMakeCache.txt` and `CMakeFiles/` inside `build/` — never `rm -rf build`, and never use an alternative build directory.
+Run: `mpirun -np N ./build/MPM` (or use `build/run.sh`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
 A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh [N]`.
 
 ### CMake target dependency rules

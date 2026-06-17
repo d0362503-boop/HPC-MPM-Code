@@ -37,6 +37,10 @@ class CrsMat {
     // block_id= offset of the ndof*ndof dense block inside that entry.
     std::vector<double> amat, adiag, b_rhs, x_lhs;
 
+    /**
+     * @brief Build the local CSR sparsity pattern from mesh connectivity.
+     * @param num_block Number of scalar blocks per CSR entry (typically `ndof * ndof`).
+     */
     void BuildCrsMat(int num_block);
 
     inline int FindIndex(int nid, int njd, int &ncol) const {
@@ -50,28 +54,80 @@ class CrsMat {
         return this->matrow[nid] + ncol;
     }
 
+    /**
+     * @brief Extract the block-diagonal entries of `amat` into `adiag`.
+     * @param ndof Degrees of freedom per node.
+     */
     void ExtractDiagonal(int ndof);
 
+    /**
+     * @brief Compute `adiag[i] = 1 / sqrt(adiag[i])` for diagonal scaling.
+     * @param ndof Degrees of freedom per node.
+     */
     void ComputeDiagonalInverseSqrt(int ndof);
 
+    /**
+     * @brief Apply left and right diagonal scaling to the CSR matrix.
+     * @param ndof Degrees of freedom per node.
+     */
     void ApplyDiagonalScaling(int ndof);
 
+    /**
+     * @brief Build a diagonal preconditioner from `adiag`.
+     * @param ndof Degrees of freedom per node.
+     */
     void BuildDiagonalPreconditioner(int ndof);
 
+    /**
+     * @brief Scale a vector by the diagonal scaling stored in `adiag`.
+     * @param rr Vector to be scaled in-place.
+     */
     void ScaleSolution(std::vector<double> &rr);
 
+    /**
+     * @brief Reverse the diagonal scaling applied to `x_lhs`.
+     */
     void RestorSolution();
 
+    /**
+     * @brief Compute the local matrix-vector product `y = A * x` in CSR storage.
+     * @param xx Input vector.
+     * @return Result vector.
+     */
     std::vector<double> MatVecMult(const std::vector<double> &xx);
 
+    /**
+     * @brief Compute the PETSc residual norm and active-DOF count for convergence monitoring.
+     * @param res_norm  Output L2 norm of the residual.
+     * @param active_dof Output number of active degrees of freedom.
+     */
     void ComputePetscResidualStats(double &res_norm, double &active_dof);
 
+    /**
+     * @brief Compute a reference residual used for Newton-Raphson convergence checks.
+     * @return Reference residual value.
+     */
     double ComputeRefResidual();
 
+    /**
+     * @brief Compute the absolute residual used for Newton-Raphson convergence checks.
+     * @return Absolute residual value.
+     */
     double ComputeAbsResidual();
 
+    /**
+     * @brief Mark rows with negligible assembled entries as inactive for MPM solves.
+     */
     void BuildActiveRowMask();
 
+    /**
+     * @brief Check whether the Newton–Raphson iteration has converged.
+     * @param NR_it     Current Newton–Raphson iteration index.
+     * @param NR_it_max Maximum allowed Newton–Raphson iterations.
+     * @param solver_it Linear solver iteration count for the current NR step.
+     * @param r0r       Squared residual ratio (updated in-place).
+     * @return True if converged, false otherwise.
+     */
     bool CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r);
 
     // --- PETSc distributed objects ---
@@ -111,22 +167,66 @@ class CrsMat {
     std::vector<PetscScalar> petsc_block_vals_buf;
     std::vector<char> active_row_mask;
 
+    /**
+     * @brief Build the PETSc local-to-global mapping for distributed vectors/matrices.
+     * @param ndof Degrees of freedom per node.
+     */
     void BuildLGMAP(int ndof);
 
+    /**
+     * @brief Create the distributed PETSc matrix from the local CSR pattern.
+     * @param ndof Degrees of freedom per node.
+     */
     void BuildPetscMat(int ndof);
 
+    /**
+     * @brief Create and configure the PETSc KSP solver object.
+     */
     void BuildKSPSolver();
+
+    /**
+     * @brief Configure a velocity-pressure field-split preconditioner for the fluid solver.
+     * @param pc PETSc preconditioner context.
+     */
     void ConfigureVelocityPressureFieldSplit(PC pc);
 
+    /**
+     * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
+     * @param ndof Degrees of freedom per node.
+     */
     void InitPetscSolver(int ndof);
 
+    /**
+     * @brief Assemble the local CSR matrix `amat` into the PETSc distributed matrix.
+     * @param ndof Degrees of freedom per node.
+     */
     void AssemblePetscMat(int ndof);
+
+    /**
+     * @brief Assemble the local CSR matrix into the PETSc matrix using block-level mappings.
+     * @param ndof Degrees of freedom per node.
+     */
     void AssemblePetscMatBlocked(int ndof);
 
+    /**
+     * @brief Copy the local RHS vector `b_rhs` into the PETSc RHS vector.
+     * @param ndof Degrees of freedom per node.
+     */
     void UpdatePetscRhs(int ndof);
 
+    /**
+     * @brief Solve the linear system with PETSc and scatter the solution back to `x_lhs`.
+     * @param ndof Degrees of freedom per node.
+     * @param nr_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
+     * @return Number of KSP iterations, or -1 on failure.
+     */
     int SolveWithPetsc(int ndof, int nr_it = -1);
 
+    /**
+     * @brief Collect global IDs of Dirichlet boundary rows/columns into `petsc_bc_gids`.
+     *
+     * Delegates to the owning physics object (`owner_->BuildPetscBCList`).
+     */
     void BuildPetscBCList();
 
     void AddBCComponent(const BoundaryCondition &bc, int offset) {

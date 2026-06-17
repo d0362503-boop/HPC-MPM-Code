@@ -24,7 +24,7 @@ Supported solver modes:
 ```bash
 cmake -S . -B build
 cmake --build build -j8
-mpiexec -np 4 ./build/MPM
+mpirun -np 4 ./build/MPM
 ```
 
 The CMake binary directory **must** be named `build`; anything else is rejected.
@@ -71,7 +71,7 @@ If `external/petsc` and `external/hdf5` already exist, CMake skips rebuilding th
 
 ## Build Options
 
-Active options in `cmake/options.cmake`:
+Active build options (most are defined in `cmake/options.cmake`; `MPM_ENABLE_NATIVE_ARCH` is defined in the root `CMakeLists.txt`):
 
 | Option | Default | Meaning |
 |--------|---------|---------|
@@ -151,7 +151,7 @@ cmake --build build --target makinput_fsi -j8
 ## Running the Solver
 
 ```bash
-mpiexec -np 4 ./build/MPM
+mpirun -np 4 ./build/MPM
 ```
 
 At runtime the solver reads an orchestration file, conventionally `file.dat`, with four lines:
@@ -170,7 +170,9 @@ cd build
 sh run.sh [NP]
 ```
 
-It runs `./MPM` under `nohup` in the background, uses all logical CPUs by default (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`), and redirects output to `stdout/out_<PID>_<NP>.log` and errors to `stderr/err_<PID>_<NP>.log`. The number of ranks can be passed as an argument or via the `NP` environment variable.
+It launches `./MPM` with `mpirun` under `nohup` in the background, uses all logical CPUs by default (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`), and redirects output to `stdout/out_<PID>_<NP>.log` and errors to `stderr/err_<PID>_<NP>.log`. The number of ranks can be passed as an argument or via the `NP` environment variable.
+
+> **Do not delete `build/`**: it contains generated runtime files, partitioned input data, and job outputs. If a clean CMake configure is needed, remove only `build/CMakeCache.txt` and `build/CMakeFiles/`.
 
 ## Data Generator / Partitioner Workflow
 

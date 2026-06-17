@@ -7,11 +7,21 @@
 #include "mesh.h"
 #include "dataset.h"
 
+/**
+ * @brief Return the sign of a scalar value.
+ * @param val Input value.
+ * @return -1, 0, or 1 depending on the sign of `val`.
+ */
 template <typename T>
 T Sign(T val) {
     return (T(0) < val) - (val < T(0));
 }
 
+/**
+ * @brief Compute the Euclidean norm of a 3-component vector.
+ * @param vec Input vector.
+ * @return L2 norm of `vec`.
+ */
 template<typename T>
 double NormVec3(const std::array<T, 3>& vec) {
 
@@ -24,6 +34,11 @@ double NormVec3(const std::array<T, 3>& vec) {
     return norm_vec;
 }
 
+/**
+ * @brief Compute the trace of a 3x3 matrix.
+ * @param mat Input matrix.
+ * @return Trace of `mat`.
+ */
 template<typename T>
 double TraceMat3(const std::array<std::array<T, 3>, 3>& mat) {
 
@@ -35,6 +50,11 @@ double TraceMat3(const std::array<std::array<T, 3>, 3>& mat) {
     return tr_mat;
 }
 
+/**
+ * @brief Compute the determinant of a 3x3 matrix.
+ * @param mat Input matrix.
+ * @return Determinant of `mat`.
+ */
 template<typename T>
 double DetMat3(const std::array<std::array<T, 3>, 3>& mat) {
 
@@ -45,6 +65,12 @@ double DetMat3(const std::array<std::array<T, 3>, 3>& mat) {
     return mat_det;
 }
 
+/**
+ * @brief Compute the inverse of a 3x3 matrix.
+ * @param mat Input matrix.
+ * @return Inverse of `mat`.
+ * @throws Floating-point division by zero if the determinant is zero.
+ */
 template<typename T>
 std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 3>& mat) {
 
@@ -65,6 +91,10 @@ std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 
     return mat_inv;
 }
 
+/**
+ * @brief Transpose a 3x3 matrix in-place.
+ * @param mat Input/output matrix.
+ */
 template<typename T>
 void TransMat3(std::array<std::array<T, 3>, 3>& mat) {
 

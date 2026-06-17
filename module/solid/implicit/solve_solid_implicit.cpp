@@ -29,7 +29,7 @@ void SolidMaterialPoint::UpdateNRIncrement() {
     return;
 }
 
-std::vector<std::array<double, 6>> SolidMaterialPoint::InitializeNRStress() { return this->stress; }
+auto SolidMaterialPoint::InitializeNRStress() { return this->stress; }
 
 auto SolidMaterialPoint::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
                                                const std::array<double, 6> &sts_af) {

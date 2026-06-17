@@ -285,28 +285,30 @@ Checklist：
 
 - [ ] 让一个不熟悉当前构建系统的人按文档排查一次，确认路径清晰。
 
-## Phase 8: Legacy 构建路径收尾
+## Phase 8: Legacy 构建路径清理（已完成）
+
+决策：根 `Makefile` 及 `data/` 下的旧 Makefile 已彻底废弃，不再维护。
 
 重点文件：
 
-- 根 `Makefile`
-- `data/`、`vtk/` 下旧 Makefile
-- `docs/`
+- 根 `Makefile`（保留文件本体作为历史参考，但文档中不再描述其用法）
+- `data/` 下旧 Makefile
+- `docs/`、`README.md`、`AGENTS.md`、各 `README.md`
 
 Checklist：
 
-- [ ] 明确 legacy Makefile 是否继续支持。
-- [ ] 如果继续支持，写明支持范围和限制。
-- [ ] 如果不再主推，文档中明确标注“非主路径，仅历史兼容”。
-- [ ] 避免出现“新增 `.cpp` 文件只改了 CMake、忘了改 Makefile”的维护陷阱。
+- [x] 明确 legacy Makefile 不再支持。
+- [x] 从所有 Markdown 文档中移除 Makefile 用法说明。
+- [x] 文档统一以 CMake 为唯一官方构建路径。
+- [x] 新增 `.cpp` 文件只需更新 `CMakeLists.txt`。
 
 建议结果：
 
-- 团队成员知道哪条构建路径是官方主线。
+- 团队成员知道 CMake 是唯一官方主线，不存在“双主线”误导。
 
 验证：
 
-- [ ] 文档和实际行为一致，不存在“双主线”误导。
+- [x] 文档和实际行为一致；除本清理记录外，所有使用说明性质的 `*.md` 均已移除 `make -j`、`make clean`、`Makefile` 等旧构建说明。
 
 ## 5. 优先级建议
 

@@ -21,14 +21,34 @@ inline std::vector<std::vector<int>> ncc;
 inline std::vector<std::array<double, 3>> xyc;
 // ----------------------------
 
+/**
+ * @brief Compute Gaussian quadrature points and weights for hexahedral elements.
+ * @param dec2p Output array of quadrature data.
+ */
 void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p);
 
+/**
+ * @brief Compute nodal/control-point volumes from element volumes.
+ */
 void MakNodalVol();
 
+/**
+ * @brief Build the background mesh node coordinates and element connectivity.
+ */
 void BuildMesh();
 
+/**
+ * @brief Build the higher-order control-point coordinates and connectivity.
+ */
 void BuildControlPoint();
 
+/**
+ * @brief Compute the coordinate of control point `nid` along direction `dir`.
+ * @tparam dir  Spatial direction (0=x, 1=y, 2=z).
+ * @param nid   Control-point index.
+ * @param ijk_l Local IJK indices of the control point.
+ * @param ijk_g Global IJK indices of the control point.
+ */
 template <int dir> void DefineCpPos(int nid, const std::vector<int> &ijk_l, const std::vector<int> &ijk_g) {
 
     if (idimc[dir] == 1) {
