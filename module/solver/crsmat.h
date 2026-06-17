@@ -161,7 +161,7 @@ class CrsMat {
     // Block-level L2G: one global node ID per natural node.
     std::vector<PetscInt> l2g_block_map;
 
-    // Reusable block-oriented buffers for AssemblePetscMatBlocked.
+    // Reusable block-oriented buffers for AssemblePetscMat.
     // Sizes are fixed in BuildPetscMat() to avoid heap allocation in the hot loop.
     std::vector<PetscInt> petsc_block_cols_buf;
     std::vector<PetscScalar> petsc_block_vals_buf;
@@ -197,16 +197,10 @@ class CrsMat {
     void InitPetscSolver(int ndof);
 
     /**
-     * @brief Assemble the local CSR matrix `amat` into the PETSc distributed matrix.
+     * @brief Assemble the local CSR matrix into the PETSc distributed matrix using block-level mappings.
      * @param ndof Degrees of freedom per node.
      */
     void AssemblePetscMat(int ndof);
-
-    /**
-     * @brief Assemble the local CSR matrix into the PETSc matrix using block-level mappings.
-     * @param ndof Degrees of freedom per node.
-     */
-    void AssemblePetscMatBlocked(int ndof);
 
     /**
      * @brief Copy the local RHS vector `b_rhs` into the PETSc RHS vector.

@@ -487,16 +487,10 @@ void CrsMat::InitPetscSolver(int ndof) {
 }
 
 /**
- * @brief Assemble the PETSc matrix through the blocked assembly path.
- * @param ndof Degrees of freedom per node.
- */
-void CrsMat::AssemblePetscMat(int ndof) { this->AssemblePetscMatBlocked(ndof); }
-
-/**
  * @brief Assemble block rows and patch inactive owned rows with identity blocks.
  * @param ndof Degrees of freedom per node.
  */
-void CrsMat::AssemblePetscMatBlocked(int ndof) {
+void CrsMat::AssemblePetscMat(int ndof) {
     MatZeroEntries(this->petsc_mat);
     std::vector<PetscScalar> identity_block(static_cast<size_t>(ndof) * ndof, 0.0);
     for (int var = 0; var < ndof; ++var) { identity_block[var * ndof + var] = 1.0; }

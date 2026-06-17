@@ -133,7 +133,7 @@ MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
 ### 3.3 Blocked assembly path
 
-`AssemblePetscMat()` delegates to `AssemblePetscMatBlocked()`, which treats each natural node as one block row and each CSR neighbour as one dense `ndof×ndof` block. The packing order is row-major:
+`AssemblePetscMat()` treats each natural node as one block row and each CSR neighbour as one dense `ndof×ndof` block. The packing order is row-major:
 
 ```
 (0,0) (0,1) ... (0,ndof-1)
@@ -190,7 +190,7 @@ as the matrix assembly.
 
 Current implementation (`ComputePetscResidualStats`):
 
-- `AssemblePetscMatBlocked()` calls `BuildActiveRowMask()` at the start of each assembly,
+- `AssemblePetscMat()` calls `BuildActiveRowMask()` at the start of each assembly,
   then skips node block rows where `!FEM_flag && active_row_mask[i] == 0`
 - locally-owned skipped rows receive an identity block in the second pass
 - `ComputeRefResidual()` and `ComputeAbsResidual()` now use `ComputePetscResidualStats()` for
