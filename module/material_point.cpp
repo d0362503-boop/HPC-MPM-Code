@@ -126,7 +126,8 @@ void MaterialPoint::CalPointUnitNormal() {
 
 std::array<std::array<double, 3>, 3> MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode,
                                                                         double af_coeff,
-                                                                        const std::vector<std::array<double, 3>> &dsf) {
+                                                                        const std::vector<std::array<double, 3>> &dsf)
+    const noexcept {
     std::array<std::array<double, 3>, 3> def_grad{};
     for (int ni = 0; ni < nenode; ni++) {
         int nid = nc[ni];
@@ -151,7 +152,7 @@ std::array<std::array<double, 3>, 3> MaterialPoint::ComputeDeltaDefGrad(const st
 }
 
 void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
-                                    std::vector<std::array<double, 3>> &dsf) {
+                                    std::vector<std::array<double, 3>> &dsf) const noexcept {
     std::array<std::array<double, 3>, 3> def_grad{};
     def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->alpha_f, dsf);
 
@@ -171,7 +172,7 @@ void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
     return;
 }
 
-std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionParticleShifting() {
+std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionParticleShifting() const {
     std::vector<double> nei(nodec, 0.0e0);
     std::vector<std::array<double, 3>> delta_corr;
     VectorAssign(this->num, delta_corr);

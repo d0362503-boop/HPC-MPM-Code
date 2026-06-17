@@ -67,7 +67,7 @@ class SolidMaterialPointBase : public MaterialPoint {
     // -------------------------------
 
     std::array<double, 3> ComputeInternalForce(int ni, int pid, const std::vector<std::array<double, 3>> &dsf,
-                                               const std::array<double, 6> &stress) {
+                                               const std::array<double, 6> &stress) const noexcept {
         double dsfi1 = dsf[ni][0];
         double dsfi2 = dsf[ni][1];
         double dsfi3 = dsf[ni][2];
@@ -80,7 +80,7 @@ class SolidMaterialPointBase : public MaterialPoint {
         return nfint;
     }
 
-    virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi) {
+    virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept {
         double fx = bb[0] * facl;
         double fy = bb[1] * facl;
         double fz = bb[2] * facl;

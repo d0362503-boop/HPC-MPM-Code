@@ -30,9 +30,9 @@ class FSISolid : public implicitmpm::SolidMaterialPoint {
 
     FSISolid(BlockFSI &fsi) : fsi_(fsi) {}
 
-    double ComputeNRLumpedMat(double pid, double sfi) override;
+    double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    std::array<double, 3> ComputeExternalForce(int pid, double sfi) override;
+    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
 
     void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
 };

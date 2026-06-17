@@ -144,7 +144,7 @@ void SolidMaterialPoint::AssembleSystem(const std::vector<double> &naccel_k, con
                 double dsfi3 = dsf[ni][2];
 
                 // --- Mass Matrix (lumpd) ---
-                double emd_lu = this->ComputeNRLumpedMat(pid, sfi);
+                double emd_lu = this->ComputeNRLumpedMassMat(pid, sfi);
 
                 int ncol = 0;
                 for (int nj = 0; nj < nenode; nj++) {

@@ -211,7 +211,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                 double dsfi2 = dsf[ni][1];
                 double dsfi3 = dsf[ni][2];
                 // --- Mass Matrix (Galerkin part) ---
-                double emd_lu = this->ComputeNRLumpedMat(pid, sfi);
+                double emd_lu = this->ComputeNRLumpedMassMat(pid, sfi);
 
                 int ncol = 0;
                 for (int nj = 0; nj < nenode; nj++) {

@@ -87,7 +87,7 @@ class StabilizedFEM : public MaterialPoint {
     std::vector<double> ComputeAdvectionVel();
 
     /**
-     * @brief Compute SUPG/PSPG stabilization coefficients `tau1` and shock-capturing coefficients `tau2`.
+     * @brief Compute SUPG/PSPG stabilization coefficients `tau1` and LSIC coefficients `tau2`.
      * @param adv_vel Advection velocity vector (size `nodec * 3`).
      */
     void MakNSStabCoeff(const std::vector<double> &adv_vel);

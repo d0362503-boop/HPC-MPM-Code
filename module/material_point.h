@@ -54,7 +54,7 @@ class MaterialPoint {
      * @brief Compute the nodal acceleration at the Generalized-α intermediate time level.
      * @return Vector of intermediate accelerations sized to `nodec * 3`.
      */
-    std::vector<double> GeneralizedAlphaNodeAccelUpdate();
+    std::vector<double> GeneralizedAlphaNodeAccelUpdate() const;
 
     // --- Newmark-β part ---
     double gamma_nb, beta_nb;
@@ -70,7 +70,7 @@ class MaterialPoint {
      * @param nvel_k   Nodal velocity vector to be predicted (size `nodec * 3`).
      * @param naccel_k Nodal acceleration vector to be predicted (size `nodec * 3`).
      */
-    void PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k, std::vector<double> &naccel_k);
+    void PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
     // ------------------------------
 
     // --- Newton-Raphson ---
@@ -84,7 +84,7 @@ class MaterialPoint {
     virtual void BCResidualSet(std::vector<double> &rr) {};
     // ------------------------------------------
 
-    virtual double ComputeNRLumpedMat(double pid, double sfi) {
+    virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
         double emd = this->nb_para[3] * sfi * this->mass[pid];
 
         return emd;
@@ -105,7 +105,7 @@ class MaterialPoint {
 
     virtual void UpdateNRIncrement() {};
 
-    int SolveSystem(CrsMat &mat, int NR_it = -1) {
+    int SolveSystem(CrsMat &mat, int NR_it = -1) const {
         int iter;
         if (mat.use_petsc) {
             mat.AssemblePetscMat(mat.ndof);
@@ -124,9 +124,10 @@ class MaterialPoint {
     void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
 
     /**
-     * @brief Update particle position, velocity, acceleration, and deformation gradient after a converged step.
+     * @brief Commit particle kinematics: update FLIP velocity via Newmark-β, update position, and apply optional
+     * particle-shifting correction.
      * @param accel_old Nodal/particle acceleration from the previous step.
-     * @param disp      Nodal displacement increment.
+     * @param disp      Nodal displacement increment applied to particle coordinates.
      * @param delta_corr Optional particle-shifting correction displacement.
      */
     void CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
@@ -139,7 +140,8 @@ class MaterialPoint {
      * @param nenode Number of nodes in the element.
      * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
      */
-    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf);
+    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode,
+                         std::vector<std::array<double, 3>> &dsf) const noexcept;
     // ------------------------
     // ------------------------
 
@@ -196,13 +198,14 @@ class MaterialPoint {
      */
     virtual std::array<std::array<double, 3>, 3> ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode,
                                                                      double af_coeff,
-                                                                     const std::vector<std::array<double, 3>> &dsf);
+                                                                     const std::vector<std::array<double, 3>> &dsf)
+        const noexcept;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting();
+    std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
     // ----------------------------------
 
     // ----- Control point variable -----
@@ -289,7 +292,8 @@ class MaterialPoint {
      * @param node_var  Nodal/control-point accumulator vector.
      */
     template <typename T>
-    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var, std::vector<T> &node_var);
+    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var,
+                        std::vector<T> &node_var) const noexcept;
 
     /**
      * @brief Map a per-particle scalar variable to control points with mass weighting.
@@ -301,8 +305,8 @@ class MaterialPoint {
      * @param node_var   Nodal/control-point accumulator vector.
      */
     template <typename T>
-    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass, const std::vector<T> &point_var,
-                        std::vector<T> &node_var);
+    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
+                        const std::vector<T> &point_var, std::vector<T> &node_var) const noexcept;
 
     /**
      * @brief Map a per-particle vector variable (one component) to control points with mass weighting.
@@ -315,14 +319,15 @@ class MaterialPoint {
      */
     template <typename T>
     void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                        const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var);
+                        const std::vector<std::array<T, 3>> &point_var,
+                        std::vector<T> &node_var) const noexcept;
     // -----------------------------------
     virtual ~MaterialPoint() = default;
 };
 
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var,
-                                   std::vector<T> &node_var) {
+                                   std::vector<T> &node_var) const noexcept {
     node_var[nid] += sfi * point_var[pid];
 
     return;
@@ -330,7 +335,7 @@ void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vect
 
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                                   const std::vector<T> &point_var, std::vector<T> &node_var) {
+                                   const std::vector<T> &point_var, std::vector<T> &node_var) const noexcept {
     node_var[nid] += sfi * point_mass[pid] * point_var[pid];
 
     return;
@@ -338,7 +343,8 @@ void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vect
 
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                                   const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) {
+                                   const std::vector<std::array<T, 3>> &point_var,
+                                   std::vector<T> &node_var) const noexcept {
     node_var[nid + nuc] += sfi * point_mass[pid] * point_var[pid][0];
     node_var[nid + nvc] += sfi * point_mass[pid] * point_var[pid][1];
     node_var[nid + nwc] += sfi * point_mass[pid] * point_var[pid][2];
