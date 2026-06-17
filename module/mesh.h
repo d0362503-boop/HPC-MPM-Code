@@ -28,7 +28,7 @@ inline std::vector<std::array<double, 3>> xyc;
  * Computes `dti`, `dxy`, `xynodew`, `xynodecw`, and `dlstep` from the
  * already-populated global mesh/time input state.
  */
-inline void InitalizeMeshAndTimeParameters() {
+inline void InitializeMeshAndTimeParameters() {
 
     dti = 1.0e0 / dt;
     for (int i = 0; i < 3; i++) {

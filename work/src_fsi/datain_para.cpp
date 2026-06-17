@@ -90,7 +90,7 @@ void BlockFSI::DataInput() {
     infile.ignore(1000, '\n');
     infile.close();
 
-    InitalizeMeshAndTimeParameters();
+    InitializeMeshAndTimeParameters();
 
     // --- Generalized α & Newmark β parameter Init ---
     this->solid_.GeneralizedAlphaParaSet();

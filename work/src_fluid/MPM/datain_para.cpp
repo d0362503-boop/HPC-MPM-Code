@@ -67,7 +67,7 @@ void StabilizedMPM::DataInput() {
     infile.ignore(1000, '\n');
     infile.close();
 
-    InitalizeMeshAndTimeParameters();
+    InitializeMeshAndTimeParameters();
 
     // ----- Newmark beta parameter -----
     this->NewmarkBetaParaSet();

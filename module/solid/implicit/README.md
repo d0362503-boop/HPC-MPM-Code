@@ -8,7 +8,7 @@ Unlike the explicit MPM counterpart, this solver assembles and factorizes a spar
 
 | Matrix | DOF | Purpose |
 |--------|-----|---------|
-| `solid_` | 3 (u, v, w) | Momentum / displacement system |
+| `SM_` | 3 (u, v, w) | Momentum / displacement system |
 
 ---
 
@@ -16,7 +16,7 @@ Unlike the explicit MPM counterpart, this solver assembles and factorizes a spar
 
 | File | Responsibility |
 |------|----------------|
-| `implicit_mpm_solid.h` | Class declaration, constructor wiring (`solid_.owner_ = this`), inline singleton `sp` |
+| `implicit_mpm_solid.h` | Class declaration, constructor wiring (`SM_.owner_ = this`) |
 | `solve_solid_implicit.cpp` | NR loop, system assembly, tangent-modulus computation, diagonal preconditioner |
 | `var_trans_solid_implicit.cpp` | P2G (`Particle2Node`), G2P (`Node2Particle`), deformation-gradient update, particle shifting |
 
@@ -27,7 +27,7 @@ Unlike the explicit MPM counterpart, this solver assembles and factorizes a spar
 ```
 SolidMaterialPointBase
     └── ImplicitSolidMPM
-            └── solid_ : CrsMat  (ndof = 3, owner_ = this, FEM_flag = false)
+            └── SM_ : CrsMat  (ndof = 3, owner_ = this, FEM_flag = false)
 ```
 
 `ImplicitSolidMPM` **overrides** the base-class virtual hooks for polymorphic BC handling:
@@ -46,7 +46,15 @@ Zeroes constrained DOFs in a residual vector:
 Sets Dirichlet values for the current NR iteration.
 
 ### `UpdateNRIncrement()`
-Applies the converged Newton correction `solid_.x_lhs` to the nodal displacement `ndispl`.
+Applies the converged Newton correction `SM_.x_lhs` to the nodal displacement `ndispl`.
+
+### `DataInput()`
+Loads the standalone implicit-solid case input:
+- orchestration file (`file.dat`)
+- parameter file
+- derived mesh/time scalars via `InitializeMeshAndTimeParameters()`
+- solid BC data through `InputBCData(infile)`
+- solid particle data through `InputPointData(infile)`
 
 ---
 
@@ -71,7 +79,7 @@ for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
     PredictNewmarkBetaVelAndAccel(...);     // predictor step
     AssembleSystem(naccel_k, nvel_k, stress_k);
-    iter = GPBiCGSafe(solid_);              // linear solve
+    iter = GPBiCGSafe(SM_);                 // linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
     if CheckNRConvergence() break;
 ```
@@ -96,7 +104,7 @@ Then, for each node pair `(ni, nj)`:
   - For nonlinear problems adds the **geometric stiffness** term `σ_af ⊗ I`
 - **Internal / external force vectors**: `f_int = -∇N · σ_af · vol`, `f_ext = sf · (mass · g + trac)`
 
-The assembled matrix is stored in `solid_.amat`, RHS in `solid_.b_rhs`.
+The assembled matrix is stored in `SM_.amat`, RHS in `SM_.b_rhs`.
 
 ### 4. Tangent Modulus (`ComputeTangentModulus`)
 
@@ -126,16 +134,15 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 
 ## Integration with the Rest of the Codebase
 
-- **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; BC logic injected through `owner_` virtuals. `solid_.ndof = 3` configures the generic solver for 3-DOF solid mechanics.
+- **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; BC logic injected through `owner_` virtuals. `SM_.ndof = 3` configures the generic solver for 3-DOF solid mechanics.
 - **`MaterialPoint`** (`module/material_point.h`) — base class providing `PredictNewmarkBetaVelAndAccel`, `CommitNodalKinematics`, and the virtual BC hooks.
 - **`SolidMaterialPointBase`** (`module/solid/solid_material_point.h`) — intermediate base providing constitutive-model interface (`UpdateConstitutiveModel`).
-- **Solvers** (`module/solver/solver.cpp`) — `GPBiCGSafe` called on `solid_`; residual callbacks dispatched through `solid_.owner_->BCResidualSet(rr)`.
+- **Solvers** (`module/solver/solver.cpp`) — `GPBiCGSafe` called on `SM_`; residual callbacks dispatched through `SM_.owner_->BCResidualSet(rr)`.
 
 ---
 
 ## Coding Style Notes
 
-- Trailing underscore for class members (`owner_`, `solid_`).
-- Global singleton `sp` declared inline in `implicit_mpm_solid.h`.
+- Trailing underscore for class members (`owner_`, `SM_`).
 - `using namespace implicitmpm;` appears in `.cpp` files only.
-- The constructor disables PETSc (`use_petsc = false`) and sets `FEM_flag = false` to indicate an MPM (not FEM) matrix structure.
+- The constructor enables PETSc (`use_petsc = true`) and sets `FEM_flag = false` to indicate an MPM (not FEM) matrix structure.

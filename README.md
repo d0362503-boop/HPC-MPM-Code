@@ -194,6 +194,16 @@ cd build/data/divide/fsi
 
 The partitioner writes rank-split data under `myrank_data/`.
 
+For solid cases, the generated `spdata.txt` / partitioned `spdata*.txt`
+records now store each particle as:
+
+1. coordinate triplet
+2. `id`
+3. `matid`
+4. `surf_point`
+5. `mass`
+6. `vol0`
+
 ## Output
 
 - Visualization: VTK HDF5 (`grid.vtkhdf`, `wp.vtkhdf`, `sp.vtkhdf`)
