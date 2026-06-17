@@ -12,6 +12,16 @@
 
 using namespace stabilizedfem;
 
+void StabilizedFEM::InputBCData(std::ifstream &infile) {
+
+    this->ubc.BCInput(infile);
+    this->vbc.BCInput(infile);
+    this->wbc.BCInput(infile);
+    this->pbc.BCInput(infile);
+
+    return;
+}
+
 void StabilizedFEM::RestartInput() {
     this->InitializeMeshData();
 

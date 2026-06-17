@@ -36,6 +36,12 @@ class StabilizedFEM : public MaterialPoint {
         this->PF_.owner_ = this;
     }
 
+    /**
+     * @brief Read fluid Boundary Condition data from input stream.
+     * @param inflie Input file stream.
+     */
+    void InputBCData(std::ifstream &infile) override;
+
     void InitializeMeshData() {
         VectorAssign(nodec * 3, this->nvel);
         VectorAssign(nodec * 3, this->nvel_old);

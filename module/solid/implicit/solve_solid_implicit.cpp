@@ -23,16 +23,16 @@
 
 using namespace implicitmpm;
 
-void SolidMaterialPoint::UpdateNRIncrement() {
+void ImplicitSolidMPM::UpdateNRIncrement() {
     for (int n = 0; n < nodec * 3; n++) { this->ndispl[n] += this->SM_.x_lhs[n]; }
 
     return;
 }
 
-auto SolidMaterialPoint::InitializeNRStress() { return this->stress; }
+auto ImplicitSolidMPM::InitializeNRStress() { return this->stress; }
 
-auto SolidMaterialPoint::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
-                                               const std::array<double, 6> &sts_af) {
+auto ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
+                                             const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[idm[i][j]]; }
@@ -62,7 +62,7 @@ auto SolidMaterialPoint::ComputeTangentModulus(int pid, int ni, int nj, const st
     return K_mat;
 }
 
-void SolidMaterialPoint::SolveSolid() {
+void ImplicitSolidMPM::SolveSolid() {
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
 
     // --- NR_flag true for nonlinear elasticity and false for linear elasticity ---
@@ -102,8 +102,8 @@ void SolidMaterialPoint::SolveSolid() {
     return;
 }
 
-void SolidMaterialPoint::AssembleSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k,
-                                        std::vector<std::array<double, 6>> &stress_k) {
+void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k,
+                                      std::vector<std::array<double, 6>> &stress_k) {
     const double af = this->alpha_f;
     const double af0 = 1.0e0 - this->alpha_f;
     const double am = this->alpha_m;

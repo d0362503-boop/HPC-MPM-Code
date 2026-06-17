@@ -20,7 +20,7 @@ using namespace implicitmpm;
 
 namespace {
 
-SolidMaterialPoint g_sp;
+ImplicitSolidMPM g_sp;
 double g_msp = 0.0;
 double g_volp = 0.0;
 
@@ -42,7 +42,7 @@ void SolidGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> g_sp.gamma_nb >> g_sp.beta_nb;
+    infile >> dt >> mtol >> g_sp.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -200,8 +200,8 @@ void SolidGenerator::WriteTextOutputs() {
     pointfile << std::setw(10) << g_sp.num << "\n";
     OutputVector(pointfile, g_sp.num, g_sp.coord);
     for (int i = 0; i < g_sp.num; i++) {
-        pointfile << std::setw(10) << i << std::setw(10) << g_sp.matid[i] << std::setw(15) << g_msp << std::setw(15)
-                  << g_volp << "\n";
+        pointfile << std::setw(15) << i << std::setw(15) << g_sp.matid[i] << std::setw(15) << g_sp.surf_point[i]
+                  << std::setw(15) << g_msp << std::setw(15) << g_volp << "\n";
     }
 }
 

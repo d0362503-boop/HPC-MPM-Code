@@ -26,7 +26,7 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
-- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `SolidMaterialPoint` (ImplicitMPM).
+- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (ImplicitMPM).
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h`, selected by `solswitch` string.
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Known issue: parallel ownership bug with shared overlap nodes (see `petsc_parallel_debug_report_v2.md`).
 

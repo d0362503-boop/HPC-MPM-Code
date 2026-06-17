@@ -38,6 +38,11 @@ class StabilizedMPM : public MaterialPoint {
     void DataInput();
 
     /**
+     * @brief Read fluid Boundary Condition data from input stream.
+     * @param inflie Input file stream.
+     */
+    void InputBCData(std::ifstream &infile) override;
+    /**
      * @brief Initialize fluid particle state (mass, volume, pressure) after input is read.
      */
     void InitializePointData() override;

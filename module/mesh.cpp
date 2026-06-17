@@ -7,9 +7,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace std;
-
-void GaussianDistribution(array<array<double, 3>, 6> &dec2p) {
+void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p) {
 
     dec2p = {};
 
@@ -69,7 +67,7 @@ void BuildMesh() {
     int ynode = xynode[1];
     int znode = xynode[2];
 
-    xyn.assign(node, array<double, 3>{});
+    xyn.assign(node, std::array<double, 3>{});
     for (int k = 0; k < znode; k++) {
         for (int j = 0; j < ynode; j++) {
             for (int i = 0; i < xnode; i++) {
@@ -81,7 +79,7 @@ void BuildMesh() {
         }
     }
 
-    nc.assign(nelem, array<int, 8>{});
+    nc.assign(nelem, std::array<int, 8>{});
     for (int k = 0; k < zelem; k++) {
         for (int j = 0; j < yelem; j++) {
             for (int i = 0; i < xelem; i++) {
@@ -112,7 +110,7 @@ void BuildControlPoint() {
     int nez = xyelem[2];
 
     int nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);
-    ncc.assign(nelem, vector<int>(nenode));
+    ncc.assign(nelem, std::vector<int>(nenode));
     for (int m = 0; m < nelem; m++) {
 
         int ize = m / (nex * ney);
@@ -134,7 +132,7 @@ void BuildControlPoint() {
         }
     }
 
-    xyc.assign(nodec, array<double, 3>{});
+    xyc.assign(nodec, std::array<double, 3>{});
     for (int k = aelemmin[2]; k <= aelemmax[2] + idimc[2]; k++) {
         for (int j = aelemmin[1]; j <= aelemmax[1] + idimc[1]; j++) {
             for (int i = aelemmin[0]; i <= aelemmax[0] + idimc[0]; i++) {

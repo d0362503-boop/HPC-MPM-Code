@@ -24,7 +24,7 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
     void BCSet() override;
 };
 
-class FSISolid : public implicitmpm::SolidMaterialPoint {
+class FSISolid : public implicitmpm::ImplicitSolidMPM {
   public:
     BlockFSI &fsi_; // Reference back to the FSI coordinator
 

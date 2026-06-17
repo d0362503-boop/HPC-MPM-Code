@@ -13,11 +13,11 @@
 
 namespace implicitmpm {
 
-class SolidMaterialPoint : public SolidMaterialPointBase {
+class ImplicitSolidMPM : public SolidMaterialPointBase {
   public:
     CrsMat SM_;
 
-    SolidMaterialPoint() {
+    ImplicitSolidMPM() {
         this->ode_order = 2;
         this->cm_.implicit_flag = true;
         this->SM_.ndof = 3;
@@ -26,6 +26,8 @@ class SolidMaterialPoint : public SolidMaterialPointBase {
         this->SM_.amg_rebuild_freq = 1; // keep solid AMG alive across this 10-step window unless iterations deteriorate
         this->SM_.owner_ = this;
     }
+
+    void DataInput();
 
     void SetTracForce() {
         const double t0 = 1.0e0 * dxy[1] * dxy[2] / (npxye[1] * npxye[2]);

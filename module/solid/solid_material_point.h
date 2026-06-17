@@ -15,9 +15,16 @@ class SolidMaterialPointBase : public MaterialPoint {
   public:
     bool Fbar_flag = false;
     // --- Data Initialize ---
+
+    /**
+     * @brief Read solid Boundary Condition data from input stream.
+     * @param inflie Input file stream .
+     */
+    void InputBCData(std::ifstream &infile) override;
+
     /**
      * @brief Read solid point data (coordinates, material IDs, velocities, etc.) from input stream.
-     * @param inflie Input file stream positioned at the point-data section.
+     * @param inflie Input file stream .
      */
     void InputPointData(std::ifstream &inflie) override;
 
@@ -51,12 +58,12 @@ class SolidMaterialPointBase : public MaterialPoint {
     void Moveparticle() override;
 
     // --- Stress computation ---
-    double ComputeMeanStress(int pid) {
+    double ComputeMeanStress(int pid) const noexcept {
         double mean_stress = (this->stress[pid][0] + this->stress[pid][1] + this->stress[pid][2]) / 3.0e0;
         return mean_stress;
     }
 
-    double ComputeVMStress(int pid) {
+    double ComputeVMStress(int pid) const noexcept {
         double VM_stress = std::sqrt(
             0.5e0 * (pow((this->stress[pid][0] - this->stress[pid][1]), 2)   //
                      + pow((this->stress[pid][1] - this->stress[pid][2]), 2) //

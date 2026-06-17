@@ -35,6 +35,8 @@ class MaterialPoint {
     BoundaryCondition rigid_bc;
     // --- Inflow BC ---
     BoundaryCondition uinfbc, vinfbc, winfbc;
+
+    virtual void InputBCData(std::ifstream &infile) {};
     // ---------------
 
     // --- For Implicit MPM ---
@@ -196,10 +198,9 @@ class MaterialPoint {
      * @param dsf       Shape-function gradients in the current configuration.
      * @return Incremental deformation gradient tensor.
      */
-    virtual std::array<std::array<double, 3>, 3> ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode,
-                                                                     double af_coeff,
-                                                                     const std::vector<std::array<double, 3>> &dsf)
-        const noexcept;
+    virtual std::array<std::array<double, 3>, 3>
+    ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, double af_coeff,
+                        const std::vector<std::array<double, 3>> &dsf) const noexcept;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
@@ -305,8 +306,8 @@ class MaterialPoint {
      * @param node_var   Nodal/control-point accumulator vector.
      */
     template <typename T>
-    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                        const std::vector<T> &point_var, std::vector<T> &node_var) const noexcept;
+    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass, const std::vector<T> &point_var,
+                        std::vector<T> &node_var) const noexcept;
 
     /**
      * @brief Map a per-particle vector variable (one component) to control points with mass weighting.
@@ -319,8 +320,7 @@ class MaterialPoint {
      */
     template <typename T>
     void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                        const std::vector<std::array<T, 3>> &point_var,
-                        std::vector<T> &node_var) const noexcept;
+                        const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) const noexcept;
     // -----------------------------------
     virtual ~MaterialPoint() = default;
 };

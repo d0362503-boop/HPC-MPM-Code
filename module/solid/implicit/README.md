@@ -26,11 +26,11 @@ Unlike the explicit MPM counterpart, this solver assembles and factorizes a spar
 
 ```
 SolidMaterialPointBase
-    └── SolidMaterialPoint
+    └── ImplicitSolidMPM
             └── solid_ : CrsMat  (ndof = 3, owner_ = this, FEM_flag = false)
 ```
 
-`SolidMaterialPoint` **overrides** the base-class virtual hooks for polymorphic BC handling:
+`ImplicitSolidMPM` **overrides** the base-class virtual hooks for polymorphic BC handling:
 
 ### `BuildPetscBCList(CrsMat& mat)`
 Collects 3-DOF BC global IDs:

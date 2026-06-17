@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dataset.h"
 #include <array>
 #include <vector>
 
@@ -20,6 +21,19 @@ inline std::vector<double> nvol;
 inline std::vector<std::vector<int>> ncc;
 inline std::vector<std::array<double, 3>> xyc;
 // ----------------------------
+
+inline void InitalizeMeshAndTimeParameters() {
+
+    dti = 1.0e0 / dt;
+    for (int i = 0; i < 3; i++) {
+        dxy[i] = (xymaxw[i] - xyminw[i]) / double(xyelemw[i]);
+        xynodew[i] = xyelemw[i] + 1;
+        xynodecw[i] = xyelemw[i] + idimc[i];
+    }
+    dlstep = 1.0e0 / double(nlstep);
+
+    return;
+}
 
 /**
  * @brief Compute Gaussian quadrature points and weights for hexahedral elements.

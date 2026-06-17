@@ -20,15 +20,15 @@ using namespace implicitmpm;
 using namespace stabilizedfem;
 
 void BlockFSI::DataInput() {
-    std::ifstream infile;
-    infile.open("file.dat");
+
+    std::ifstream infile = OpenInputFile("file.dat");
     getline(infile, parafile);
     getline(infile, gridfile);
     getline(infile, pointfile);
     getline(infile, outfile);
     infile.close();
 
-    infile.open(parafile);
+    infile = OpenInputFile(parafile);
     infile.ignore(1000, '\n');
     std::string solswitch_str;
     infile >> solswitch_str >> rstflag >> nlstep;
@@ -64,7 +64,7 @@ void BlockFSI::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> this->solid_.rho >> this->fluid_.rhol >> this->fluid_.rmul  //
+    infile >> this->solid_.rho >> this->fluid_.rhol >> this->fluid_.rmul //
         >> this->fluid_.rhog >> this->fluid_.rmug >> this->fluid_.fs_height;
     infile.ignore(1000, '\n');
 
@@ -81,9 +81,7 @@ void BlockFSI::DataInput() {
         infile.ignore(1000, '\n');
 
         infile.ignore(1000, '\n');
-        for (int i = 0; i < nprop[n]; i++) {
-            infile >> mat_prop[n][i];
-        }
+        for (int i = 0; i < nprop[n]; i++) { infile >> mat_prop[n][i]; }
         infile.ignore(1000, '\n');
     }
 
@@ -92,13 +90,7 @@ void BlockFSI::DataInput() {
     infile.ignore(1000, '\n');
     infile.close();
 
-    dti = 1.0e0 / dt;
-    for (int i = 0; i < 3; i++) {
-        dxy[i] = (xymaxw[i] - xyminw[i]) / double(xyelemw[i]);
-        xynodew[i] = xyelemw[i] + 1;
-        xynodecw[i] = xyelemw[i] + idimc[i];
-    }
-    dlstep = 1.0e0 / double(nlstep);
+    InitalizeMeshAndTimeParameters();
 
     // --- Generalized α & Newmark β parameter Init ---
     this->solid_.GeneralizedAlphaParaSet();
@@ -107,25 +99,19 @@ void BlockFSI::DataInput() {
     // --------------------------------
 
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
-    infile.open(filename);
+    infile = OpenInputFile(filename);
 
     InputParaGriddata(infile);
-
-    // --- solid boundary condition ---
-    this->solid_.ubc.BCInput(infile);
-    this->solid_.vbc.BCInput(infile);
-    this->solid_.wbc.BCInput(infile);
-    // --- water boundary condition ---
-    this->fluid_.ubc.BCInput(infile);
-    this->fluid_.vbc.BCInput(infile);
-    this->fluid_.wbc.BCInput(infile);
-    this->fluid_.pbc.BCInput(infile);
+    // --- Solid boundary condition ---
+    this->solid_.InputBCData(infile);
+    // --- Fluid boundary condition ---
+    this->fluid_.InputBCData(infile);
 
     infile.close();
 
     if (rstflag == 0 || rstflag == 2) {
         filename = pointfile + std::to_string(myrank) + ".txt";
-        infile.open(filename);
+        infile = OpenInputFile(filename);
 
         this->solid_.InputPointData(infile);
 
