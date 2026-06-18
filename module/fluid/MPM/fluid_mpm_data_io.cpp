@@ -13,6 +13,20 @@
 
 using namespace stabilizedmpm;
 
+void StabilizedMPM::InputBCData(std::ifstream &infile) {
+
+    this->ubc.BCInput(infile);
+    this->vbc.BCInput(infile);
+    this->wbc.BCInput(infile);
+    this->pbc.BCInput(infile);
+    // --- Inflow boundary ---
+    this->uinfbc.BCInput(infile, false);
+    this->vinfbc.BCInput(infile, false);
+    this->winfbc.BCInput(infile, false);
+
+    return;
+}
+
 void StabilizedMPM::InputPointData(std::ifstream &infile) {
     infile >> this->num;
     infile.ignore(1000, '\n');

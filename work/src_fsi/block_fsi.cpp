@@ -287,14 +287,14 @@ void BlockFSI::CalFSIForce() {
     return;
 }
 
-double FSISolid::ComputeNRLumpedMat(double pid, double sfi) {
-    double emd = MaterialPoint::ComputeNRLumpedMat(pid, sfi);
+double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
+    double emd = MaterialPoint::ComputeNRLumpedMassMat(pid, sfi);
     emd += this->nb_para[3] * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
 
     return emd;
 }
 
-std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) {
+std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
     double fx = bb[0] * facl;
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;

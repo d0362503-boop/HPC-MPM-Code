@@ -15,27 +15,55 @@ class SolidMaterialPointBase : public MaterialPoint {
   public:
     bool Fbar_flag = false;
     // --- Data Initialize ---
+
+    /**
+     * @brief Read solid boundary-condition data from an input stream.
+     * @param infile Input stream positioned at the solid boundary-condition section.
+     */
+    void InputBCData(std::ifstream &infile) override;
+
+    /**
+     * @brief Read solid point data (coordinates, material IDs, velocities, etc.) from input stream.
+     * @param inflie Input file stream .
+     */
     void InputPointData(std::ifstream &inflie) override;
 
+    /**
+     * @brief Initialize solid particle state (mass, volume, stress, deformation gradient) after input is read.
+     */
     void InitializePointData() override;
 
+    /**
+     * @brief Read solid restart data from per-rank `*_re.txt` files.
+     */
     void RestartInput() override;
 
     // --- Data I/O ---
+    /**
+     * @brief Write solid particle data to VTK HDF5 visualization files.
+     * @param iview Output view index.
+     * @param istep Current time step.
+     */
     void OutputPointDataVTKHDF(int iview, int istep) override;
 
+    /**
+     * @brief Write solid restart data to per-rank `*_re.txt` files.
+     */
     void RestartOutput() override;
 
     // --- MPI Particle move ---
+    /**
+     * @brief Move particles that have crossed rank boundaries and exchange them via MPI.
+     */
     void Moveparticle() override;
 
     // --- Stress computation ---
-    double ComputeMeanStress(int pid) {
+    double ComputeMeanStress(int pid) const noexcept {
         double mean_stress = (this->stress[pid][0] + this->stress[pid][1] + this->stress[pid][2]) / 3.0e0;
         return mean_stress;
     }
 
-    double ComputeVMStress(int pid) {
+    double ComputeVMStress(int pid) const noexcept {
         double VM_stress = std::sqrt(
             0.5e0 * (pow((this->stress[pid][0] - this->stress[pid][1]), 2)   //
                      + pow((this->stress[pid][1] - this->stress[pid][2]), 2) //
@@ -46,7 +74,7 @@ class SolidMaterialPointBase : public MaterialPoint {
     // -------------------------------
 
     std::array<double, 3> ComputeInternalForce(int ni, int pid, const std::vector<std::array<double, 3>> &dsf,
-                                               const std::array<double, 6> &stress) {
+                                               const std::array<double, 6> &stress) const noexcept {
         double dsfi1 = dsf[ni][0];
         double dsfi2 = dsf[ni][1];
         double dsfi3 = dsf[ni][2];
@@ -59,7 +87,7 @@ class SolidMaterialPointBase : public MaterialPoint {
         return nfint;
     }
 
-    virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi) {
+    virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept {
         double fx = bb[0] * facl;
         double fy = bb[1] * facl;
         double fz = bb[2] * facl;
@@ -74,11 +102,22 @@ class SolidMaterialPointBase : public MaterialPoint {
 
     virtual void SolveSolid() = 0;
 
+    /**
+     * @brief Identify particles whose material ID corresponds to a rigid body and tag them in `rigid_bc`.
+     */
     void DetermineRigidBC();
 
     // --- Constitutive model ---
     ConstitutiveModel cm_;
 
+    /**
+     * @brief Update the stress and (if implicit) tangent stiffness for particle `pid`.
+     * @param pid              Particle index.
+     * @param stress           Particle stress vector (updated in-place).
+     * @param det_def_grad_bar F-bar corrected determinant of deformation gradient for each particle.
+     * @param def_grad         Total deformation-gradient tensor for each particle.
+     * @param delta_def_grad   Incremental deformation-gradient tensor for each particle.
+     */
     void UpdateConstitutiveModel(int pid, std::vector<std::array<double, 6>> &stress,
                                  const std::vector<double> &det_def_grad_bar,
                                  const std::vector<std::array<std::array<double, 3>, 3>> &def_grad,

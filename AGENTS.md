@@ -11,13 +11,22 @@ Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
 ## 2. Build & Run
 
 **Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
-**Legacy:** The old root `Makefile` and standalone `data/`/`vtk/` Makefiles are no longer the active build path.
-Run: `mpiexec -np N ./build/MPM`. Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
+
+**Never delete `build/`:** The `build/` directory contains generated runtime files, partitioned input data, job outputs, and local working state. Deleting it can destroy an ongoing or future simulation setup. If a clean configure is needed, remove only `CMakeCache.txt` and `CMakeFiles/` inside `build/` — never `rm -rf build`, and never use an alternative build directory.
+Run: `mpirun -np N ./build/MPM` (or use `build/run.sh`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
+A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh [N]`.
+
+### CMake target dependency rules
+
+- Link `mpm_cxx_compat` (directly or via `mpm_modules`) for any target that needs C++17 / `std::filesystem`. GCC < 9 gets `stdc++fs` automatically from this single interface target.
+- `mpm_modules` is an `OBJECT` library; its PUBLIC dependencies propagate include directories and compile definitions, but final executables must still link `mpm_modules` to pull in the object files.
+- Data tools (`makinput_*`, `makdivide_*`) should be created with `mpm_add_data_tool()` / `mpm_add_divide_tool()` from `cmake/MPMTools.cmake` so link rules stay consistent.
+- The configuration stage prints an `MPM Configuration Summary` showing compiler, build type, active solver, MPI, PETSc, HDF5, and ZLIB.
 
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
-- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `SolidMaterialPoint` (ImplicitMPM).
+- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h`, selected by `solswitch` string.
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Known issue: parallel ownership bug with shared overlap nodes (see `petsc_parallel_debug_report_v2.md`).
 
@@ -49,9 +58,9 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 
 1. grep `inline` in `*.h` to find global variables before refactoring.
 2. Do not assume class encapsulation.
-3. When adding `.cpp` files, update both `CMakeLists.txt` and `Makefile`.
-4. `data/` and `vtk/` tools use old SoA→AoS data structures; check for transposed indices.
-5. `data/divide_fsi/` is out of sync with global inline vars (`sp`, `wfem`).
+3. When adding `.cpp` files, update the relevant `CMakeLists.txt`.
+4. `data/` tools use old SoA→AoS data structures; check for transposed indices.
+5. `data/divide/divide_fsi/` is out of sync with current solid data structures (`sp` is no longer a global singleton; `wfem` remains a global inline singleton).
 
 ## 7. Agent Discipline
 

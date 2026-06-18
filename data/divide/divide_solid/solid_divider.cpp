@@ -19,33 +19,34 @@ void SolidDivider::LoadPointData(std::ifstream &infile) {
 
     VectorAssign(this->solid_points_.num, this->solid_points_.id);
     VectorAssign(this->solid_points_.num, this->solid_points_.matid);
+    VectorAssign(this->solid_points_.num, this->solid_points_.surf_point);
     VectorAssign(this->solid_points_.num, this->solid_points_.mass);
     VectorAssign(this->solid_points_.num, this->solid_points_.vol0);
     VectorAssign(this->solid_points_.num, this->solid_points_.coord);
 
-    if (this->solid_points_.num == 0) {
-        return;
-    }
+    if (this->solid_points_.num == 0) { return; }
 
     InputVector(infile, this->solid_points_.num, this->solid_points_.coord);
     for (int i = 0; i < this->solid_points_.num; ++i) {
-        infile >> this->solid_points_.id[i] >> this->solid_points_.matid[i]
-               >> this->solid_points_.mass[i] >> this->solid_points_.vol0[i];
+        infile >> this->solid_points_.id[i]      //
+            >> this->solid_points_.matid[i]      //
+            >> this->solid_points_.surf_point[i] //
+            >> this->solid_points_.mass[i]       //
+            >> this->solid_points_.vol0[i];
         infile.ignore(1000, '\n');
     }
 }
 
 void SolidDivider::PartitionProcess(int rank_id) {
-    this->PointRenumber(this->partition_points_.num, this->partition_points_.id,
-                        this->solid_points_, rank_id);
+    this->PointRenumber(this->partition_points_.num, this->partition_points_.id, this->solid_points_, rank_id);
     this->MeshPartition(rank_id);
 
-    this->BcRenumber(this->partition_points_.ubc, this->solid_points_.ubc, xynodec, xynodecw,
-                     this->inxyminc_, this->inxymaxc_);
-    this->BcRenumber(this->partition_points_.vbc, this->solid_points_.vbc, xynodec, xynodecw,
-                     this->inxyminc_, this->inxymaxc_);
-    this->BcRenumber(this->partition_points_.wbc, this->solid_points_.wbc, xynodec, xynodecw,
-                     this->inxyminc_, this->inxymaxc_);
+    this->BcRenumber(this->partition_points_.ubc, this->solid_points_.ubc, xynodec, xynodecw, this->inxyminc_,
+                     this->inxymaxc_);
+    this->BcRenumber(this->partition_points_.vbc, this->solid_points_.vbc, xynodec, xynodecw, this->inxyminc_,
+                     this->inxymaxc_);
+    this->BcRenumber(this->partition_points_.wbc, this->solid_points_.wbc, xynodec, xynodecw, this->inxyminc_,
+                     this->inxymaxc_);
 }
 
 void SolidDivider::WriteBoundaryData(std::ofstream &outfile) {
@@ -59,17 +60,16 @@ void SolidDivider::WritePointData(std::ofstream &outfile) {
 
     for (int i = 0; i < this->partition_points_.num; ++i) {
         const int point_id = this->partition_points_.id[i];
-        for (int j = 0; j < 3; ++j) {
-            outfile << std::setw(15) << this->solid_points_.coord[point_id][j];
-        }
+        for (int j = 0; j < 3; ++j) { outfile << std::setw(15) << this->solid_points_.coord[point_id][j]; }
         outfile << "\n";
     }
 
     for (int i = 0; i < this->partition_points_.num; ++i) {
         const int point_id = this->partition_points_.id[i];
-        outfile << std::setw(15) << this->solid_points_.id[point_id]
-                << std::setw(15) << this->solid_points_.matid[point_id]
-                << std::setw(15) << this->solid_points_.mass[point_id]
+        outfile << std::setw(15) << this->solid_points_.id[point_id]         //
+                << std::setw(15) << this->solid_points_.matid[point_id]      //
+                << std::setw(15) << this->solid_points_.surf_point[point_id] //
+                << std::setw(15) << this->solid_points_.mass[point_id]       //
                 << std::setw(15) << this->solid_points_.vol0[point_id] << "\n";
     }
 }

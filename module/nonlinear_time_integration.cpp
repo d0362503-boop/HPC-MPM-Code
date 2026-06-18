@@ -26,7 +26,7 @@ void MaterialPoint::GeneralizedAlphaParaSet() {
     return;
 }
 
-std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() {
+std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() const {
     double para1 = 1.0e0 / (this->gamma_nb * dt);
     double para2 = (1.0e0 - this->gamma_nb) / this->gamma_nb;
 
@@ -56,7 +56,8 @@ void MaterialPoint::NewmarkBetaParaSet() {
     return;
 }
 
-void MaterialPoint::PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k, std::vector<double> &naccel_k) {
+void MaterialPoint::PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k,
+                                                  std::vector<double> &naccel_k) const noexcept {
     for (int n = 0; n < nodec * 3; n++) {
         nvel_k[n] = this->nb_para[0] * this->ndispl[n] //
                     - this->nb_para[1] * this->nvel[n] //

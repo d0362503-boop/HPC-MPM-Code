@@ -10,6 +10,16 @@
 #include "../vtk_hdf5.h"
 #include "solid_material_point.h"
 
+void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
+
+    // --- solid boundary condition ---
+    this->ubc.BCInput(infile);
+    this->vbc.BCInput(infile);
+    this->wbc.BCInput(infile);
+
+    return;
+}
+
 void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
     infile >> this->num;
     infile.ignore(1000, '\n');

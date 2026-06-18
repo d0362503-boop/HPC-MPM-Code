@@ -61,6 +61,16 @@ Each generator writes:
 - text inputs such as `griddata.txt`, `wpdata.txt`, `spdata.txt`, or `pointdata.txt`
 - VTK HDF5 files for visualization
 
+For solid cases, each `spdata.txt` particle record now includes the surface
+flag:
+
+- coordinates
+- `id`
+- `matid`
+- `surf_point`
+- `mass`
+- `vol0`
+
 Visualization output is standardized on `vtkhdf` only:
 
 - mesh: `grid.vtkhdf`
@@ -76,3 +86,6 @@ cd build/data/divide/fsi
 ```
 
 Each divider reads the matching generator outputs through its copied per-case `para_input_data.txt` and writes rank-split text files under `build/data/divide/<case>/myrank_data/`.
+
+The solid divider preserves the same per-particle field order in the split
+`spdata*.txt` files, including `surf_point`.

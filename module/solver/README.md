@@ -133,7 +133,7 @@ MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
 ### 3.3 Blocked assembly path
 
-`AssemblePetscMat()` delegates to `AssemblePetscMatBlocked()`, which treats each natural node as one block row and each CSR neighbour as one dense `ndof×ndof` block. The packing order is row-major:
+`AssemblePetscMat()` treats each natural node as one block row and each CSR neighbour as one dense `ndof×ndof` block. The packing order is row-major:
 
 ```
 (0,0) (0,1) ... (0,ndof-1)
@@ -190,7 +190,7 @@ as the matrix assembly.
 
 Current implementation (`ComputePetscResidualStats`):
 
-- `AssemblePetscMatBlocked()` calls `BuildActiveRowMask()` at the start of each assembly,
+- `AssemblePetscMat()` calls `BuildActiveRowMask()` at the start of each assembly,
   then skips node block rows where `!FEM_flag && active_row_mask[i] == 0`
 - locally-owned skipped rows receive an identity block in the second pass
 - `ComputeRefResidual()` and `ComputeAbsResidual()` now use `ComputePetscResidualStats()` for
@@ -457,13 +457,13 @@ So the distinction between fluid and solid is now mainly in the preconditioner, 
 - gathering the full global PETSc solution on every rank
 - using fluid pressure Jacobi for the current Turek case
 - treating the current solid matrix as safely CG-compatible without further proof
-- editing headers without `make clean` afterward
+- editing headers without reconfiguring CMake afterward
 
 ---
 
 ## 11. Practical Notes for Future Changes
 
-1. If you change any PETSc-related header path or solver header, do `make clean && make -j8`.
+1. If you change any PETSc-related header path or solver header, reconfigure and rebuild: `rm -rf build/CMakeCache.txt build/CMakeFiles && cmake -S . -B build && cmake --build build -j8`.
 2. If you change `nxyr`, you must regenerate partitions before solver benchmarking.
 3. If a new preconditioner looks faster but `NS_iter` jumps far above the pure AMG baseline, do not keep it.
 4. If a run becomes fast but starts printing `PETSc KSP diverged`, that result is invalid even if the wall time looks good.

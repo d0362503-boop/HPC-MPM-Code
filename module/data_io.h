@@ -8,10 +8,28 @@
 #include <type_traits>
 #include <vector>
 
+/**
+ * @brief Open an input file and verify it was successfully opened.
+ * @param filename Path to the input file.
+ * @return Opened input file stream.
+ * @throws std::runtime_error if the file cannot be opened.
+ */
 std::ifstream OpenInputFile(const std::string &filename);
 
+/**
+ * @brief Open an output file and verify it was successfully opened.
+ * @param filename Path to the output file.
+ * @return Opened output file stream.
+ * @throws std::runtime_error if the file cannot be opened.
+ */
 std::ofstream OpenOutputFile(const std::string &filename);
 
+/**
+ * @brief Read a vector of scalars from an input stream.
+ * @param infile Input file stream.
+ * @param size0  Number of entries to read.
+ * @param variable Output vector (must be pre-sized to at least `size0`).
+ */
 template <typename T> void InputVector(std::ifstream &infile, const int size0, std::vector<T> &variable) {
 
     for (int i = 0; i < size0; i++) {
@@ -21,6 +39,12 @@ template <typename T> void InputVector(std::ifstream &infile, const int size0, s
     return;
 }
 
+/**
+ * @brief Read a vector of fixed-size arrays from an input stream.
+ * @param infile   Input file stream.
+ * @param size0    Number of array entries to read.
+ * @param variable Output vector of arrays (must be pre-sized to at least `size0`).
+ */
 template <typename T, std::size_t N>
 void InputVector(std::ifstream &infile, const int size0, std::vector<std::array<T, N>> &variable) {
 
@@ -37,12 +61,24 @@ void InputVector(std::ifstream &infile, const int size0, std::vector<std::array<
     return;
 }
 
+/**
+ * @brief Write a vector of scalars to an output stream.
+ * @param outfile Output file stream.
+ * @param size0   Number of entries to write.
+ * @param variable Vector of values to write.
+ */
 template <typename T> void OutputVector(std::ofstream &outfile, const int size0, std::vector<T> &variable) {
 
     for (int i = 0; i < size0; i++) { outfile << std::setw(15) << variable[i] << "\n"; }
     return;
 }
 
+/**
+ * @brief Write a vector of fixed-size arrays to an output stream.
+ * @param outfile Output file stream.
+ * @param size0   Number of array entries to write.
+ * @param variable Vector of arrays to write.
+ */
 template <typename T, std::size_t N>
 void OutputVector(std::ofstream &outfile, const int size0, std::vector<std::array<T, N>> &variable) {
 
@@ -59,8 +95,17 @@ void OutputVector(std::ofstream &outfile, const int size0, std::vector<std::arra
     return;
 }
 
+/**
+ * @brief Read per-rank MPI domain-decomposition data from a partitioned grid file.
+ * @param infile Input file stream positioned at the grid-data header.
+ */
 void InputParaGriddata(std::ifstream &infile);
 
+/**
+ * @brief Print a progress message to stdout showing current step and view index.
+ * @param iview Output view index.
+ * @param istep Current time step.
+ */
 inline void OutputMessage(int iview, int istep) {
 
     std::cout << " ===== Now Computing ===== " << "\n";

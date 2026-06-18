@@ -9,17 +9,11 @@ file(GLOB_RECURSE SRC_FLUID_SOURCES
 
 add_library(mpm_src_fluid OBJECT ${SRC_FLUID_SOURCES})
 
-# Include directories - no relative paths needed
-# All module headers can be included directly: #include "bc.h"
+# Own headers are public to consumers of this solver library.
 target_include_directories(mpm_src_fluid PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../module
 )
 
-# Link MPI if available
-if(USE_MPI)
-    target_link_libraries(mpm_src_fluid PUBLIC MPI::MPI_CXX)
-endif()
-
-# Link mpm_modules to inherit PETSc and other dependencies
+# mpm_modules provides the module include directories and all transitive
+# dependencies (MPI, PETSc, HDF5, compiler compatibility).
 target_link_libraries(mpm_src_fluid PUBLIC mpm_modules)

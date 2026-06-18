@@ -17,7 +17,7 @@
 
 using namespace implicitmpm;
 
-void SolidMaterialPoint::Particle2Node() {
+void ImplicitSolidMPM::Particle2Node() {
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -79,10 +79,10 @@ void SolidMaterialPoint::Particle2Node() {
     return;
 }
 
-void SolidMaterialPoint::UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm,
-                                       const std::vector<double> &sf, const std::vector<std::array<double, 3>> &dsf,
-                                       std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
-                                       std::vector<std::array<std::array<double, 3>, 3>> &def_grad) {
+void ImplicitSolidMPM::UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm,
+                                     const std::vector<double> &sf, const std::vector<std::array<double, 3>> &dsf,
+                                     std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+                                     std::vector<std::array<std::array<double, 3>, 3>> &def_grad) {
     std::array<std::array<double, 3>, 3> ddg{};
     ddg = this->ComputeDeltaDefGrad(ncm, nenode, af_coeff, dsf);
 
@@ -103,7 +103,7 @@ void SolidMaterialPoint::UpdateDefGrad(int pid, int nenode, double af_coeff, con
     return;
 }
 
-void SolidMaterialPoint::Node2Particle() {
+void ImplicitSolidMPM::Node2Particle() {
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     // ---- Newmark beta velocity & acceleration ----
     this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);

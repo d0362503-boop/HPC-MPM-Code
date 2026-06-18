@@ -24,15 +24,15 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
     void BCSet() override;
 };
 
-class FSISolid : public implicitmpm::SolidMaterialPoint {
+class FSISolid : public implicitmpm::ImplicitSolidMPM {
   public:
     BlockFSI &fsi_; // Reference back to the FSI coordinator
 
     FSISolid(BlockFSI &fsi) : fsi_(fsi) {}
 
-    double ComputeNRLumpedMat(double pid, double sfi) override;
+    double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    std::array<double, 3> ComputeExternalForce(int pid, double sfi) override;
+    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
 
     void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
 };
@@ -59,6 +59,12 @@ class BlockFSI {
     std::vector<double> added_mass;
     std::vector<double> nfsi_force;
 
+    /**
+     * @brief Read and initialize the coupled FSI case input data.
+     *
+     * Loads shared global parameters, then dispatches fluid and solid
+     * boundary-condition/particle input to the corresponding sub-solvers.
+     */
     void DataInput();
 
     void DetectFSIInterface();
