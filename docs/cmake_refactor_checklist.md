@@ -291,8 +291,8 @@ Checklist：
 
 重点文件：
 
-- 根 `Makefile`（保留文件本体作为历史参考，但文档中不再描述其用法）
-- `data/` 下旧 Makefile
+- 根 `Makefile`（已从仓库中删除）
+- `data/` 下旧 Makefile（已从仓库中删除）
 - `docs/`、`README.md`、`AGENTS.md`、各 `README.md`
 
 Checklist：

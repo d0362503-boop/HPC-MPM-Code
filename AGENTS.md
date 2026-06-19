@@ -6,7 +6,7 @@
 
 C++17 MPM/FEM solver for solid/fluid mechanics and FSI. MPI-parallelized with PETSc backend.
 Three modes: FLUID (MPM/FEM), SOLID (explicit/implicit), FSI (partitioned coupling).
-Key deps: MPI, PETSc 3.24.5 (at `/home/pan/petsc-3.24.5`), GCC ≥11.
+Key deps: MPI, PETSc 3.24.5 (auto-bootstrapped from `Ext/petsc-3.24.5.tar.gz` into `external/petsc`), GCC ≥11.
 
 ## 2. Build & Run
 
@@ -28,7 +28,7 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
 - **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h`, selected by `solswitch` string.
-- **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Known issue: parallel ownership bug with shared overlap nodes (see `petsc_parallel_debug_report_v2.md`).
+- **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Known issue: parallel ownership bug with shared overlap nodes (documented in `module/solver/README.md`).
 
 ## 4. Code Style
 
@@ -59,8 +59,6 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 1. grep `inline` in `*.h` to find global variables before refactoring.
 2. Do not assume class encapsulation.
 3. When adding `.cpp` files, update the relevant `CMakeLists.txt`.
-4. `data/` tools use old SoA→AoS data structures; check for transposed indices.
-5. `data/divide/divide_fsi/` is out of sync with current solid data structures (`sp` is no longer a global singleton; `wfem` remains a global inline singleton).
 
 ## 7. Agent Discipline
 
