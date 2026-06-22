@@ -291,11 +291,11 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                 RHS_G[2] = this->vol[pid] *
                                (dsfi1 * dev_stress_k[2][0] + dsfi2 * dev_stress_k[2][1] + dsfi3 * dev_stress_k[2][2]) //
                            - sfi * this->mass[pid] * fz - this->vol[pid] * dsfi3 * pres_k;
-                RHS_G[3] = this->vol[pid] * sfi * (grad_vel_k[0][0] + grad_vel_k[1][1] + grad_vel_k[2][2]);
+                RHS_G[3] = this->vol[pid] * sfi * TraceMat3(grad_vel_k);
 
-                RHS_S[0] = this->vol[pid] * t2 * dsfi1 * (grad_vel_k[0][0] + grad_vel_k[1][1] + grad_vel_k[2][2]);
-                RHS_S[1] = this->vol[pid] * t2 * dsfi2 * (grad_vel_k[0][0] + grad_vel_k[1][1] + grad_vel_k[2][2]);
-                RHS_S[2] = this->vol[pid] * t2 * dsfi3 * (grad_vel_k[0][0] + grad_vel_k[1][1] + grad_vel_k[2][2]);
+                RHS_S[0] = this->vol[pid] * t2 * dsfi1 * TraceMat3(grad_vel_k);
+                RHS_S[1] = this->vol[pid] * t2 * dsfi2 * TraceMat3(grad_vel_k);
+                RHS_S[2] = this->vol[pid] * t2 * dsfi3 * TraceMat3(grad_vel_k);
                 RHS_S[3] =
                     t1 * this->mass[pid] *
                         (dsfi1 * (accel_k[0] - fx) + dsfi2 * (accel_k[1] - fy) + dsfi3 * (accel_k[2] - fz)) //

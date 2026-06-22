@@ -166,8 +166,7 @@ void BlockFSI::CalDragLiftCoeff() {
 
     if (myrank == 0) {
         std::cout << "Drag and lift coefficients: " //
-                  << std::setw(15) << cd            //
-                  << std::setw(15) << cl << "\n";
+                  << std::setw(15) << cd << std::setw(15) << cl << "\n";
     }
 
     return;
