@@ -87,7 +87,7 @@ void MaterialPoint::CalPointUnitNormal() {
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
-            std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
+            std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -105,8 +105,9 @@ void MaterialPoint::CalPointUnitNormal() {
     NodeVarComm(this->nnormal, {nuc, nvc, nwc});
 
     for (int n = 0; n < nodec; n++) {
-        double norm =
-            std::sqrt(pow(this->nnormal[n + nuc], 2) + pow(this->nnormal[n + nvc], 2) + pow(this->nnormal[n + nwc], 2));
+        double norm = std::sqrt(std::pow(this->nnormal[n + nuc], 2)   //
+                                + std::pow(this->nnormal[n + nvc], 2) //
+                                + std::pow(this->nnormal[n + nwc], 2));
         if (norm > mtol) {
             this->nnormal[n + nuc] /= norm;
             this->nnormal[n + nvc] /= norm;
