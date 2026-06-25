@@ -176,8 +176,8 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
                 adv_vel_k[2] += sfi * adv_vel[nid + nwc];
             }
 
-            double rhof = phi_k * rhol + (1.0e0 - phi_k) * rhog;
-            double rmuf = phi_k * rmul + (1.0e0 - phi_k) * rmug;
+            double rhof = phi_k * this->rhol + (1.0e0 - phi_k) * this->rhog;
+            double rmuf = phi_k * this->rmul + (1.0e0 - phi_k) * this->rmug;
 
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];

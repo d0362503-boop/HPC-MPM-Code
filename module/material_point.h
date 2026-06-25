@@ -119,6 +119,7 @@ class MaterialPoint {
         } else {
             iter = GPBiCGSafe(mat);
         }
+
         return iter;
     }
 
@@ -175,9 +176,44 @@ class MaterialPoint {
 
     virtual void RestartOutput() {};
 
+    bool infbc_isfilled = false;
+    std::vector<int> inflow_row;
+
+    void InitializeInflowBC() {
+
+        int num = (this->uinfbc.ibc + this->vinfbc.ibc + this->winfbc.ibc);
+        this->inflow_row.assign(num, 0);
+
+        return;
+    }
+
+    bool InflowMeshisFilled(const BoundaryCondition &infbc);
+
+    int GetInflowSign(int dir, int mesh_id) {
+
+        int sign;
+        int mid = mesh_id + aelemmin[dir];
+        if (mid == 0) {
+            sign = 1;
+        } else if (mid == xyelemw[dir] - 1) {
+            sign = -1;
+        }
+
+        return sign;
+    };
+
+    void GenerateInflowParticles(int dir, MaterialPoint &ifp, //
+                                 const BoundaryCondition &infbc);
+
+    void AssignUniqueInflowIds(MaterialPoint &ifp) const;
+
     virtual void InflowParticles() {};
 
-    virtual void GenerateInflowParticles(int dir, MaterialPoint &ifp, const BoundaryCondition &ifbc) {};
+    virtual void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, //
+                                                  const BoundaryCondition &infbc) {};
+
+    virtual void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, //
+                                                   const BoundaryCondition &infbc) {};
 
     /**
      * @brief Build element-to-particle linked lists (`idepf`, `idp2p`, `numep`).

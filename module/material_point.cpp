@@ -59,9 +59,9 @@ void MaterialPoint::MeshPointLinklist() {
         double xx = this->coord[ip][0] - xymin[0];
         double yy = this->coord[ip][1] - xymin[1];
         double zz = this->coord[ip][2] - xymin[2];
-        int iex = std::floor(xx / dxy[0]);
-        int iey = std::floor(yy / dxy[1]);
-        int iez = std::floor(zz / dxy[2]);
+        int iex = static_cast<int>(std::floor(xx / dxy[0]));
+        int iey = static_cast<int>(std::floor(yy / dxy[1]));
+        int iez = static_cast<int>(std::floor(zz / dxy[2]));
         int ne = iex + iey * xyelem[0] + iez * xyelem[0] * xyelem[1];
         this->numep[ne]++;
         if (this->numep[ne] == 1) {

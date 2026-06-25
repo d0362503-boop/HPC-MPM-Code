@@ -24,6 +24,8 @@ void StabilizedMPM::InputBCData(std::ifstream &infile) {
     this->vinfbc.BCInput(infile, false);
     this->winfbc.BCInput(infile, false);
 
+    this->InitializeInflowBC();
+
     return;
 }
 

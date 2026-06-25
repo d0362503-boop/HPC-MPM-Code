@@ -29,8 +29,6 @@ void ImplicitSolidMPM::UpdateNRIncrement() {
     return;
 }
 
-auto ImplicitSolidMPM::InitializeNRStress() { return this->stress; }
-
 auto ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
                                              const std::array<double, 6> &sts_af) {
     double stsmat[3][3];

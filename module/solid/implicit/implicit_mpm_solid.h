@@ -82,7 +82,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Initialize stress state at the start of the Newton–Raphson loop.
      * @return Tuple or structured result holding initial stress and related data.
      */
-    auto InitializeNRStress();
+    auto InitializeNRStress() { return this->stress; };
 
     void BCNRSet() override {
         this->ubc.BCSetDt(nuc, this->ndispl);

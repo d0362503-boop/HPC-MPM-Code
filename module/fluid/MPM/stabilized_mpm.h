@@ -140,19 +140,19 @@ class StabilizedMPM : public MaterialPoint {
     void Moveparticle() override;
 
     // --- Inflow Particles ---
-    /**
-     * @brief Inject inflow particles at inflow boundaries for the current step.
-     */
     void InflowParticles() override;
+
+    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, //
+                                          const BoundaryCondition &infbc) override;
 
     /**
      * @brief Generate new inflow particles in direction `dir` using the inflow particle template.
      * @param dir  Inflow direction index (0=x, 1=y, 2=z).
      * @param ifp  Inflow particle template.
-     * @param ifbc Inflow boundary condition.
+     * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticles(int dir, MaterialPoint &ifp, //
-                                 const BoundaryCondition &ifbc) override;
+    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, //
+                                           const BoundaryCondition &infbc) override;
 
     // void Cp2NodeVTK();
 };
