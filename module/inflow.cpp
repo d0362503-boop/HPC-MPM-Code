@@ -23,7 +23,7 @@ bool MaterialPoint::InflowMeshisFilled(const BoundaryCondition &infbc) {
     return isfilled;
 }
 
-void MaterialPoint::GenerateInflowParticles(int dir, MaterialPoint &ifp, //
+void MaterialPoint::GenerateInflowParticles(int dir, MaterialPoint &ifp,
                                             const BoundaryCondition &infbc) {
 
     if (!this->infbc_isfilled) { this->infbc_isfilled = InflowMeshisFilled(infbc); }

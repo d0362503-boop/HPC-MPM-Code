@@ -140,19 +140,35 @@ class StabilizedMPM : public MaterialPoint {
     void Moveparticle() override;
 
     // --- Inflow Particles ---
+    /**
+     * @brief Generate fluid inflow particles for all active directions.
+     *
+     * Resizes the inflow particle buffer, dispatches generation for each active
+     * inflow direction, and assigns globally unique IDs to the new particles.
+     */
     void InflowParticles() override;
 
-    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, //
-                                          const BoundaryCondition &infbc) override;
+    /**
+     * @brief Generate fluid inflow particles in empty boundary cells.
+     * @param dir   Inflow direction index (0=x, 1=y, 2=z).
+     * @param ifp   Inflow particle buffer.
+     * @param infbc Inflow boundary condition for direction `dir`.
+     *
+     * Fills each marked boundary cell layer by layer on a Gaussian sub-grid
+     * until the cell reaches the target number of particles.
+     */
+    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 
     /**
-     * @brief Generate new inflow particles in direction `dir` using the inflow particle template.
-     * @param dir  Inflow direction index (0=x, 1=y, 2=z).
-     * @param ifp  Inflow particle template.
-     * @param infbc Inflow boundary condition.
+     * @brief Generate fluid inflow particles by cloning existing particles.
+     * @param dir   Inflow direction index (0=x, 1=y, 2=z).
+     * @param ifp   Inflow particle buffer.
+     * @param infbc Inflow boundary condition for direction `dir`.
+     *
+     * Identifies fluid particles that have moved one cell inward from a marked
+     * boundary cell and clones them back into the boundary cell.
      */
-    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, //
-                                           const BoundaryCondition &infbc) override;
+    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 
     // void Cp2NodeVTK();
 };

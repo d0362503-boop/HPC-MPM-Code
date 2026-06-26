@@ -51,7 +51,7 @@ void StabilizedMPM::InflowParticles() {
     return;
 }
 
-void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, //
+void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp,
                                                      const BoundaryCondition &infbc) {
 
     std::array<std::array<double, 3>, 6> dec2p;
@@ -101,7 +101,7 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
                 ifp.mass[ifp.num] = particle_mass;
                 // --- Volume ---
                 ifp.vol[ifp.num] = particle_vol;
-
+                // --- Material ID ---
                 ifp.matid[ifp.num] = 0;
 
                 // --- Coordinate ---
@@ -132,7 +132,7 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
     return;
 }
 
-void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, //
+void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp,
                                                       const BoundaryCondition &infbc) {
 
     constexpr int offset_layer = 1;
@@ -207,7 +207,7 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
                         }
                     }
                     if (this->solswitch == MapScheme::APIC) { ifp.apic.InvDmatG2P(ifp.num, ADp); }
-                    ifp.id[ifp.num] = this->id[pid];
+                    // ifp.id[ifp.num] = this->id[pid];
                     ifp.matid[ifp.num] = this->matid[pid];
                     ifp.mass[ifp.num] = this->mass[pid];
                     ifp.vol[ifp.num] = this->vol[pid];
