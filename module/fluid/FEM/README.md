@@ -17,7 +17,7 @@ The solver uses a **SUPG/PSPG stabilized formulation** with **generalized-α tim
 
 | File | Responsibility |
 |------|----------------|
-| `stabilized_fem.h` | Class declaration, inline constructor, and global singleton `wfem` |
+| `stabilized_fem.h` | Class declaration and inline default constructor |
 | `solve_ns_fem.cpp` | Time integration, stabilization-coefficient calculation, system assembly, and linear solve |
 | `phase_field.cpp`  | Phase-field initialization, volume-fraction projection (`Particle2NodePhi`), material-property blending (`SetPFDomain`), liquid-volume calculation (`CalLiquidVol`) |
 | `fem_data_io.cpp`  | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshDataVTKHDF`), VTK nodal interpolation (`Cp2NodeVTK`) |
@@ -124,5 +124,5 @@ npres_old  ← npres
 ## Coding Style Notes
 
 - Trailing underscore for class members (`owner_`, `NS_`, `PF_`).
-- Global singleton `wfem` is declared inline in `stabilized_fem.h`.
+- The class lives in namespace `stabilizedfem`; in the FSI driver it is subclassed as `FSIFluid` in `work/src_fsi/block_fsi.h`.
 - `using namespace stabilizedfem;` appears in `.cpp` files only.

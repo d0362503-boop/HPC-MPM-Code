@@ -47,6 +47,7 @@ class BlockFSI {
 
     // Block-iteration control
     const int max_block_iter = 100;
+    const double phi_cut = 0.25e0;
     double relax_omega = 0.1e0;
     const double tol_ref = 1.0e-3;
     const double tol_abs = 1.0e-6;

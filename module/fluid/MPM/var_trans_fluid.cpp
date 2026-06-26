@@ -11,15 +11,14 @@
 #include <iomanip>
 #include <vector>
 
-using namespace std;
 using namespace stabilizedmpm;
 
 void StabilizedMPM::Particle2Node() {
 
     int nenode;
-    vector<int> ncm;
-    vector<double> sf;
-    vector<std::array<double, 3>> dsf;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(nodec, this->nmass);
     VectorAssign(nodec, this->nvof);
@@ -76,7 +75,7 @@ void StabilizedMPM::Particle2Node() {
 
 void StabilizedMPM::Node2Particle() {
 
-    vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
+    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     // ---- Newmark beta velocity & acceleration ----
     this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
 
@@ -96,9 +95,9 @@ void StabilizedMPM::Node2Particle() {
     if (this->solswitch == MapScheme::APIC) { VectorAssign(this->num, this->apic.inv_Dmat); }
 
     int nenode;
-    vector<int> ncm;
-    vector<double> sf;
-    vector<std::array<double, 3>> dsf;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
 
     for (int m = 0; m < nelem; m++) {
 
@@ -125,7 +124,7 @@ void StabilizedMPM::Node2Particle() {
         }
     }
 
-    vector<array<double, 3>> delta_corr;
+    std::vector<std::array<double, 3>> delta_corr;
     delta_corr = this->DeltaCorrectionParticleShifting();
     // particle_shifting_SPH_like(wp, wp_move, spring_force);
 

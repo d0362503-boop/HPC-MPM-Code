@@ -163,14 +163,25 @@ At runtime the solver reads an orchestration file, conventionally `file.dat`, wi
 
 Per-rank input files follow the prefix with the rank number, e.g. `griddata0.txt`, `pointdata0.txt`.
 
-A convenience script is available at `build/run.sh` (gitignored; copy it if you want to keep a version in the repo):
+A convenience script is available at `build/run.sh`:
 
 ```bash
 cd build
 sh run.sh [NP]
 ```
 
-It launches `./MPM` with `mpirun` under `nohup` in the background, uses all logical CPUs by default (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`), and redirects output to `stdout/out_<PID>_<NP>.log` and errors to `stderr/err_<PID>_<NP>.log`. The number of ranks can be passed as an argument or via the `NP` environment variable.
+`NP` resolves in this order:
+
+1. Command-line argument: `sh run.sh 16`
+2. Environment variable: `NP=8 sh run.sh`
+3. Default: all logical CPUs (`nproc`)
+
+It launches `./MPM` with `mpirun` under `nohup` in the background (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`) and redirects output to:
+
+- `stdout/out_<PID>_<NP>.log`
+- `stderr/err_<PID>_<NP>.log`
+
+`build/run.sh` is gitignored; copy it elsewhere if you want to version a customized version.
 
 > **Do not delete `build/`**: it contains generated runtime files, partitioned input data, and job outputs. If a clean CMake configure is needed, remove only `build/CMakeCache.txt` and `build/CMakeFiles/`.
 

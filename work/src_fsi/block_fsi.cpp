@@ -30,9 +30,10 @@ void BlockFSI::DetectFSIInterface() {
     this->fsi_intf.ibc = 0;
     for (int n = 0; n < nodec; n++) {
         this->solid_.nphi[n] = this->solid_.nvof[n] / nvol[n];
-        if (this->solid_.nphi[n] > 0.25e0) { this->fsi_intf.nbc[this->fsi_intf.ibc++] = n; }
-        if (this->solid_.nphi[n] < 0.01e0) this->solid_.nphi[n] = 0.0e0;
-        if (this->solid_.nphi[n] > 0.99e0) this->solid_.nphi[n] = 1.0e0;
+        if (this->solid_.nphi[n] > this->phi_cut) { this->fsi_intf.nbc[this->fsi_intf.ibc++] = n; }
+        this->solid_.nphi[n] = std::clamp(this->solid_.nphi[n], 0.0e0, 1.0e0);
+        // if (this->solid_.nphi[n] < 0.01e0) this->solid_.nphi[n] = 0.0e0;
+        // if (this->solid_.nphi[n] > 0.99e0) this->solid_.nphi[n] = 1.0e0;
     }
 
     return;
@@ -166,8 +167,7 @@ void BlockFSI::CalDragLiftCoeff() {
 
     if (myrank == 0) {
         std::cout << "Drag and lift coefficients: " //
-                  << std::setw(15) << cd            //
-                  << std::setw(15) << cl << "\n";
+                  << std::setw(15) << cd << std::setw(15) << cl << "\n";
     }
 
     return;
@@ -277,7 +277,7 @@ void BlockFSI::CalFSIForce() {
     NodeVarComm(this->nfsi_force, {nuc, nvc, nwc});
 
     for (int n = 0; n < nodec; n++) {
-        if (this->solid_.nphi[n] < 0.25e0) {
+        if (this->solid_.nphi[n] < this->phi_cut) {
             this->nfsi_force[n + nuc] = 0.0e0;
             this->nfsi_force[n + nvc] = 0.0e0;
             this->nfsi_force[n + nwc] = 0.0e0;

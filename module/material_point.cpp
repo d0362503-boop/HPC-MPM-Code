@@ -59,9 +59,9 @@ void MaterialPoint::MeshPointLinklist() {
         double xx = this->coord[ip][0] - xymin[0];
         double yy = this->coord[ip][1] - xymin[1];
         double zz = this->coord[ip][2] - xymin[2];
-        int iex = std::floor(xx / dxy[0]);
-        int iey = std::floor(yy / dxy[1]);
-        int iez = std::floor(zz / dxy[2]);
+        int iex = static_cast<int>(std::floor(xx / dxy[0]));
+        int iey = static_cast<int>(std::floor(yy / dxy[1]));
+        int iez = static_cast<int>(std::floor(zz / dxy[2]));
         int ne = iex + iey * xyelem[0] + iez * xyelem[0] * xyelem[1];
         this->numep[ne]++;
         if (this->numep[ne] == 1) {
@@ -87,7 +87,7 @@ void MaterialPoint::CalPointUnitNormal() {
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
-            std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
+            std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -105,8 +105,9 @@ void MaterialPoint::CalPointUnitNormal() {
     NodeVarComm(this->nnormal, {nuc, nvc, nwc});
 
     for (int n = 0; n < nodec; n++) {
-        double norm =
-            std::sqrt(pow(this->nnormal[n + nuc], 2) + pow(this->nnormal[n + nvc], 2) + pow(this->nnormal[n + nwc], 2));
+        double norm = std::sqrt(std::pow(this->nnormal[n + nuc], 2)   //
+                                + std::pow(this->nnormal[n + nvc], 2) //
+                                + std::pow(this->nnormal[n + nwc], 2));
         if (norm > mtol) {
             this->nnormal[n + nuc] /= norm;
             this->nnormal[n + nvc] /= norm;
@@ -124,31 +125,30 @@ void MaterialPoint::CalPointUnitNormal() {
     return;
 }
 
-std::array<std::array<double, 3>, 3> MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode,
-                                                                        double af_coeff,
-                                                                        const std::vector<std::array<double, 3>> &dsf)
-    const noexcept {
-    std::array<std::array<double, 3>, 3> def_grad{};
+std::array<std::array<double, 3>, 3>
+MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, double af_coeff,
+                                   const std::vector<std::array<double, 3>> &dsf) const noexcept {
+    std::array<std::array<double, 3>, 3> ddg{};
     for (int ni = 0; ni < nenode; ni++) {
         int nid = nc[ni];
         double dsfi1 = dsf[ni][0];
         double dsfi2 = dsf[ni][1];
         double dsfi3 = dsf[ni][2];
-        def_grad[0][0] += dsfi1 * af_coeff * this->ndispl[nid + nuc];
-        def_grad[0][1] += dsfi2 * af_coeff * this->ndispl[nid + nuc];
-        def_grad[0][2] += dsfi3 * af_coeff * this->ndispl[nid + nuc];
-        def_grad[1][0] += dsfi1 * af_coeff * this->ndispl[nid + nvc];
-        def_grad[1][1] += dsfi2 * af_coeff * this->ndispl[nid + nvc];
-        def_grad[1][2] += dsfi3 * af_coeff * this->ndispl[nid + nvc];
-        def_grad[2][0] += dsfi1 * af_coeff * this->ndispl[nid + nwc];
-        def_grad[2][1] += dsfi2 * af_coeff * this->ndispl[nid + nwc];
-        def_grad[2][2] += dsfi3 * af_coeff * this->ndispl[nid + nwc];
+        ddg[0][0] += dsfi1 * af_coeff * this->ndispl[nid + nuc];
+        ddg[0][1] += dsfi2 * af_coeff * this->ndispl[nid + nuc];
+        ddg[0][2] += dsfi3 * af_coeff * this->ndispl[nid + nuc];
+        ddg[1][0] += dsfi1 * af_coeff * this->ndispl[nid + nvc];
+        ddg[1][1] += dsfi2 * af_coeff * this->ndispl[nid + nvc];
+        ddg[1][2] += dsfi3 * af_coeff * this->ndispl[nid + nvc];
+        ddg[2][0] += dsfi1 * af_coeff * this->ndispl[nid + nwc];
+        ddg[2][1] += dsfi2 * af_coeff * this->ndispl[nid + nwc];
+        ddg[2][2] += dsfi3 * af_coeff * this->ndispl[nid + nwc];
     }
-    ++def_grad[0][0];
-    ++def_grad[1][1];
-    ++def_grad[2][2];
+    ++ddg[0][0];
+    ++ddg[1][1];
+    ++ddg[2][2];
 
-    return def_grad;
+    return ddg;
 }
 
 void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
@@ -166,7 +166,7 @@ void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
             dsf_temp[j] = 0.0e0;
             for (int i = 0; i < 3; i++) { dsf_temp[j] += dsf[ni][i] * def_grad_inv[i][j]; }
         }
-        for (int j = 0; j < 3; j++) { dsf[ni][j] = dsf_temp[j]; }
+        dsf[ni] = dsf_temp;
     }
 
     return;

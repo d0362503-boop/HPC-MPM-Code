@@ -119,6 +119,7 @@ class MaterialPoint {
         } else {
             iter = GPBiCGSafe(mat);
         }
+
         return iter;
     }
 
@@ -175,9 +176,76 @@ class MaterialPoint {
 
     virtual void RestartOutput() {};
 
+    bool infbc_isfilled = false;
+    std::vector<int> inflow_row;
+
+    /**
+     * @brief Initialize per-boundary inflow layer counters.
+     *
+     * Resizes `inflow_row` to the total number of inflow boundary faces across
+     * all directions and resets all counters to zero.
+     */
+    void InitializeInflowBC() {
+
+        int num = (this->uinfbc.ibc + this->vinfbc.ibc + this->winfbc.ibc);
+        this->inflow_row.assign(num, 0);
+
+        return;
+    }
+
+    /**
+     * @brief Check whether any inflow boundary cell is sufficiently filled.
+     * @param infbc Inflow boundary condition describing the active boundary faces.
+     * @return True if at least one marked boundary cell has a fill ratio above
+     *         the tolerance (0.95), false otherwise.
+     */
+    bool InflowMeshisFilled(const BoundaryCondition &infbc);
+
+    /**
+     * @brief Determine the inward/outward sign for an inflow boundary cell.
+     * @param dir     Inflow direction index (0=x, 1=y, 2=z).
+     * @param mesh_id Local element index along direction `dir`.
+     * @return +1 for the lower domain boundary, -1 for the upper domain boundary.
+     */
+    int GetInflowSign(int dir, int mesh_id) {
+
+        int sign;
+        int mid = mesh_id + aelemmin[dir];
+        if (mid == 0) {
+            sign = 1;
+        } else if (mid == xyelemw[dir] - 1) {
+            sign = -1;
+        }
+
+        return sign;
+    };
+
+    /**
+     * @brief Dispatch inflow particle generation for a given direction.
+     * @param dir   Inflow direction index (0=x, 1=y, 2=z).
+     * @param ifp   Inflow particle buffer to populate.
+     * @param infbc Inflow boundary condition for direction `dir`.
+     *
+     * Switches between the empty-mesh and filled-mesh generators based on the
+     * current fill state of the boundary cells.
+     */
+    void GenerateInflowParticles(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc);
+
+    /**
+     * @brief Assign globally unique IDs to newly generated inflow particles.
+     * @param ifp Inflow particle buffer whose `id` entries will be overwritten.
+     *
+     * Computes the current global maximum particle ID across all MPI ranks, then
+     * uses an MPI exclusive scan to assign contiguous unique IDs to the new
+     * inflow particles.
+     */
+    void AssignUniqueInflowIds(MaterialPoint &ifp) const;
+
     virtual void InflowParticles() {};
 
-    virtual void GenerateInflowParticles(int dir, MaterialPoint &ifp, const BoundaryCondition &ifbc) {};
+    virtual void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {};
+
+    virtual void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {};
 
     /**
      * @brief Build element-to-particle linked lists (`idepf`, `idp2p`, `numep`).
