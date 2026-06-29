@@ -48,6 +48,30 @@ inline void InitializeMeshAndTimeParameters() {
 void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p);
 
 /**
+ * @brief Locate the global background element indices containing point `xq`.
+ * @param xq   Query point in physical coordinates.
+ * @param ie_g Output global element indices along x/y/z.
+ * @return `true` if the point lies inside the global background mesh bounds.
+ */
+bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie_g);
+
+/**
+ * @brief Convert global background element indices to the current rank-local element index.
+ * @param ie_g    Global element indices along x/y/z.
+ * @param m_local Output local element index on this rank.
+ * @return `true` if the element belongs to the current rank partition.
+ */
+bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local);
+
+/**
+ * @brief Locate the current rank-local background element containing point `xq`.
+ * @param xq      Query point in physical coordinates.
+ * @param m_local Output local element index on this rank.
+ * @return `true` if the point is inside the current rank partition.
+ */
+bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local);
+
+/**
  * @brief Compute nodal/control-point volumes from element volumes.
  */
 void MakNodalVol();

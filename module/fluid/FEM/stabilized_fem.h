@@ -28,8 +28,6 @@ class StabilizedFEM : public MaterialPoint {
         this->PF_.FEM_flag = true;
         this->NS_.use_petsc = true;
         this->PF_.use_petsc = true;
-        this->NS_.use_fieldsplit = true;
-        this->NS_.pressure_pc_use_amg = true;
         this->NS_.amg_rebuild_freq = 20; // rebuild fluid AMG every 20 steps
         this->PF_.amg_rebuild_freq = 20;
         this->NS_.owner_ = this;

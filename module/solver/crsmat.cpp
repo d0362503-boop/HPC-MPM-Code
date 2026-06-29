@@ -382,22 +382,6 @@ void CrsMat::BuildPetscMat(int ndof) {
 }
 
 /**
- * @brief Configure the velocity-pressure FieldSplit preconditioner.
- * @param pc PETSc preconditioner object.
- */
-void CrsMat::ConfigureVelocityPressureFieldSplit(PC pc) {
-    PetscInt fields_u[] = {0, 1, 2};
-    PetscInt fields_p[] = {3};
-
-    PCSetType(pc, PCNONE);
-    PCSetType(pc, PCFIELDSPLIT);
-    PCFieldSplitSetType(pc, PC_COMPOSITE_MULTIPLICATIVE);
-    PCFieldSplitSetBlockSize(pc, 4);
-    PCFieldSplitSetFields(pc, "0", 3, fields_u, fields_u);
-    PCFieldSplitSetFields(pc, "1", 1, fields_p, fields_p);
-}
-
-/**
  * @brief Build the PETSc KSP solver and default preconditioner stack.
  */
 void CrsMat::BuildKSPSolver() {
@@ -410,40 +394,17 @@ void CrsMat::BuildKSPSolver() {
 
     PC pc;
     KSPGetPC(this->ksp, &pc);
-    if (this->use_fieldsplit && this->ndof == 4) {
-        this->ConfigureVelocityPressureFieldSplit(pc);
-        PetscOptionsSetValue(NULL, "-pc_fieldsplit_type", "multiplicative");
-        PetscOptionsSetValue(NULL, "-pc_fieldsplit_block_size", "4");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_ksp_type", "preonly");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_type", "hypre");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_type", "boomeramg");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_coarsen_type", "HMIS");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_interp_type", "ext+i");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_agg_nl", "2");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_P_max", "2");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_strong_threshold", "0.8");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_max_levels", "8");
-        PetscOptionsSetValue(NULL, "-fieldsplit_0_pc_hypre_boomeramg_nodal_coarsen", "6");
-        PetscOptionsSetValue(NULL, "-fieldsplit_1_ksp_type", "preonly");
-        if (this->pressure_pc_use_amg) {
-            PetscOptionsSetValue(NULL, "-fieldsplit_1_pc_type", "hypre");
-            PetscOptionsSetValue(NULL, "-fieldsplit_1_pc_hypre_type", "boomeramg");
-        } else {
-            PetscOptionsSetValue(NULL, "-fieldsplit_1_pc_type", "jacobi");
-        }
-    } else {
-        PCSetType(pc, PCHYPRE);
-        PCHYPRESetType(pc, "boomeramg");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_coarsen_type", "HMIS");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_interp_type", "ext+i");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_agg_nl", "2");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_P_max", "2");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_strong_threshold", "0.8");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_max_levels", "8");
-        PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_nodal_coarsen", "6");
-    }
+    PCSetType(pc, PCHYPRE);
+    PCHYPRESetType(pc, "boomeramg");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_coarsen_type", "HMIS");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_interp_type", "ext+i");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_agg_nl", "2");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_P_max", "2");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_strong_threshold", "0.5");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_max_levels", "8");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_nodal_coarsen", "0");
 
-    KSPSetTolerances(this->ksp, 1.0e-8, 1.0e-10, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-12, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
 
@@ -643,7 +604,6 @@ int CrsMat::SolveWithPetsc(int ndof, int nr_it) {
     // while still allowing fluid and solid AMGs to coexist.
     if (need_rebuild) {
         PCReset(pc);
-        if (this->use_fieldsplit && this->ndof == 4) { this->ConfigureVelocityPressureFieldSplit(pc); }
         KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
         PCSetReusePreconditioner(pc, PETSC_FALSE);
     } else {

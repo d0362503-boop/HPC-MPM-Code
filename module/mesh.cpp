@@ -2,6 +2,7 @@
 #include "dataset.h"
 #include "material_point.h"
 #include "shape_function.h"
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -49,6 +50,39 @@ void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p) {
         }
     }
     return;
+}
+
+bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie_g) {
+    for (int d = 0; d < 3; d++) {
+        if (xq[d] < xyminw[d] || xq[d] > xymaxw[d]) { return false; }
+
+        double xi = (xq[d] - xyminw[d]) / dxy[d];
+        int ie = static_cast<int>(std::floor(xi));
+        ie_g[d] = std::clamp(ie, 0, xyelemw[d] - 1);
+    }
+
+    return true;
+}
+
+bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local) {
+    for (int d = 0; d < 3; d++) {
+        if (ie_g[d] < aelemmin[d] || ie_g[d] > aelemmax[d]) { return false; }
+    }
+
+    int iex_l = ie_g[0] - aelemmin[0];
+    int iey_l = ie_g[1] - aelemmin[1];
+    int iez_l = ie_g[2] - aelemmin[2];
+
+    m_local = iex_l + xyelem[0] * iey_l + xyelem[0] * xyelem[1] * iez_l;
+
+    return true;
+}
+
+bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local) {
+    std::array<int, 3> ie_g{};
+    if (!LocateGlobalElement(xq, ie_g)) { return false; }
+
+    return GlobalElementToLocal(ie_g, m_local);
 }
 
 void BuildMesh() {

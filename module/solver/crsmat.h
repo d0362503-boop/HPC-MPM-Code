@@ -147,8 +147,6 @@ class CrsMat {
     int amg_rebuild_freq;   // rebuild preconditioner every N steps
     int prev_ksp_its_ = -1; // KSP iterations of the previous solve
     bool force_rebuild_next_ = false;
-    bool use_fieldsplit = false;
-    bool pressure_pc_use_amg = false;
     // Reusable buffers for RHS / initial-guess insertion (size = local_node*ndof)
     std::vector<PetscInt> petsc_indices_buf;
     std::vector<PetscScalar> petsc_values_buf;
@@ -183,12 +181,6 @@ class CrsMat {
      * @brief Create and configure the PETSc KSP solver object.
      */
     void BuildKSPSolver();
-
-    /**
-     * @brief Configure a velocity-pressure field-split preconditioner for the fluid solver.
-     * @param pc PETSc preconditioner context.
-     */
-    void ConfigureVelocityPressureFieldSplit(PC pc);
 
     /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.

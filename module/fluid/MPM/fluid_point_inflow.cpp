@@ -18,28 +18,28 @@ using namespace stabilizedmpm;
 void StabilizedMPM::InflowParticles() {
 
     int target_per_cell = npxye[0] * npxye[1] * npxye[2];
-    int num = (this->uinfbc.ibc + this->vinfbc.ibc + this->winfbc.ibc) * target_per_cell;
+    int target_num = (this->uinfbc.ibc + this->vinfbc.ibc + this->winfbc.ibc) * target_per_cell;
 
-    if (num == 0) return;
+    if (target_num == 0) return;
 
     this->ifp.num = 0;
 
-    VectorAssign(num, this->ifp.id);
-    VectorAssign(num, this->ifp.matid);
-    VectorAssign(num, this->ifp.mass);
-    VectorAssign(num, this->ifp.vol);
-    VectorAssign(num, this->ifp.pres);
-    VectorAssign(num, this->ifp.coord);
-    VectorAssign(num, this->ifp.vel);
-    VectorAssign(num, this->ifp.accel);
+    VectorAssign(target_num, this->ifp.id);
+    VectorAssign(target_num, this->ifp.matid);
+    VectorAssign(target_num, this->ifp.mass);
+    VectorAssign(target_num, this->ifp.vol);
+    VectorAssign(target_num, this->ifp.pres);
+    VectorAssign(target_num, this->ifp.coord);
+    VectorAssign(target_num, this->ifp.vel);
+    VectorAssign(target_num, this->ifp.accel);
 
     if (this->solswitch == MapScheme::TPIC) {
-        VectorAssign(num, this->ifp.tpic.vel_grad);
-        VectorAssign(num, this->ifp.tpic.accel_grad);
+        VectorAssign(target_num, this->ifp.tpic.vel_grad);
+        VectorAssign(target_num, this->ifp.tpic.accel_grad);
     } else if (this->solswitch == MapScheme::APIC) {
-        VectorAssign(num, this->ifp.apic.vel_Bmat);
-        VectorAssign(num, this->ifp.apic.accel_Bmat);
-        VectorAssign(num, this->ifp.apic.inv_Dmat);
+        VectorAssign(target_num, this->ifp.apic.vel_Bmat);
+        VectorAssign(target_num, this->ifp.apic.accel_Bmat);
+        VectorAssign(target_num, this->ifp.apic.inv_Dmat);
     }
 
     if (this->uinfbc.ibc != 0) { this->GenerateInflowParticles(0, this->ifp, this->uinfbc); }
@@ -51,8 +51,7 @@ void StabilizedMPM::InflowParticles() {
     return;
 }
 
-void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp,
-                                                     const BoundaryCondition &infbc) {
+void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {
 
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
@@ -132,8 +131,7 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
     return;
 }
 
-void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp,
-                                                      const BoundaryCondition &infbc) {
+void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {
 
     constexpr int offset_layer = 1;
 
@@ -162,8 +160,8 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
         int iye = (ie - ize * (nex * ney)) / nex;
         int ixe = ie - ize * (nex * ney) - iye * nex;
 
-        std::vector<double> xyr(3);
-        std::vector<int> iexp(3), ie_indices = {ixe, iye, ize};
+        std::array<double, 3> xyr;
+        std::array<int, 3> iexp{}, ie_indices = {ixe, iye, ize};
 
         int sign = this->GetInflowSign(dir, ie_indices[dir]);
 

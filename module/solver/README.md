@@ -237,65 +237,21 @@ Because `fsi_intf` changes every step, BC lists must be rebuilt before every sol
 
 ## 5. Current PETSc Solver Configuration
 
-This section describes the current production configuration used by the successful 32-rank Turek FSI tests.
+All PETSc-based solves now use the same monolithic AMG preconditioner stack. The previous velocity-pressure `PCFIELDSPLIT` path has been removed.
 
-### 5.1 Fluid solver
+### 5.1 Unified AMG preconditioner
 
-Fluid uses:
+- outer Krylov: `KSPFGMRES` (overridable via `-ksp_type`)
+- preconditioner: `PCHYPRE`
+- AMG type: `BoomerAMG`
 
-- outer Krylov: `KSPBCGS`
-- preconditioner: `PCFIELDSPLIT`
-- split type: multiplicative
-- velocity block: BoomerAMG
-- pressure block: scalar BoomerAMG
-
-Relevant code path:
-- `use_fieldsplit = true`
-- `ndof = 4`
+This applies to every `CrsMat` that uses PETSc, regardless of `ndof` (1, 3, or 4).
 
 PETSc options set in code:
 
 ```cpp
--pc_fieldsplit_type multiplicative
--pc_fieldsplit_block_size 4
--pc_fieldsplit_0_fields 0,1,2
--pc_fieldsplit_1_fields 3
--fieldsplit_0_ksp_type preonly
--fieldsplit_0_pc_type hypre
--fieldsplit_0_pc_hypre_type boomeramg
--fieldsplit_1_ksp_type preonly
--fieldsplit_1_pc_type hypre
--fieldsplit_1_pc_hypre_type boomeramg
-```
-
-Velocity AMG is intentionally lighter-weight than default:
-
-```cpp
--fieldsplit_0_pc_hypre_boomeramg_coarsen_type HMIS
--fieldsplit_0_pc_hypre_boomeramg_interp_type ext+i
--fieldsplit_0_pc_hypre_boomeramg_agg_nl 2
--fieldsplit_0_pc_hypre_boomeramg_P_max 2
--fieldsplit_0_pc_hypre_boomeramg_strong_threshold 0.8
--fieldsplit_0_pc_hypre_boomeramg_max_levels 8
--fieldsplit_0_pc_hypre_boomeramg_nodal_coarsen 6
-```
-
-### 5.2 Solid solver
-
-Solid stays monolithic:
-
-- outer Krylov: `KSPBCGS`
-- preconditioner: `PCHYPRE`
-- AMG type: `BoomerAMG`
-
-Relevant code path:
-- `FEM_flag = false`
-- `ndof = 3`
-- `use_fieldsplit = false`
-
-Current solid AMG tuning:
-
-```cpp
+-pc_type hypre
+-pc_hypre_type boomeramg
 -pc_hypre_boomeramg_coarsen_type HMIS
 -pc_hypre_boomeramg_interp_type ext+i
 -pc_hypre_boomeramg_agg_nl 2
@@ -305,13 +261,11 @@ Current solid AMG tuning:
 -pc_hypre_boomeramg_nodal_coarsen 6
 ```
 
-This keeps solid on AMG, but avoids the older cross-solver AMG-release logic.
+### 5.2 Solver independence
 
-### 5.3 Why fluid and solid are different
+Fluid and solid keep their AMG hierarchies independently.
 
-Fluid and solid now keep their AMG hierarchies independently.
-
-There is no longer any global "release other AMG" behavior. Fluid and solid AMG are allowed to coexist.
+There is no longer any global "release other AMG" behavior, and the fieldsplit-specific flags (`use_fieldsplit`, `pressure_pc_use_amg`) have been removed. Fluid and solid AMG are allowed to coexist.
 
 ---
 

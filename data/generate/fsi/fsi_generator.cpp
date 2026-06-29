@@ -170,8 +170,9 @@ void FsiGenerator::BuildData() {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
                 int id = i + xnodec * j + xnodec * ynodec * k;
-                if (i == 0 && (k != 0 || k != znodec - 1)) {
-                    double vel = 1.5e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
+                if (k == znodec - 1) {
+                    double vel = 1.0e-2;
+                    // double vel = 1.5e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
                     g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
                     g_wfem.ubc.fbc[g_wfem.ubc.ibc] = vel;
                     g_wfem.ubc.ibc++;
@@ -179,7 +180,7 @@ void FsiGenerator::BuildData() {
                     g_wfem.wbc.fbc[g_wfem.wbc.ibc] = 0.0e0;
                     g_wfem.wbc.ibc++;
                 }
-                if (i == 0 || i == xnodec - 1 || k == 0 || k == znodec - 1) {
+                if (i == 0 || i == xnodec - 1 || k == 0) {
                     g_sp.ubc.nbc[g_sp.ubc.ibc] = id;
                     g_sp.ubc.fbc[g_sp.ubc.ibc] = 0.0e0;
                     g_sp.ubc.ibc++;
@@ -195,7 +196,7 @@ void FsiGenerator::BuildData() {
                     g_wfem.vbc.fbc[g_wfem.vbc.ibc] = 0.0e0;
                     g_wfem.vbc.ibc++;
                 }
-                if (k == 0 || k == znodec - 1) {
+                if (i == 0 || i == xnodec - 1 || k == 0) {
                     g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
                     g_wfem.ubc.fbc[g_wfem.ubc.ibc] = 0.0e0;
                     g_wfem.ubc.ibc++;
@@ -203,7 +204,7 @@ void FsiGenerator::BuildData() {
                     g_wfem.wbc.fbc[g_wfem.wbc.ibc] = 0.0e0;
                     g_wfem.wbc.ibc++;
                 }
-                if (i == xnodec - 1) {
+                if (i == 0 && k == 0) {
                     g_wfem.pbc.nbc[g_wfem.pbc.ibc] = id;
                     g_wfem.pbc.fbc[g_wfem.pbc.ibc] = 0.0e0;
                     g_wfem.pbc.ibc++;
@@ -229,30 +230,31 @@ void FsiGenerator::BuildData() {
                         double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ip++) {
                             double xp = ecx + dec2p[ip][0];
-                            if (zp >= 0.21e0 || zp <= 0.19e0) {
-                                if (std::pow((xp - 0.2e0), 2) + std::pow((zp - 0.2e0), 2) < std::pow(0.05e0, 2)) {
-                                    g_sp.coord[g_sp.num][0] = xp;
-                                    g_sp.coord[g_sp.num][1] = yp;
-                                    g_sp.coord[g_sp.num][2] = zp;
-                                    g_sp.matid[g_sp.num] = 0;
-                                    g_sp.id[g_sp.num] = g_sp.num;
-                                    g_sp.num++;
-                                }
-                            } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.15e0 && xp <= 0.25e0) {
+                            // if (zp >= 0.21e0 || zp <= 0.19e0) {
+                            // if (std::pow((xp - 0.2e0), 2) + std::pow((zp - 0.2e0), 2) < std::pow(0.05e0, 2)) {
+                            if (std::pow((xp - 6.0e-3), 2) + std::pow((zp - 5.0e-3), 2) < std::pow(2.0e-3, 2)) {
                                 g_sp.coord[g_sp.num][0] = xp;
                                 g_sp.coord[g_sp.num][1] = yp;
                                 g_sp.coord[g_sp.num][2] = zp;
                                 g_sp.matid[g_sp.num] = 0;
                                 g_sp.id[g_sp.num] = g_sp.num;
                                 g_sp.num++;
-                            } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.25e0 && xp <= 0.6e0) {
-                                g_sp.coord[g_sp.num][0] = xp;
-                                g_sp.coord[g_sp.num][1] = yp;
-                                g_sp.coord[g_sp.num][2] = zp;
-                                g_sp.matid[g_sp.num] = 1;
-                                g_sp.id[g_sp.num] = g_sp.num;
-                                g_sp.num++;
                             }
+                            // } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.15e0 && xp <= 0.25e0) {
+                            //     g_sp.coord[g_sp.num][0] = xp;
+                            //     g_sp.coord[g_sp.num][1] = yp;
+                            //     g_sp.coord[g_sp.num][2] = zp;
+                            //     g_sp.matid[g_sp.num] = 0;
+                            //     g_sp.id[g_sp.num] = g_sp.num;
+                            //     g_sp.num++;
+                            // } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.25e0 && xp <= 0.6e0) {
+                            //     g_sp.coord[g_sp.num][0] = xp;
+                            //     g_sp.coord[g_sp.num][1] = yp;
+                            //     g_sp.coord[g_sp.num][2] = zp;
+                            //     g_sp.matid[g_sp.num] = 1;
+                            //     g_sp.id[g_sp.num] = g_sp.num;
+                            //     g_sp.num++;
+                            // }
                         }
                     }
                 }

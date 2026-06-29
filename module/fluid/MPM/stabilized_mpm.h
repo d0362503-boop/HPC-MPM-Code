@@ -26,8 +26,6 @@ class StabilizedMPM : public MaterialPoint {
         this->NS_.ndof = 4;
         this->NS_.FEM_flag = false;
         this->NS_.use_petsc = true;
-        this->NS_.use_fieldsplit = true;
-        this->NS_.pressure_pc_use_amg = true;
         this->NS_.amg_rebuild_freq = 1; // rebuild fluid AMG every step
         this->NS_.owner_ = this;
     }
