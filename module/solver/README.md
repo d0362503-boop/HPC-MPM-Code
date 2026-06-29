@@ -357,41 +357,37 @@ Without this release, solid work arrays remained resident across time steps and 
 
 ## 9. Current 32-Rank Baseline
 
-### 9.1 Pure fluid AMG baseline
+### 9.1 Unified AMG baseline
 
-When fluid is temporarily switched back to monolithic AMG, the Turek 10-step baseline gives:
+All PETSc-based solves now use the same monolithic AMG preconditioner stack (`PCHYPRE` + `BoomerAMG`). For the Turek 10-step baseline:
 
 - `NS_iter ~= 8`
 
-This is the reference used to judge whether the FieldSplit preconditioner is acceptable.
+This is the reference used to judge whether future preconditioner changes are acceptable.
 
 ### 9.2 Current recommended production run
 
 Current recommended configuration:
 
-- fluid: `FieldSplit + velocity AMG + pressure AMG + BCGS`
-- solid: `monolithic AMG + BCGS`
+- fluid: `monolithic AMG + FGMRES`
+- solid: `monolithic AMG + FGMRES`
 - local PETSc solution scatter
 - solid temporary arrays released every step
 
-Successful 32-rank 10-step run:
+Successful 16-rank cavity-flow run after tightening tolerances:
 
-- file: `build/stdout/direct_speed_try6.txt`
-- total time: about `180.30 s`
-- fluid `NS_iter`: `7~9`
-- solid linear iterations reported in `NR_converge`: about `1~4`
-
-This is currently the best stable configuration reached in this branch.
+- fluid `NS_iter`: `6~10`, stabilizing around `6`
+- FSI block iteration converges in `0~2` iterations per step
 
 ### 9.3 Default Krylov Policy
 
 Current default policy in code is simple:
 
-- all PETSc KSP objects default to `KSPBCGS`
-- fluid still changes the **preconditioner structure** through `FieldSplit`
-- solid still changes the **preconditioner type** through monolithic BoomerAMG
+- all PETSc KSP objects default to `KSPFGMRES`
+- both fluid and solid use the same preconditioner type: monolithic `BoomerAMG`
+- the only distinction left is the rebuild frequency and the physical BCs injected by each physics object
 
-So the distinction between fluid and solid is now mainly in the preconditioner, not in the Krylov family.
+So the distinction between fluid and solid is now mainly in the physics (DOF count, BCs, rebuild cadence), not in the Krylov family or preconditioner structure.
 
 ---
 
@@ -400,16 +396,16 @@ So the distinction between fluid and solid is now mainly in the preconditioner, 
 ### 10.1 Good directions
 
 - keep `MatSetBlockSize(ndof)`
-- keep fluid velocity/pressure split physical
 - keep fluid and solid AMG independent
 - keep solid temporary arrays released after solve
 - use local solution scatter, not global `CreateToAll`
+- if mixed u-p problems show false convergence (very few or zero iterations), tighten `rtol`/`abstol` or add symmetric diagonal scaling before the PETSc solve
 
 ### 10.2 Bad or abandoned directions
 
 - restoring global cross-solver AMG release logic
 - gathering the full global PETSc solution on every rank
-- using fluid pressure Jacobi for the current Turek case
+- using a loosely set `rtol` (e.g. `1.0e-8`) for unscaled mixed u-p systems, which can accept a trivial initial guess as "converged"
 - treating the current solid matrix as safely CG-compatible without further proof
 - editing headers without reconfiguring CMake afterward
 
@@ -419,7 +415,7 @@ So the distinction between fluid and solid is now mainly in the preconditioner, 
 
 1. If you change any PETSc-related header path or solver header, reconfigure and rebuild: `rm -rf build/CMakeCache.txt build/CMakeFiles && cmake -S . -B build && cmake --build build -j8`.
 2. If you change `nxyr`, you must regenerate partitions before solver benchmarking.
-3. If a new preconditioner looks faster but `NS_iter` jumps far above the pure AMG baseline, do not keep it.
+3. If a new preconditioner looks faster but `NS_iter` jumps far above the unified AMG baseline, do not keep it.
 4. If a run becomes fast but starts printing `PETSc KSP diverged`, that result is invalid even if the wall time looks good.
 
 ---
@@ -432,11 +428,10 @@ For the current 32-rank Turek benchmark:
 |---------|-------|
 | MPI ranks | `32` |
 | Runner | `build/run.sh` |
-| Fluid Krylov | `KSPBCGS` |
-| Fluid PC | `PCFIELDSPLIT` |
-| Fluid split | velocity AMG + pressure AMG |
-| Solid Krylov | `KSPBCGS` |
-| Solid PC | `BoomerAMG` |
+| Fluid Krylov | `KSPFGMRES` |
+| Fluid PC | `PCHYPRE` + `BoomerAMG` |
+| Solid Krylov | `KSPFGMRES` |
+| Solid PC | `PCHYPRE` + `BoomerAMG` |
 | Fluid rebuild freq | `20` |
 | Solid rebuild freq | `20` |
 
