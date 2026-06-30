@@ -85,11 +85,17 @@ where `num_block = ndof * ndof`. For fluid (`ndof=4`) this means 16 scalar block
 
 In MPM, a control point is called *inactive* when its assembled matrix row carries negligible physical content. This is detected at solve time by `BuildActiveRowMask()`, which computes the absolute sum of all entries in the node's CSR row. If the sum is below `mtol`, the node is marked inactive.
 
+**Critical invariant for parallel PETSc solves:** the active/inactive decision must be synchronized across overlap control points before assembly skips rows or inserts owned-row identity blocks. A shared control point is considered active if *any* overlapping rank assembled nontrivial row content for that node. `BuildActiveRowMask()` implements this by computing a local integer indicator, calling `NodeVarComm(..., 0)` to accumulate indicators on shared nodes, and rebuilding `active_row_mask` from the synchronized result.
+
+This prevents owner-rank false negatives: a rank that happens to own a shared node but has no local element contribution would otherwise mark the row inactive and identity-fill it, producing an artificial Dirichlet-like wall along partition boundaries.
+
 During assembly:
 - inactive nodes are skipped in the first pass
 - locally-owned inactive nodes receive an identity block in a second pass to keep the matrix well-conditioned
 
 This replaces the older `nmass < mtol` heuristic with a matrix-content-based check that is consistent with the actual assembled system. See Section 3.5 for details.
+
+> **Do not** classify active rows from purely rank-local `amat` content and immediately apply identity fill on owned rows. In overlapping decompositions this misclassifies shared rows whose physical contributions are split across ranks.
 
 ---
 
@@ -113,6 +119,8 @@ Shared control points are owned by a tie-break based on `aelemmin`.
 `interior_list` stores locally owned control points.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
+
+**Open concern: LGMAP size and PETSc ownership consistency.** `BuildPetscMat()` creates the distributed PETSc matrix with local size `local_node * ndof`, but `BuildLGMAP()` currently constructs the local-to-global mapping with `nodec` block entries (owned plus ghost). This relies on the partitioner numbering owned control points as the first `local_node` local indices, so that PETSc only reads the first `local_node` entries of the mapping. If that assumption is ever violated—for example, by a different partitioner or ghost-layer ordering—the matrix layout and ownership will disagree and assembly will fail or silently corrupt shared rows. A more robust fix would be to pass only the owned subset (`l2g_block_map[interior_list[i]]`) as the LGMAP entries.
 
 ### 3.2 Matrix setup
 
@@ -175,13 +183,13 @@ This tells PETSc to dynamically `malloc` storage for unexpected nonzeros instead
 
 #### Inactive-node identity fill
 
-At the start of each assembly, `BuildActiveRowMask()` scans every control point's CSR row and marks the node inactive if the row's absolute entry sum falls below `mtol`. FEM nodes are always active. These inactive nodes are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
+At the start of each assembly, `BuildActiveRowMask()` scans every control point's CSR row and computes a local active indicator. The indicator is then synchronized across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank has nonzero row content. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
 
 ```cpp
 MatSetValuesBlocked(..., 1, &block_row, 1, &block_row, identity_block.data(), ADD_VALUES);
 ```
 
-This keeps the matrix non-singular and prevents the linear solver from diverging on empty-space degrees of freedom.
+This keeps the matrix non-singular and prevents the linear solver from diverging on empty-space degrees of freedom, while ensuring that partition-boundary nodes with real physical contributions are not pinned by mistake.
 
 #### Residual consistency for inactive MPM nodes
 

@@ -111,7 +111,8 @@ void CrsMat::ExtractDiagonal(int ndof) {
 void CrsMat::BuildActiveRowMask() {
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
-    constexpr double kZeroRowTol = 1.0e-12;
+
+    std::vector<int> local_row_active(nodec, 0);
 
     for (int nid = 0; nid < nodec; ++nid) {
         double row_abs_sum = 0.0e0;
@@ -123,8 +124,16 @@ void CrsMat::BuildActiveRowMask() {
                 }
             }
         }
-        if (row_abs_sum < mtol) this->active_row_mask[nid] = 0;
+        if (row_abs_sum >= mtol) local_row_active[nid] = 1;
     }
+
+    // Synchronize the active indicator across overlap control points so that a
+    // shared row is active if any overlapping rank assembled nonzero content.
+    // This prevents owner-rank false negatives that can pin partition seams.
+    NodeVarComm(local_row_active, 0);
+
+    for (int nid = 0; nid < nodec; ++nid) { this->active_row_mask[nid] = (local_row_active[nid] > 0) ? 1 : 0; }
+
     return;
 }
 
@@ -305,7 +314,7 @@ void CrsMat::BuildLGMAP(int ndof) {
     this->ghost_node = nodec - this->local_node;
 
     // Sanity check: the sum of owned nodes across all ranks must equal the
-    // global control-point count.  If not, the tie-break logic is inconsistent.
+    // global control-point count. If not, the tie-break logic is inconsistent.
     int global_nodec = xynodecw[0] * xynodecw[1] * xynodecw[2];
     int total_local_node = 0;
     MPI_Allreduce(&this->local_node, &total_local_node, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
@@ -325,8 +334,9 @@ void CrsMat::BuildLGMAP(int ndof) {
         }
     }
 
-    // Create the PETSc LGMAP object.  It is not bound to the matrix because
-    // we insert values directly via global indices using MatSetValues.
+    // Create the scalar LGMAP used by PETSc vectors (petsc_b, petsc_x).
+    // The matrix uses a separate block LGMAP (block size ndof) created in
+    // BuildPetscMat() to match MatSetBlockSize(ndof).
     ISLocalToGlobalMappingCreate(MPI_COMM_WORLD, 1, nodec * ndof, this->l2g_var_map.data(), PETSC_COPY_VALUES,
                                  &this->lgmap);
 
@@ -369,6 +379,19 @@ void CrsMat::BuildPetscMat(int ndof) {
     VecCreateMPI(MPI_COMM_WORLD, local_n, PETSC_DETERMINE, &this->petsc_b);
     VecCreateMPI(MPI_COMM_WORLD, local_n, PETSC_DETERMINE, &this->petsc_x);
 
+    // Bind the local-to-global mapping so that all global indices used in
+    // MatSetValuesBlocked / VecSetValues / MatZeroRowsColumns are interpreted
+    // with the Cartesian node numbering from BuildLGMAP, not PETSc's default
+    // contiguous-by-rank numbering. Without this, 2D/3D partitions misplace
+    // rows/columns and BC rows end up on the wrong ranks.
+    ISLocalToGlobalMapping lgmap_block = nullptr;
+    ISLocalToGlobalMappingCreate(MPI_COMM_WORLD, ndof, nodec, this->l2g_block_map.data(), PETSC_COPY_VALUES,
+                                 &lgmap_block);
+    MatSetLocalToGlobalMapping(this->petsc_mat, lgmap_block, lgmap_block);
+    VecSetLocalToGlobalMapping(this->petsc_b, this->lgmap);
+    VecSetLocalToGlobalMapping(this->petsc_x, this->lgmap);
+    ISLocalToGlobalMappingDestroy(&lgmap_block);
+
     VecZeroEntries(this->petsc_b);
     VecZeroEntries(this->petsc_x);
 
@@ -402,7 +425,7 @@ void CrsMat::BuildKSPSolver() {
     // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_P_max", "2");
     // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_strong_threshold", "0.5");
     // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_max_levels", "8");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_nodal_coarsen", "0");
+    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_nodal_coarsen", "6");
 
     KSPSetTolerances(this->ksp, 1.0e-12, 1.0e-15, 1.0e6, 1000);
 

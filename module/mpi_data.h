@@ -138,8 +138,8 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<in
  */
 template <typename T> void NodeVarCommLowerOrder(std::vector<T> &dat, int nn) {
 
-    std::vector<T> sdn(isubc);
-    std::vector<T> rvn(isubc);
+    std::vector<T> sdn(isubl);
+    std::vector<T> rvn(isubl);
     std::vector<MPI_Request> irqs(isb);
     std::vector<MPI_Request> irqr(isb);
     MPI_Status status;
