@@ -107,7 +107,7 @@ void BlockFSI::SolveFSISystem() {
         }
     }
 
-    // this->CalDragLiftCoeff();
+    // this->CalDragLiftCoeffBySurfaceTraction();
 
     this->fluid_.naccel = this->fluid_.GeneralizedAlphaNodeAccelUpdate();
 
@@ -149,25 +149,94 @@ void BlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vecto
     return;
 }
 
-void BlockFSI::CalDragLiftCoeff() {
-    // --- For CD and CL coefficients ---
-    double cd = 0.0e0, cl = 0.0e0;
-    for (int n = 0; n < nodec; n++) {
-        cd += this->nfsi_force[n + nuc] * dbc[n + nuc];
-        cl += this->nfsi_force[n + nwc] * dbc[n + nwc];
+void BlockFSI::CalDragLiftCoeffBySurfaceTraction() {
+    const double cylinder_center_x = 0.2e0;
+    const double cylinder_center_z = 0.2e0;
+    const double cylinder_radius = 0.05e0;
+    const int surface_quad_points = 720;
+
+    const double radius_eval = cylinder_radius;
+    const double dtheta = 2.0e0 * M_PI / static_cast<double>(surface_quad_points);
+    const double y_mid = 0.5e0 * (xyminw[1] + xymaxw[1]);
+
+    double fx = 0.0e0;
+    double fz = 0.0e0;
+
+    int nenode;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
+
+    for (int iq = 0; iq < surface_quad_points; iq++) {
+        double theta = (static_cast<double>(iq) + 0.5e0) * dtheta;
+
+        std::array<double, 3> xq{
+            cylinder_center_x + radius_eval * std::cos(theta),
+            y_mid,
+            cylinder_center_z + radius_eval * std::sin(theta),
+        };
+
+        int m_local;
+        if (!LocateLocalElement(xq, m_local)) { continue; }
+
+        MakSf(m_local, xq, idimc, xynodec, ncm, nenode, sf, dsf);
+
+        double phi_q = 0.0e0;
+        double pres_q = 0.0e0;
+        std::array<std::array<double, 3>, 3> grad_vel_q{};
+
+        for (int ni = 0; ni < nenode; ni++) {
+            int nid = ncm[ni];
+            double sfi = sf[ni];
+            double dsfi1 = dsf[ni][0];
+            double dsfi2 = dsf[ni][1];
+            double dsfi3 = dsf[ni][2];
+
+            phi_q += sfi * this->fluid_.nphi[nid];
+            pres_q += sfi * this->fluid_.npres[nid];
+
+            grad_vel_q[0][0] += dsfi1 * this->fluid_.nvel[nid + nuc];
+            grad_vel_q[0][1] += dsfi2 * this->fluid_.nvel[nid + nuc];
+            grad_vel_q[0][2] += dsfi3 * this->fluid_.nvel[nid + nuc];
+
+            grad_vel_q[1][0] += dsfi1 * this->fluid_.nvel[nid + nvc];
+            grad_vel_q[1][1] += dsfi2 * this->fluid_.nvel[nid + nvc];
+            grad_vel_q[1][2] += dsfi3 * this->fluid_.nvel[nid + nvc];
+
+            grad_vel_q[2][0] += dsfi1 * this->fluid_.nvel[nid + nwc];
+            grad_vel_q[2][1] += dsfi2 * this->fluid_.nvel[nid + nwc];
+            grad_vel_q[2][2] += dsfi3 * this->fluid_.nvel[nid + nwc];
+        }
+
+        double rmuf = phi_q * this->fluid_.rmul + (1.0e0 - phi_q) * this->fluid_.rmug;
+
+        std::array<std::array<double, 3>, 3> sigma_q{};
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) { sigma_q[i][j] = rmuf * (grad_vel_q[i][j] + grad_vel_q[j][i]); }
+            sigma_q[i][i] -= pres_q;
+        }
+
+        double nx = std::cos(theta);
+        double nz = std::sin(theta);
+
+        double tx = sigma_q[0][0] * nx + sigma_q[0][2] * nz;
+        double tz = sigma_q[2][0] * nx + sigma_q[2][2] * nz;
+
+        double dgamma = radius_eval * dtheta * dxy[1];
+        fx += tx * dgamma;
+        fz += tz * dgamma;
     }
 
-    cd = -cd;
-    cl = -cl;
-    MPI_Allreduce(MPI_IN_PLACE, &cd, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &cl, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &fx, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &fz, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    cd *= 2.0e0 / (this->fluid_.rhol * 0.1e0 * dxy[1]);
-    cl *= 2.0e0 / (this->fluid_.rhol * 0.1e0 * dxy[1]);
+    double cd = 2.0e0 * fx / (this->fluid_.rhol * 0.1e0 * dxy[1]);
+    double cl = 2.0e0 * fz / (this->fluid_.rhol * 0.1e0 * dxy[1]);
 
     if (myrank == 0) {
-        std::cout << "Drag and lift coefficients: " //
-                  << std::setw(15) << cd << std::setw(15) << cl << "\n";
+        std::cout << "Surface traction Cd Cl:" //
+                  << std::setw(15) << cd       //
+                  << std::setw(15) << cl << "\n";
     }
 
     return;

@@ -11,11 +11,6 @@
 #include <string>
 #include <vector>
 
-/**
- * @brief Solve the scaled linear system with the GPBiCGSafe iteration.
- * @param mat Sparse matrix and solver state.
- * @return Number of Krylov iterations performed.
- */
 int GPBiCGSafe(CrsMat &mat) {
 
     const int var_size = mat.x_lhs.size();
@@ -140,11 +135,6 @@ int GPBiCGSafe(CrsMat &mat) {
     return iter;
 }
 
-/**
- * @brief Solve the scaled linear system with the GPBiCGAR iteration.
- * @param mat Sparse matrix and solver state.
- * @return Number of Krylov iterations performed.
- */
 int GPBiCGAR(CrsMat &mat) {
 
     const int var_size = mat.x_lhs.size();
@@ -269,11 +259,6 @@ int GPBiCGAR(CrsMat &mat) {
     return iter;
 }
 
-/**
- * @brief Solve the scaled linear system with the original GPBiCG iteration.
- * @param mat Sparse matrix and solver state.
- * @return Number of Krylov iterations performed.
- */
 int GPBiCG(CrsMat &mat) {
 
     const int var_size = mat.x_lhs.size();
@@ -397,11 +382,6 @@ int GPBiCG(CrsMat &mat) {
     return iter;
 }
 
-/**
- * @brief Apply the local block CSR matrix and overlap accumulation to a vector.
- * @param xx Input vector in node-major block layout.
- * @return Result after matrix multiplication and overlap-node communication.
- */
 std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
 
     const int var_size = (int)this->x_lhs.size();
@@ -432,11 +412,6 @@ std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
     return rr;
 }
 
-/**
- * @brief Compute the PETSc residual norm and the active PETSc DOF count.
- * @param res_norm Euclidean norm of the masked PETSc residual.
- * @param active_dof Number of active PETSc degrees of freedom used in the norm.
- */
 void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
     Vec residual = nullptr;
     Vec active_mask = nullptr;
@@ -455,17 +430,16 @@ void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
 
     size_t idx = 0;
     for (int i = 0; i < this->local_node; ++i) {
-        const int natural_id = this->interior_list[i];
+        const int natural_id = this->owned_natural_ids[i];
         const PetscScalar is_active = (this->FEM_flag || this->active_row_mask[natural_id] != 0) ? 1.0 : 0.0;
         for (int var = 0; var < this->ndof; ++var) {
-            const int local_idx = natural_id + var * nodec;
-            indices[idx] = this->l2g_var_map[local_idx];
+            indices[idx] = this->NaturalNodeVarToPetscLocalScalar(natural_id, var);
             values[idx] = is_active;
             ++idx;
         }
     }
 
-    VecSetValues(active_mask, local_size, indices.data(), values.data(), INSERT_VALUES);
+    VecSetValuesLocal(active_mask, local_size, indices.data(), values.data(), INSERT_VALUES);
     VecAssemblyBegin(active_mask);
     VecAssemblyEnd(active_mask);
 
@@ -475,21 +449,12 @@ void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
 
     VecDestroy(&residual);
     VecDestroy(&active_mask);
+
+    return;
 }
 
-/**
- * @brief Compute the reference residual norm used in Newton convergence checks.
- * @return Residual norm for the current solver path.
- */
-double CrsMat::ComputeRefResidual() {
+double CrsMat::ComputeNativeResidualNormSq() {
     const int var_size = int(this->x_lhs.size());
-
-    if (this->use_petsc) {
-        double res_norm = 0.0e0;
-        double active_dof = 0.0e0;
-        this->ComputePetscResidualStats(res_norm, active_dof);
-        return res_norm;
-    }
 
     if (this->owner_) { this->owner_->BCResidualSet(this->b_rhs); }
 
@@ -506,16 +471,21 @@ double CrsMat::ComputeRefResidual() {
     }
     MPI_Allreduce(MPI_IN_PLACE, &rtr, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    return std::sqrt(rtr);
+    return rtr;
 }
 
-/**
- * @brief Compute the absolute residual metric used in Newton convergence checks.
- * @return Weighted absolute residual for the current solver path.
- */
-double CrsMat::ComputeAbsResidual() {
-    const int var_size = int(this->x_lhs.size());
+double CrsMat::ComputeRefResidual() {
+    if (this->use_petsc) {
+        double res_norm = 0.0e0;
+        double active_dof = 0.0e0;
+        this->ComputePetscResidualStats(res_norm, active_dof);
+        return res_norm;
+    }
 
+    return std::sqrt(this->ComputeNativeResidualNormSq());
+}
+
+double CrsMat::ComputeAbsResidual() {
     if (this->use_petsc) {
         double res_norm = 0.0e0;
         double active_dof = 0.0e0;
@@ -524,44 +494,19 @@ double CrsMat::ComputeAbsResidual() {
         return res_norm / std::sqrt(active_dof);
     }
 
-    if (this->owner_) { this->owner_->BCResidualSet(this->b_rhs); }
-
-    std::vector<double> x_pre(var_size);
-    for (int n = 0; n < var_size; n++) { x_pre[n] = (this->adiag[n] > mtol) ? this->x_lhs[n] / this->adiag[n] : 0.0e0; }
-
-    std::vector<double> Ax = this->MatVecMult(x_pre);
-
-    double rtr = 0.0e0;
-    for (int n = 0; n < var_size; n++) {
-        double Ax_phys = (this->adiag[n] > mtol) ? (Ax[n] / this->adiag[n]) : 0.0e0;
-        double r = this->b_rhs[n] - Ax_phys;
-        rtr += r * r * dbc[n];
-    }
+    const int var_size = int(this->x_lhs.size());
+    const double rtr = this->ComputeNativeResidualNormSq();
 
     double idof = 0.0e0;
     for (int n = 0; n < var_size; n++) {
         if (this->adiag[n] > mtol) { idof += dbc[n]; }
     }
-
-    double buf_rid[2] = {rtr, idof};
-    MPI_Allreduce(MPI_IN_PLACE, buf_rid, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    rtr = buf_rid[0];
-    idof = buf_rid[1];
+    MPI_Allreduce(MPI_IN_PLACE, &idof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     if (idof <= 1.0e-30) { return 0.0e0; }
-    rtr = std::sqrt(rtr / idof);
-
-    return rtr;
+    return std::sqrt(rtr / idof);
 }
 
-/**
- * @brief Evaluate Newton convergence and print the current residual summary.
- * @param NR_it Current Newton iteration index.
- * @param NR_it_max Maximum allowed Newton iterations.
- * @param solver_it Linear solver iteration count for this Newton step.
- * @param r0r Reference residual from the first Newton iteration.
- * @return True when the Newton process should stop.
- */
 bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
     double rkr;
     if (NR_it == 0) {

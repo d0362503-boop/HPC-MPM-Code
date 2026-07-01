@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <vector>
 
 #include "../module/bc.h"
@@ -76,7 +77,10 @@ class BlockFSI {
 
     void CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k);
 
-    void CalDragLiftCoeff();
-
     void CalFSIForce();
+
+    /**
+     * @brief Specifically for Turek CFD problem (Cylinder flow)
+     */
+    void CalDragLiftCoeffBySurfaceTraction();
 };

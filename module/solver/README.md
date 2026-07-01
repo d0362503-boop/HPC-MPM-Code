@@ -85,11 +85,17 @@ where `num_block = ndof * ndof`. For fluid (`ndof=4`) this means 16 scalar block
 
 In MPM, a control point is called *inactive* when its assembled matrix row carries negligible physical content. This is detected at solve time by `BuildActiveRowMask()`, which computes the absolute sum of all entries in the node's CSR row. If the sum is below `mtol`, the node is marked inactive.
 
+**Critical invariant for parallel PETSc solves:** the active/inactive decision must be synchronized across overlap control points before assembly skips rows or inserts owned-row identity blocks. A shared control point is considered active if *any* overlapping rank assembled nontrivial row content for that node. `BuildActiveRowMask()` implements this by computing a local integer indicator, calling `NodeVarComm(..., 0)` to accumulate indicators on shared nodes, and rebuilding `active_row_mask` from the synchronized result.
+
+This prevents owner-rank false negatives: a rank that happens to own a shared node but has no local element contribution would otherwise mark the row inactive and identity-fill it, producing an artificial Dirichlet-like wall along partition boundaries.
+
 During assembly:
 - inactive nodes are skipped in the first pass
 - locally-owned inactive nodes receive an identity block in a second pass to keep the matrix well-conditioned
 
 This replaces the older `nmass < mtol` heuristic with a matrix-content-based check that is consistent with the actual assembled system. See Section 3.5 for details.
+
+> **Do not** classify active rows from purely rank-local `amat` content and immediately apply identity fill on owned rows. In overlapping decompositions this misclassifies shared rows whose physical contributions are split across ranks.
 
 ---
 
@@ -113,6 +119,8 @@ Shared control points are owned by a tie-break based on `aelemmin`.
 `interior_list` stores locally owned control points.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
+
+**Open concern: LGMAP size and PETSc ownership consistency.** `BuildPetscMat()` creates the distributed PETSc matrix with local size `local_node * ndof`, but `BuildLGMAP()` currently constructs the local-to-global mapping with `nodec` block entries (owned plus ghost). This relies on the partitioner numbering owned control points as the first `local_node` local indices, so that PETSc only reads the first `local_node` entries of the mapping. If that assumption is ever violated—for example, by a different partitioner or ghost-layer ordering—the matrix layout and ownership will disagree and assembly will fail or silently corrupt shared rows. A more robust fix would be to pass only the owned subset (`l2g_block_map[interior_list[i]]`) as the LGMAP entries.
 
 ### 3.2 Matrix setup
 
@@ -175,13 +183,13 @@ This tells PETSc to dynamically `malloc` storage for unexpected nonzeros instead
 
 #### Inactive-node identity fill
 
-At the start of each assembly, `BuildActiveRowMask()` scans every control point's CSR row and marks the node inactive if the row's absolute entry sum falls below `mtol`. FEM nodes are always active. These inactive nodes are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
+At the start of each assembly, `BuildActiveRowMask()` scans every control point's CSR row and computes a local active indicator. The indicator is then synchronized across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank has nonzero row content. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
 
 ```cpp
 MatSetValuesBlocked(..., 1, &block_row, 1, &block_row, identity_block.data(), ADD_VALUES);
 ```
 
-This keeps the matrix non-singular and prevents the linear solver from diverging on empty-space degrees of freedom.
+This keeps the matrix non-singular and prevents the linear solver from diverging on empty-space degrees of freedom, while ensuring that partition-boundary nodes with real physical contributions are not pinned by mistake.
 
 #### Residual consistency for inactive MPM nodes
 
@@ -237,65 +245,21 @@ Because `fsi_intf` changes every step, BC lists must be rebuilt before every sol
 
 ## 5. Current PETSc Solver Configuration
 
-This section describes the current production configuration used by the successful 32-rank Turek FSI tests.
+All PETSc-based solves now use the same monolithic AMG preconditioner stack. The previous velocity-pressure `PCFIELDSPLIT` path has been removed.
 
-### 5.1 Fluid solver
+### 5.1 Unified AMG preconditioner
 
-Fluid uses:
+- outer Krylov: `KSPFGMRES` (overridable via `-ksp_type`)
+- preconditioner: `PCHYPRE`
+- AMG type: `BoomerAMG`
 
-- outer Krylov: `KSPBCGS`
-- preconditioner: `PCFIELDSPLIT`
-- split type: multiplicative
-- velocity block: BoomerAMG
-- pressure block: scalar BoomerAMG
-
-Relevant code path:
-- `use_fieldsplit = true`
-- `ndof = 4`
+This applies to every `CrsMat` that uses PETSc, regardless of `ndof` (1, 3, or 4).
 
 PETSc options set in code:
 
 ```cpp
--pc_fieldsplit_type multiplicative
--pc_fieldsplit_block_size 4
--pc_fieldsplit_0_fields 0,1,2
--pc_fieldsplit_1_fields 3
--fieldsplit_0_ksp_type preonly
--fieldsplit_0_pc_type hypre
--fieldsplit_0_pc_hypre_type boomeramg
--fieldsplit_1_ksp_type preonly
--fieldsplit_1_pc_type hypre
--fieldsplit_1_pc_hypre_type boomeramg
-```
-
-Velocity AMG is intentionally lighter-weight than default:
-
-```cpp
--fieldsplit_0_pc_hypre_boomeramg_coarsen_type HMIS
--fieldsplit_0_pc_hypre_boomeramg_interp_type ext+i
--fieldsplit_0_pc_hypre_boomeramg_agg_nl 2
--fieldsplit_0_pc_hypre_boomeramg_P_max 2
--fieldsplit_0_pc_hypre_boomeramg_strong_threshold 0.8
--fieldsplit_0_pc_hypre_boomeramg_max_levels 8
--fieldsplit_0_pc_hypre_boomeramg_nodal_coarsen 6
-```
-
-### 5.2 Solid solver
-
-Solid stays monolithic:
-
-- outer Krylov: `KSPBCGS`
-- preconditioner: `PCHYPRE`
-- AMG type: `BoomerAMG`
-
-Relevant code path:
-- `FEM_flag = false`
-- `ndof = 3`
-- `use_fieldsplit = false`
-
-Current solid AMG tuning:
-
-```cpp
+-pc_type hypre
+-pc_hypre_type boomeramg
 -pc_hypre_boomeramg_coarsen_type HMIS
 -pc_hypre_boomeramg_interp_type ext+i
 -pc_hypre_boomeramg_agg_nl 2
@@ -305,13 +269,11 @@ Current solid AMG tuning:
 -pc_hypre_boomeramg_nodal_coarsen 6
 ```
 
-This keeps solid on AMG, but avoids the older cross-solver AMG-release logic.
+### 5.2 Solver independence
 
-### 5.3 Why fluid and solid are different
+Fluid and solid keep their AMG hierarchies independently.
 
-Fluid and solid now keep their AMG hierarchies independently.
-
-There is no longer any global "release other AMG" behavior. Fluid and solid AMG are allowed to coexist.
+There is no longer any global "release other AMG" behavior, and the fieldsplit-specific flags (`use_fieldsplit`, `pressure_pc_use_amg`) have been removed. Fluid and solid AMG are allowed to coexist.
 
 ---
 
@@ -403,41 +365,37 @@ Without this release, solid work arrays remained resident across time steps and 
 
 ## 9. Current 32-Rank Baseline
 
-### 9.1 Pure fluid AMG baseline
+### 9.1 Unified AMG baseline
 
-When fluid is temporarily switched back to monolithic AMG, the Turek 10-step baseline gives:
+All PETSc-based solves now use the same monolithic AMG preconditioner stack (`PCHYPRE` + `BoomerAMG`). For the Turek 10-step baseline:
 
 - `NS_iter ~= 8`
 
-This is the reference used to judge whether the FieldSplit preconditioner is acceptable.
+This is the reference used to judge whether future preconditioner changes are acceptable.
 
 ### 9.2 Current recommended production run
 
 Current recommended configuration:
 
-- fluid: `FieldSplit + velocity AMG + pressure AMG + BCGS`
-- solid: `monolithic AMG + BCGS`
+- fluid: `monolithic AMG + FGMRES`
+- solid: `monolithic AMG + FGMRES`
 - local PETSc solution scatter
 - solid temporary arrays released every step
 
-Successful 32-rank 10-step run:
+Successful 16-rank cavity-flow run after tightening tolerances:
 
-- file: `build/stdout/direct_speed_try6.txt`
-- total time: about `180.30 s`
-- fluid `NS_iter`: `7~9`
-- solid linear iterations reported in `NR_converge`: about `1~4`
-
-This is currently the best stable configuration reached in this branch.
+- fluid `NS_iter`: `6~10`, stabilizing around `6`
+- FSI block iteration converges in `0~2` iterations per step
 
 ### 9.3 Default Krylov Policy
 
 Current default policy in code is simple:
 
-- all PETSc KSP objects default to `KSPBCGS`
-- fluid still changes the **preconditioner structure** through `FieldSplit`
-- solid still changes the **preconditioner type** through monolithic BoomerAMG
+- all PETSc KSP objects default to `KSPFGMRES`
+- both fluid and solid use the same preconditioner type: monolithic `BoomerAMG`
+- the only distinction left is the rebuild frequency and the physical BCs injected by each physics object
 
-So the distinction between fluid and solid is now mainly in the preconditioner, not in the Krylov family.
+So the distinction between fluid and solid is now mainly in the physics (DOF count, BCs, rebuild cadence), not in the Krylov family or preconditioner structure.
 
 ---
 
@@ -446,16 +404,16 @@ So the distinction between fluid and solid is now mainly in the preconditioner, 
 ### 10.1 Good directions
 
 - keep `MatSetBlockSize(ndof)`
-- keep fluid velocity/pressure split physical
 - keep fluid and solid AMG independent
 - keep solid temporary arrays released after solve
 - use local solution scatter, not global `CreateToAll`
+- if mixed u-p problems show false convergence (very few or zero iterations), tighten `rtol`/`abstol` or add symmetric diagonal scaling before the PETSc solve
 
 ### 10.2 Bad or abandoned directions
 
 - restoring global cross-solver AMG release logic
 - gathering the full global PETSc solution on every rank
-- using fluid pressure Jacobi for the current Turek case
+- using a loosely set `rtol` (e.g. `1.0e-8`) for unscaled mixed u-p systems, which can accept a trivial initial guess as "converged"
 - treating the current solid matrix as safely CG-compatible without further proof
 - editing headers without reconfiguring CMake afterward
 
@@ -465,7 +423,7 @@ So the distinction between fluid and solid is now mainly in the preconditioner, 
 
 1. If you change any PETSc-related header path or solver header, reconfigure and rebuild: `rm -rf build/CMakeCache.txt build/CMakeFiles && cmake -S . -B build && cmake --build build -j8`.
 2. If you change `nxyr`, you must regenerate partitions before solver benchmarking.
-3. If a new preconditioner looks faster but `NS_iter` jumps far above the pure AMG baseline, do not keep it.
+3. If a new preconditioner looks faster but `NS_iter` jumps far above the unified AMG baseline, do not keep it.
 4. If a run becomes fast but starts printing `PETSc KSP diverged`, that result is invalid even if the wall time looks good.
 
 ---
@@ -478,11 +436,10 @@ For the current 32-rank Turek benchmark:
 |---------|-------|
 | MPI ranks | `32` |
 | Runner | `build/run.sh` |
-| Fluid Krylov | `KSPBCGS` |
-| Fluid PC | `PCFIELDSPLIT` |
-| Fluid split | velocity AMG + pressure AMG |
-| Solid Krylov | `KSPBCGS` |
-| Solid PC | `BoomerAMG` |
+| Fluid Krylov | `KSPFGMRES` |
+| Fluid PC | `PCHYPRE` + `BoomerAMG` |
+| Solid Krylov | `KSPFGMRES` |
+| Solid PC | `PCHYPRE` + `BoomerAMG` |
 | Fluid rebuild freq | `20` |
 | Solid rebuild freq | `20` |
 

@@ -110,7 +110,7 @@ inline void OutputMessage(int iview, int istep) {
 
     std::cout << " ===== Now Computing ===== " << "\n";
     std::cout << "istep:" << std::setw(10) << istep << "\n";
-    std::cout << "time:" << std::setw(15) << real_time << std::setw(10) //
+    std::cout << "time:" << std::setw(15) << real_time << " s" << std::setw(10) //
               << "iview:" << std::setw(10) << iview << "\n";
     std::cout << "========================== " << "\n";
 

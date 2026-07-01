@@ -25,6 +25,26 @@ class CrsMat {
     int nmata, nmat; // total scalar entries in amat, and CSR entry count
     int local_node, ghost_node;
 
+    // Natural-order ownership metadata and PETSc-local numbering.
+    std::vector<int> owned_natural_ids;
+    std::vector<int> ghost_natural_ids;
+    std::vector<char> natural_is_owned;
+    std::vector<int> natural_to_owned_pos;
+    std::vector<int> natural_to_ghost_pos;
+    std::vector<int> natural_to_petsc_local;
+    std::vector<int> petsc_local_to_natural;
+
+    // Natural-order global IDs: index with natural local node id.
+    std::vector<PetscInt> natural_block_gids;
+    std::vector<PetscInt> natural_var_gids;
+
+    // PETSc-local global IDs: index with petsc-local position (owned first, ghosts after).
+    std::vector<PetscInt> petsc_local_block_gids;
+    std::vector<PetscInt> petsc_local_var_gids;
+
+    ISLocalToGlobalMapping petsc_var_lgmap_ = nullptr;
+    ISLocalToGlobalMapping petsc_block_lgmap_ = nullptr;
+
     // CSR structure (fixed after BuildCrsMat).
     //   matrow[n]      → offset of row n in matcolid / amat.
     //   matcolid[j]    → natural column id of CSR entry j.
@@ -104,6 +124,12 @@ class CrsMat {
     void ComputePetscResidualStats(double &res_norm, double &active_dof);
 
     /**
+     * @brief Compute the squared L2 norm of the native (unscaled) residual.
+     * @return Global r^T r weighted by overlap ownership.
+     */
+    double ComputeNativeResidualNormSq();
+
+    /**
      * @brief Compute a reference residual used for Newton-Raphson convergence checks.
      * @return Reference residual value.
      */
@@ -131,13 +157,10 @@ class CrsMat {
     bool CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r);
 
     // --- PETSc distributed objects ---
-    ISLocalToGlobalMapping lgmap = nullptr;
-    std::vector<PetscInt> l2g_var_map; // scalar variable-major L2G map
     Mat petsc_mat = nullptr;
     Vec petsc_b = nullptr;
     Vec petsc_x = nullptr;
     KSP ksp = nullptr;
-    std::vector<int> interior_list;      // locally-owned natural node ids
     std::vector<PetscInt> petsc_bc_gids; // cached global BC row/column IDs
 
     VecScatter scatter_to_all = nullptr; // local scatter: petsc_x → seq_x
@@ -147,8 +170,6 @@ class CrsMat {
     int amg_rebuild_freq;   // rebuild preconditioner every N steps
     int prev_ksp_its_ = -1; // KSP iterations of the previous solve
     bool force_rebuild_next_ = false;
-    bool use_fieldsplit = false;
-    bool pressure_pc_use_amg = false;
     // Reusable buffers for RHS / initial-guess insertion (size = local_node*ndof)
     std::vector<PetscInt> petsc_indices_buf;
     std::vector<PetscScalar> petsc_values_buf;
@@ -158,20 +179,52 @@ class CrsMat {
 
     bool use_petsc = true;
 
-    // Block-level L2G: one global node ID per natural node.
-    std::vector<PetscInt> l2g_block_map;
+    std::vector<char> active_row_mask;
 
     // Reusable block-oriented buffers for AssemblePetscMat.
     // Sizes are fixed in BuildPetscMat() to avoid heap allocation in the hot loop.
     std::vector<PetscInt> petsc_block_cols_buf;
     std::vector<PetscScalar> petsc_block_vals_buf;
-    std::vector<char> active_row_mask;
 
     /**
      * @brief Build the PETSc local-to-global mapping for distributed vectors/matrices.
      * @param ndof Degrees of freedom per node.
      */
     void BuildLGMAP(int ndof);
+
+    /**
+     * @brief Build natural-order global ID maps from the local node-to-global mapping.
+     * @param ndof Degrees of freedom per node.
+     * @param node_l2g Natural local node id to global node id mapping.
+     */
+    void BuildNaturalGlobalMaps(int ndof, const std::vector<int> &node_l2g);
+
+    /**
+     * @brief Classify natural local nodes into owned and ghost sets using the
+     *        aelemmin tie-break rule.
+     * @param node_l2g Natural local node id to global node id mapping.
+     */
+    void BuildOwnershipMetadata(const std::vector<int> &node_l2g);
+
+    /**
+     * @brief Build PETSc-local numbering (owned first, ghosts after) and the
+     *        corresponding global ID arrays.
+     * @param ndof Degrees of freedom per node.
+     */
+    void BuildPetscLocalMaps(int ndof);
+
+    /**
+     * @brief Verify ownership metadata invariants before assembly.
+     */
+    void CheckOwnershipMetadata() const;
+
+    inline PetscInt NaturalNodeToPetscLocalBlock(int natural_id) const {
+        return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id]);
+    }
+
+    inline PetscInt NaturalNodeVarToPetscLocalScalar(int natural_id, int var) const {
+        return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id] + var * nodec);
+    }
 
     /**
      * @brief Create the distributed PETSc matrix from the local CSR pattern.
@@ -183,12 +236,6 @@ class CrsMat {
      * @brief Create and configure the PETSc KSP solver object.
      */
     void BuildKSPSolver();
-
-    /**
-     * @brief Configure a velocity-pressure field-split preconditioner for the fluid solver.
-     * @param pc PETSc preconditioner context.
-     */
-    void ConfigureVelocityPressureFieldSplit(PC pc);
 
     /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
@@ -223,11 +270,16 @@ class CrsMat {
      */
     void BuildPetscBCList();
 
+    /**
+     * @brief Append the global scalar IDs of a boundary-condition component to `petsc_bc_gids`.
+     * @param bc     Boundary condition descriptor containing natural node ids.
+     * @param offset Scalar variable offset (e.g. `nuc`, `nvc`, `nwc`, `npc`).
+     */
     void AddBCComponent(const BoundaryCondition &bc, int offset) {
         if (bc.ibc == 0) return;
         for (int i = 0; i < bc.ibc; ++i) {
-            int nid = bc.nbc[i];
-            this->petsc_bc_gids.push_back(this->l2g_var_map[nid + offset]);
+            const int nid = bc.nbc[i];
+            this->petsc_bc_gids.push_back(this->natural_var_gids[nid + offset]);
         }
 
         return;
