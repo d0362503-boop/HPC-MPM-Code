@@ -46,6 +46,8 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 
 - In class member functions, call other member functions with explicit `this->`.
 
+- **Doxygen documentation comments (`/** ... */` or `///`) belong in header files only.** Implementation files should not duplicate interface documentation.
+
 ## 5. Critical Parallel Rules
 
 **`node` vs `nodec`:** Computations and PETSc must use `nodec` (control points), never `node` (visualization nodes). Mixing them causes `MatAssemblyEnd` crashes.
