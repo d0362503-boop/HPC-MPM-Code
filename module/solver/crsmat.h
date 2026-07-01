@@ -124,6 +124,12 @@ class CrsMat {
     void ComputePetscResidualStats(double &res_norm, double &active_dof);
 
     /**
+     * @brief Compute the squared L2 norm of the native (unscaled) residual.
+     * @return Global r^T r weighted by overlap ownership.
+     */
+    double ComputeNativeResidualNormSq();
+
+    /**
      * @brief Compute a reference residual used for Newton-Raphson convergence checks.
      * @return Reference residual value.
      */
@@ -264,6 +270,11 @@ class CrsMat {
      */
     void BuildPetscBCList();
 
+    /**
+     * @brief Append the global scalar IDs of a boundary-condition component to `petsc_bc_gids`.
+     * @param bc     Boundary condition descriptor containing natural node ids.
+     * @param offset Scalar variable offset (e.g. `nuc`, `nvc`, `nwc`, `npc`).
+     */
     void AddBCComponent(const BoundaryCondition &bc, int offset) {
         if (bc.ibc == 0) return;
         for (int i = 0; i < bc.ibc; ++i) {

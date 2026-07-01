@@ -453,15 +453,8 @@ void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
     return;
 }
 
-double CrsMat::ComputeRefResidual() {
+double CrsMat::ComputeNativeResidualNormSq() {
     const int var_size = int(this->x_lhs.size());
-
-    if (this->use_petsc) {
-        double res_norm = 0.0e0;
-        double active_dof = 0.0e0;
-        this->ComputePetscResidualStats(res_norm, active_dof);
-        return res_norm;
-    }
 
     if (this->owner_) { this->owner_->BCResidualSet(this->b_rhs); }
 
@@ -478,12 +471,21 @@ double CrsMat::ComputeRefResidual() {
     }
     MPI_Allreduce(MPI_IN_PLACE, &rtr, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    return std::sqrt(rtr);
+    return rtr;
+}
+
+double CrsMat::ComputeRefResidual() {
+    if (this->use_petsc) {
+        double res_norm = 0.0e0;
+        double active_dof = 0.0e0;
+        this->ComputePetscResidualStats(res_norm, active_dof);
+        return res_norm;
+    }
+
+    return std::sqrt(this->ComputeNativeResidualNormSq());
 }
 
 double CrsMat::ComputeAbsResidual() {
-    const int var_size = int(this->x_lhs.size());
-
     if (this->use_petsc) {
         double res_norm = 0.0e0;
         double active_dof = 0.0e0;
@@ -492,34 +494,17 @@ double CrsMat::ComputeAbsResidual() {
         return res_norm / std::sqrt(active_dof);
     }
 
-    if (this->owner_) { this->owner_->BCResidualSet(this->b_rhs); }
-
-    std::vector<double> x_pre(var_size);
-    for (int n = 0; n < var_size; n++) { x_pre[n] = (this->adiag[n] > mtol) ? this->x_lhs[n] / this->adiag[n] : 0.0e0; }
-
-    std::vector<double> Ax = this->MatVecMult(x_pre);
-
-    double rtr = 0.0e0;
-    for (int n = 0; n < var_size; n++) {
-        double Ax_phys = (this->adiag[n] > mtol) ? (Ax[n] / this->adiag[n]) : 0.0e0;
-        double r = this->b_rhs[n] - Ax_phys;
-        rtr += r * r * dbc[n];
-    }
+    const int var_size = int(this->x_lhs.size());
+    const double rtr = this->ComputeNativeResidualNormSq();
 
     double idof = 0.0e0;
     for (int n = 0; n < var_size; n++) {
         if (this->adiag[n] > mtol) { idof += dbc[n]; }
     }
-
-    double buf_rid[2] = {rtr, idof};
-    MPI_Allreduce(MPI_IN_PLACE, buf_rid, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    rtr = buf_rid[0];
-    idof = buf_rid[1];
+    MPI_Allreduce(MPI_IN_PLACE, &idof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     if (idof <= 1.0e-30) { return 0.0e0; }
-    rtr = std::sqrt(rtr / idof);
-
-    return rtr;
+    return std::sqrt(rtr / idof);
 }
 
 bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
