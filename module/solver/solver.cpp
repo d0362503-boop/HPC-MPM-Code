@@ -490,7 +490,7 @@ double CrsMat::ComputeAbsResidual() {
         double res_norm = 0.0e0;
         double active_dof = 0.0e0;
         this->ComputePetscResidualStats(res_norm, active_dof);
-        if (active_dof <= 1.0e-12) { return 0.0e0; }
+        if (active_dof < 1.0e-12) { return 0.0e0; }
         return res_norm / std::sqrt(active_dof);
     }
 
@@ -503,7 +503,7 @@ double CrsMat::ComputeAbsResidual() {
     }
     MPI_Allreduce(MPI_IN_PLACE, &idof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    if (idof <= 1.0e-30) { return 0.0e0; }
+    if (idof < 1.0e-12) { return 0.0e0; }
     return std::sqrt(rtr / idof);
 }
 
