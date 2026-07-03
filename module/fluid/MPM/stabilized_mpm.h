@@ -13,12 +13,16 @@ namespace stabilizedmpm {
 
 class StabilizedMPM : public MaterialPoint {
   public:
-    MaterialPoint ifp; // --- Inflow particle ---
+    // Inflow particle buffer
+    MaterialPoint ifp;
 
     enum class StabCoeff { PSPG, VMS };
+    // Stabilization-coefficient selector
     static constexpr StabCoeff stab_coeff = StabCoeff::VMS;
 
+    // SUPG/PSPG and LSIC stabilization coefficients
     std::vector<double> tau1, tau2;
+    // Navier-Stokes system matrix
     CrsMat NS_;
 
     StabilizedMPM() {
@@ -26,26 +30,58 @@ class StabilizedMPM : public MaterialPoint {
         this->NS_.ndof = 4;
         this->NS_.FEM_flag = false;
         this->NS_.use_petsc = true;
-        this->NS_.amg_rebuild_freq = 1; // rebuild fluid AMG every step
+        this->NS_.amg_rebuild_freq = 1; // rebuild AMG every step
         this->NS_.owner_ = this;
     }
 
-    /**
-     * @brief Read fluid-specific parameters and initialize fluid state.
-     */
+    /** @brief Read fluid parameters and initialize state. */
     void DataInput();
 
     /**
-     * @brief Read fluid boundary-condition data from an input stream.
-     * @param infile Input stream positioned at the fluid boundary-condition section.
+     * @brief Read fluid boundary-condition data from input stream.
+     * @param infile Input stream.
      */
     void InputBCData(std::ifstream &infile) override;
-    /**
-     * @brief Initialize fluid particle state (mass, volume, pressure) after input is read.
-     */
+
+    /** @brief Initialize fluid particle state. */
     void InitializePointData() override;
 
-    // --- User's responsibility ---
+    /** @brief Map fluid particle mass/momentum to control points (P2G). */
+    void Particle2Node() override;
+
+    /** @brief Map nodal velocity/pressure back to fluid particles (G2P). */
+    void Node2Particle() override;
+
+    /** @brief Solve the stabilized Navier-Stokes system. */
+    void SolveNS();
+
+    /**
+     * @brief Read fluid point data from input stream.
+     * @param inflie Input stream.
+     */
+    void InputPointData(std::ifstream &inflie) override;
+
+    /** @brief Read fluid restart data. */
+    void RestartInput() override;
+
+    /**
+     * @brief Write fluid particle data to VTK HDF5 files.
+     * @param iview Output view index.
+     * @param istep Current time step.
+     */
+    void OutputPointDataVTKHDF(int iview, int istep) override;
+
+    /** @brief Write fluid restart data. */
+    void RestartOutput() override;
+
+    /** @brief Move particles across MPI rank boundaries. */
+    void Moveparticle() override;
+
+  private:
+    /**
+     * @brief Register constrained DOFs with PETSc matrix.
+     * @param mat PETSc matrix.
+     */
     void BuildPetscBCList(CrsMat &mat) override {
         mat.AddBCComponent(this->ubc, nuc);
         mat.AddBCComponent(this->vbc, nvc);
@@ -55,6 +91,10 @@ class StabilizedMPM : public MaterialPoint {
         return;
     };
 
+    /**
+     * @brief Zero constrained DOFs in residual vector.
+     * @param rr Residual vector.
+     */
     void BCResidualSet(std::vector<double> &rr) override {
         this->ubc.BCSetZero(nuc, rr);
         this->vbc.BCSetZero(nvc, rr);
@@ -64,6 +104,7 @@ class StabilizedMPM : public MaterialPoint {
         return;
     };
 
+    /** @brief Apply Dirichlet displacement increments for NR iteration. */
     void BCNRSet() override {
         this->ubc.BCSetDt(nuc, this->ndispl);
         this->vbc.BCSetDt(nvc, this->ndispl);
@@ -72,102 +113,41 @@ class StabilizedMPM : public MaterialPoint {
 
         return;
     };
-    // ------------------------------
 
-    /**
-     * @brief Map fluid particle mass/momentum to control points (P2G).
-     */
-    void Particle2Node() override;
-
-    /**
-     * @brief Map updated nodal velocity/pressure back to fluid particles (G2P).
-     */
-    void Node2Particle() override;
-
-    /**
-     * @brief Compute VMS/PSPG stabilization coefficients `tau1` and `tau2` for MPM fluid.
-     */
+    /** @brief Compute VMS/PSPG stabilization coefficients. */
     void MakNSStabCoeff();
 
     /**
-     * @brief Assemble the stabilized Navier–Stokes MPM matrix and RHS.
-     * @param naccel_k Nodal acceleration vector at the intermediate time level.
-     * @param nvel_k   Nodal velocity vector at the intermediate time level.
+     * @brief Assemble stabilized Navier-Stokes matrix and RHS.
+     * @param naccel_k Nodal acceleration vector.
+     * @param nvel_k   Nodal velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &naccel_k, //
+    void AssembleNSSystem(const std::vector<double> &naccel_k,
                           const std::vector<double> &nvel_k);
 
-    /**
-     * @brief Solve the stabilized Navier–Stokes MPM system and update particle velocity/pressure.
-     */
-    void SolveNS();
-
-    /**
-     * @brief Apply the converged Newton–Raphson increment to nodal variables.
-     */
+    /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;
 
-    // --- For data IO ---
-    /**
-     * @brief Read fluid point data from input stream.
-     * @param inflie Input file stream positioned at the point-data section.
-     */
-    void InputPointData(std::ifstream &inflie) override;
-
-    /**
-     * @brief Read fluid restart data from per-rank `*_re.txt` files.
-     */
-    void RestartInput() override;
-
-    /**
-     * @brief Write fluid particle data to VTK HDF5 visualization files.
-     * @param iview Output view index.
-     * @param istep Current time step.
-     */
-    void OutputPointDataVTKHDF(int iview, int istep) override;
-
-    /**
-     * @brief Write fluid restart data to per-rank `*_re.txt` files.
-     */
-    void RestartOutput() override;
-
-    // --- MPI Particle move ---
-    /**
-     * @brief Move fluid particles that have crossed rank boundaries and exchange them via MPI.
-     */
-    void Moveparticle() override;
-
-    // --- Inflow Particles ---
-    /**
-     * @brief Generate fluid inflow particles for all active directions.
-     *
-     * Resizes the inflow particle buffer, dispatches generation for each active
-     * inflow direction, and assigns globally unique IDs to the new particles.
-     */
+    /** @brief Generate inflow particles for all active directions. */
     void InflowParticles() override;
 
     /**
-     * @brief Generate fluid inflow particles in empty boundary cells.
-     * @param dir   Inflow direction index (0=x, 1=y, 2=z).
+     * @brief Generate inflow particles in empty boundary cells.
+     * @param dir   Inflow direction index.
      * @param ifp   Inflow particle buffer.
-     * @param infbc Inflow boundary condition for direction `dir`.
-     *
-     * Fills each marked boundary cell layer by layer on a Gaussian sub-grid
-     * until the cell reaches the target number of particles.
+     * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
+    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp,
+                                          const BoundaryCondition &infbc) override;
 
     /**
-     * @brief Generate fluid inflow particles by cloning existing particles.
-     * @param dir   Inflow direction index (0=x, 1=y, 2=z).
+     * @brief Generate inflow particles by cloning existing particles.
+     * @param dir   Inflow direction index.
      * @param ifp   Inflow particle buffer.
-     * @param infbc Inflow boundary condition for direction `dir`.
-     *
-     * Identifies fluid particles that have moved one cell inward from a marked
-     * boundary cell and clones them back into the boundary cell.
+     * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
-
-    // void Cp2NodeVTK();
+    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp,
+                                           const BoundaryCondition &infbc) override;
 };
+
 } // namespace stabilizedmpm

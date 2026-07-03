@@ -167,21 +167,21 @@ void ExplicitSolidMPM::UpdateDeformationGradient() {
 
     // --- Update deformation gradient ---
     std::vector<double> det_delta_def_grad(this->num, 0.0e0);
-    VectorAssign(this->num, this->delta_def_grad_);
+    VectorAssign(this->num, this->delta_def_grad);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
-            this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, this->delta_def_grad_, this->def_grad);
-            det_delta_def_grad[pid] = DetMat3(this->delta_def_grad_[pid]);
+            this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, this->delta_def_grad, this->def_grad);
+            det_delta_def_grad[pid] = DetMat3(this->delta_def_grad[pid]);
 
             pid = this->idp2p[pid];
         }
     }
 
-    if (this->Fbar_flag) { this->ComputeDefGradBar(this->delta_def_grad_, det_delta_def_grad); }
+    if (this->Fbar_flag) { this->ComputeDefGradBar(this->delta_def_grad, det_delta_def_grad); }
 
     return;
 }
@@ -219,11 +219,11 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
             if (this->Fbar_flag) {
                 this->UpdateVolume(pid, this->det_def_grad_bar[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad_bar, this->def_grad_bar,
-                                              this->delta_def_grad_);
+                                              this->delta_def_grad);
             } else {
                 this->UpdateVolume(pid, this->det_def_grad[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad,
-                                              this->delta_def_grad_);
+                                              this->delta_def_grad);
             }
 
             pid = this->idp2p[pid];

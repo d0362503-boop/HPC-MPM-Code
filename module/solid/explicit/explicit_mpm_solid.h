@@ -14,75 +14,62 @@
 namespace explicitmpm {
 
 class ExplicitSolidMPM : public SolidMaterialPointBase {
-  private:
-    /**
-     * @brief Incremental deformation gradient from the current step, stored so
-     *        the position/stress update phase can reuse it.
-     */
-    std::vector<std::array<std::array<double, 3>, 3>> delta_def_grad_;
-
   public:
     /**
-     * @brief Read and initialize the standalone explicit-solid case input data.
-     *
-     * Loads global control parameters, mesh/time derived quantities, boundary
-     * conditions, and particle data for the explicit solid solver path.
+     * @brief Read and initialize standalone explicit-solid input data.
      */
     void DataInput();
-    /**
-     * @brief Map solid particle mass/momentum/force to control points (P2G).
-     */
-    void Particle2Node() override;
 
     /**
-     * @brief MUSL velocity projection: re-map particle momentum to control points
-     *        and recompute nodal velocity after the G2P update.
+     * @brief Map solid particle mass/volume/momentum/force to control points (P2G).
      */
-    void DoMUSL();
+    void Particle2Node() override;
 
     /**
      * @brief Map updated nodal kinematics back to solid particles (G2P).
      */
     void Node2Particle() override;
 
+    /**
+     * @brief Compute nodal acceleration from force/mass and apply BCs.
+     */
+    void SolveSolid() override;
+
   private:
+    // Incremental deformation gradient for the current step.
+    std::vector<std::array<std::array<double, 3>, 3>> delta_def_grad;
+
     /**
      * @brief G2P velocity update followed by MUSL projection.
      */
     void G2PVelocityAndMUSL();
 
     /**
-     * @brief Update the particle deformation gradient for the current step.
-     *
-     * Computes the nodal displacement increment and the incremental deformation
-     * gradient, and applies the optional F-bar volumetric correction.
+     * @brief MUSL velocity projection.
+     */
+    void DoMUSL();
+
+    /**
+     * @brief Update particle deformation gradient.
      */
     void UpdateDeformationGradient();
 
     /**
-     * @brief Update particle position, volume, and stress after the deformation
-     *        gradient step.
+     * @brief Update particle position, volume, and stress.
      */
     void UpdateParticlePositionAndStress();
 
-  public:
     /**
-     * @brief Compute the F-bar corrected deformation gradient for each particle.
+     * @brief F-bar corrected deformation gradient.
      *
-     * Implements the nodal F-bar projection described in:
-     *   "Circumventing volumetric locking in explicit material point methods:
-     *    A simple, efficient, and general approach"
+     * Nodal F-bar projection from:
+     *   "Circumventing volumetric locking in explicit material point methods".
      *
-     * @param delta_def_grad      Incremental deformation-gradient tensor for each particle (modified in-place).
-     * @param det_delta_def_grad  Determinant of the incremental deformation gradient for each particle.
+     * @param delta_def_grad      Incremental deformation gradient (modified in-place).
+     * @param det_delta_def_grad  Determinant of incremental deformation gradient.
      */
     void ComputeDefGradBar(std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
                            const std::vector<double> &det_delta_def_grad);
-
-    /**
-     * @brief Compute nodal acceleration from nodal force/mass and apply boundary conditions.
-     */
-    void SolveSolid() override;
-
 };
+
 } // namespace explicitmpm

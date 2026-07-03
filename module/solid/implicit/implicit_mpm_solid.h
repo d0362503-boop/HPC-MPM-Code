@@ -28,13 +28,27 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     }
 
     /**
-     * @brief Read and initialize the standalone implicit-solid case input data.
-     *
-     * Loads global control parameters, mesh/time derived quantities, boundary
-     * conditions, and particle data for the implicit solid solver path.
+     * @brief Read and initialize standalone implicit-solid input data.
      */
     void DataInput();
 
+    /**
+     * @brief Map solid particle mass/volume/momentum/force to control points (P2G).
+     */
+    void Particle2Node() override;
+
+    /**
+     * @brief Map updated nodal kinematics back to solid particles (G2P).
+     */
+    void Node2Particle() override;
+
+    /**
+     * @brief Driver for one implicit solid time step.
+     */
+    void SolveSolid() override;
+
+  private:
+    // Case-specific surface traction force.
     void SetTracForce() {
         const double t0 = 1.0e0 * dxy[1] * dxy[2] / (npxye[1] * npxye[2]);
         double t = 0.0e0;
@@ -48,26 +62,14 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     };
 
     /**
-     * @brief Map solid particle mass/momentum/force to control points (P2G).
-     */
-    void Particle2Node() override;
-
-    /**
-     * @brief Map updated nodal kinematics back to solid particles (G2P).
-     */
-    void Node2Particle() override;
-
-    /**
-     * @brief Driver for one implicit solid time step: reset, Newton–Raphson loop, solve, update.
-     */
-    void SolveSolid() override;
-
-    /**
-     * @brief Initialize stress state at the start of the Newton–Raphson loop.
-     * @return Tuple or structured result holding initial stress and related data.
+     * @brief Stress snapshot at the start of the NR loop.
+     * @return Particle stress vector.
      */
     auto InitializeNRStress() { return this->stress; };
 
+    /**
+     * @brief Apply Dirichlet displacement increments for current NR iteration.
+     */
     void BCNRSet() override {
         this->ubc.BCSetDt(nuc, this->ndispl);
         this->vbc.BCSetDt(nvc, this->ndispl);
@@ -79,6 +81,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         return;
     };
 
+    /**
+     * @brief Zero constrained DOFs in residual vector.
+     * @param rr Residual vector.
+     */
     void BCResidualSet(std::vector<double> &rr) override {
         this->ubc.BCSetZero(nuc, rr);
         this->vbc.BCSetZero(nvc, rr);
@@ -90,6 +96,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         return;
     };
 
+    /**
+     * @brief Register constrained DOFs with PETSc matrix.
+     * @param mat PETSc matrix.
+     */
     void BuildPetscBCList(CrsMat &mat) override {
         mat.AddBCComponent(this->ubc, nuc);
         mat.AddBCComponent(this->vbc, nvc);
@@ -102,29 +112,30 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     };
 
     /**
-     * @brief Assemble the implicit solid tangent matrix and residual vector.
-     * @param naccel_k Nodal acceleration vector at the intermediate time level.
-     * @param nvel_k   Nodal velocity vector at the intermediate time level.
-     * @param stress_k Particle stress state used for the tangent assembly.
+     * @brief Assemble tangent matrix and residual vector.
+     * @param naccel_k  Nodal acceleration at intermediate time level.
+     * @param nvel_k    Nodal velocity at intermediate time level.
+     * @param stress_k  Particle stress state for tangent assembly.
      */
     void AssembleSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k,
                         std::vector<std::array<double, 6>> &stress_k);
 
     /**
-     * @brief Compute the tangent-modulus contribution of particle `pid` for nodes `ni` and `nj`.
-     * @param pid    Particle index.
-     * @param ni     First local node index.
-     * @param nj     Second local node index.
-     * @param dsf    Shape-function gradients.
-     * @param sts_af Particle stress at the intermediate time level.
+     * @brief Tangent-modulus contribution for one particle-node pair.
+     * @param pid     Particle index.
+     * @param ni      First local node index.
+     * @param nj      Second local node index.
+     * @param dsf     Shape-function gradients.
+     * @param sts_af  Particle stress at intermediate time level.
      * @return Tangent stiffness scalar contribution.
      */
     auto ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
                                const std::array<double, 6> &sts_af);
 
     /**
-     * @brief Apply the converged Newton–Raphson displacement increment to nodal displacements.
+     * @brief Apply converged NR displacement increment to nodal displacements.
      */
     void UpdateNRIncrement() override;
 };
+
 } // namespace implicitmpm
