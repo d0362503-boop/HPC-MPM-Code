@@ -14,6 +14,13 @@
 namespace explicitmpm {
 
 class ExplicitSolidMPM : public SolidMaterialPointBase {
+  private:
+    /**
+     * @brief Incremental deformation gradient from the current step, stored so
+     *        the position/stress update phase can reuse it.
+     */
+    std::vector<std::array<std::array<double, 3>, 3>> delta_def_grad_;
+
   public:
     /**
      * @brief Read and initialize the standalone explicit-solid case input data.
@@ -38,6 +45,27 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
      */
     void Node2Particle() override;
 
+  private:
+    /**
+     * @brief G2P velocity update followed by MUSL projection.
+     */
+    void G2PVelocityAndMUSL();
+
+    /**
+     * @brief Update the particle deformation gradient for the current step.
+     *
+     * Computes the nodal displacement increment and the incremental deformation
+     * gradient, and applies the optional F-bar volumetric correction.
+     */
+    void UpdateDeformationGradient();
+
+    /**
+     * @brief Update particle position, volume, and stress after the deformation
+     *        gradient step.
+     */
+    void UpdateParticlePositionAndStress();
+
+  public:
     /**
      * @brief Compute the F-bar corrected deformation gradient for each particle.
      *

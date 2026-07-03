@@ -102,6 +102,17 @@ void ExplicitSolidMPM::DoMUSL() {
 
 void ExplicitSolidMPM::Node2Particle() {
 
+    this->G2PVelocityAndMUSL();
+
+    this->UpdateDeformationGradient();
+
+    this->UpdateParticlePositionAndStress();
+
+    return;
+}
+
+void ExplicitSolidMPM::G2PVelocityAndMUSL() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -140,28 +151,47 @@ void ExplicitSolidMPM::Node2Particle() {
 
     this->DoMUSL();
 
+    return;
+}
+
+void ExplicitSolidMPM::UpdateDeformationGradient() {
+
+    int nenode;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
+
     // --- Nodal displacement increment for deformation-gradient update ---
     VectorAssign(nodec * 3, this->ndispl);
     for (int n = 0; n < nodec * 3; n++) { this->ndispl[n] = this->nvel[n] * dt; }
 
     // --- Update deformation gradient ---
     std::vector<double> det_delta_def_grad(this->num, 0.0e0);
-    std::vector<std::array<std::array<double, 3>, 3>> delta_def_grad;
-    VectorAssign(this->num, delta_def_grad);
+    VectorAssign(this->num, this->delta_def_grad_);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
-            this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, delta_def_grad, this->def_grad);
-            det_delta_def_grad[pid] = DetMat3(delta_def_grad[pid]);
+            this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, this->delta_def_grad_, this->def_grad);
+            det_delta_def_grad[pid] = DetMat3(this->delta_def_grad_[pid]);
 
             pid = this->idp2p[pid];
         }
     }
 
-    if (this->Fbar_flag) { this->ComputeDefGradBar(delta_def_grad, det_delta_def_grad); }
+    if (this->Fbar_flag) { this->ComputeDefGradBar(this->delta_def_grad_, det_delta_def_grad); }
+
+    return;
+}
+
+void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
+
+    int nenode;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
 
     // --- Particle shifting correction ---
     std::vector<std::array<double, 3>> delta_corr;
@@ -189,10 +219,11 @@ void ExplicitSolidMPM::Node2Particle() {
             if (this->Fbar_flag) {
                 this->UpdateVolume(pid, this->det_def_grad_bar[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad_bar, this->def_grad_bar,
-                                              delta_def_grad);
+                                              this->delta_def_grad_);
             } else {
                 this->UpdateVolume(pid, this->det_def_grad[pid]);
-                this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad, delta_def_grad);
+                this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad,
+                                              this->delta_def_grad_);
             }
 
             pid = this->idp2p[pid];
