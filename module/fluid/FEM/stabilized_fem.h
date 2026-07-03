@@ -13,11 +13,19 @@ namespace stabilizedfem {
 
 class StabilizedFEM : public MaterialPoint {
   public:
-    double rhol, rmul, rhog, rmug;
+    // Liquid density and viscosity
+    double rhol, rmul;
+    // Gas density and viscosity
+    double rhog, rmug;
+    // Free-surface height
     double fs_height;
+    // SUPG/PSPG and LSIC stabilization coefficients
     std::vector<double> tau1, tau2;
+    // Element density and viscosity
     std::vector<double> rhoe, rmue;
+    // Navier-Stokes system matrix
     CrsMat NS_;
+    // Phase-field system matrix
     CrsMat PF_;
 
     StabilizedFEM() {
@@ -28,18 +36,19 @@ class StabilizedFEM : public MaterialPoint {
         this->PF_.FEM_flag = true;
         this->NS_.use_petsc = true;
         this->PF_.use_petsc = true;
-        this->NS_.amg_rebuild_freq = 20; // rebuild fluid AMG every 20 steps
+        this->NS_.amg_rebuild_freq = 20; // rebuild AMG every 20 steps
         this->PF_.amg_rebuild_freq = 20;
         this->NS_.owner_ = this;
         this->PF_.owner_ = this;
     }
 
     /**
-     * @brief Read fluid boundary-condition data from an input stream.
-     * @param infile Input stream positioned at the fluid boundary-condition section.
+     * @brief Read fluid boundary-condition data from input stream.
+     * @param infile Input stream.
      */
     void InputBCData(std::ifstream &infile) override;
 
+    /** @brief Allocate and zero fluid nodal fields. */
     void InitializeMeshData() {
         VectorAssign(nodec * 3, this->nvel);
         VectorAssign(nodec * 3, this->nvel_old);
@@ -52,7 +61,54 @@ class StabilizedFEM : public MaterialPoint {
         return;
     };
 
-    // --- User's responsibility ---
+    /** @brief Solve the stabilized Navier-Stokes system. */
+    void SolveNS();
+
+    /** @brief Advance nodal velocity/pressure history arrays. */
+    void UpdateNodalVar();
+
+    /** @brief Project particle liquid/gas indicator to control points. */
+    void Particle2NodePhi();
+
+    /**
+     * @brief Compute total liquid volume from nodal volume fraction.
+     * @return Total liquid volume.
+     */
+    double CalLiquidVol();
+
+    /** @brief Set element density and viscosity from nodal volume fraction. */
+    void SetPFDomain();
+
+    /** @brief Read fluid restart data. */
+    void RestartInput() override;
+
+    /** @brief Write fluid restart data. */
+    void RestartOutput() override;
+
+    /** @brief Interpolate control-point fields to visualization nodes. */
+    void Cp2NodeVTK();
+
+    /**
+     * @brief Write fluid mesh data to VTK HDF5 files.
+     * @param iview Output view index.
+     * @param istep Current time step.
+     */
+    void OutputMeshDataVTKHDF(int iview, int istep);
+
+  protected:
+    /** @brief Apply velocity and pressure boundary conditions. */
+    virtual void BCSet() {
+        this->ApplyVelocityBC(this->nvel);
+        this->ApplyAccelerationBC(this->naccel);
+        this->pbc.BCSetVal(0, this->npres);
+
+        return;
+    };
+
+    /**
+     * @brief Register constrained DOFs with PETSc matrix.
+     * @param mat PETSc matrix.
+     */
     void BuildPetscBCList(CrsMat &mat) override {
         mat.AddBCComponent(this->ubc, nuc);
         mat.AddBCComponent(this->vbc, nvc);
@@ -62,6 +118,10 @@ class StabilizedFEM : public MaterialPoint {
         return;
     };
 
+    /**
+     * @brief Zero constrained DOFs in residual vector.
+     * @param rr Residual vector.
+     */
     void BCResidualSet(std::vector<double> &rr) override {
         this->ubc.BCSetZero(nuc, rr);
         this->vbc.BCSetZero(nvc, rr);
@@ -71,85 +131,24 @@ class StabilizedFEM : public MaterialPoint {
         return;
     };
 
-    virtual void BCSet() {
-        this->ubc.BCSetVal(nuc, this->nvel);
-        this->vbc.BCSetVal(nvc, this->nvel);
-        this->wbc.BCSetVal(nwc, this->nvel);
-        this->ubc.BCSetZero(nuc, this->naccel);
-        this->vbc.BCSetZero(nvc, this->naccel);
-        this->wbc.BCSetZero(nwc, this->naccel);
-        this->pbc.BCSetVal(0, this->npres);
-
-        return;
-    };
-    // ------------------------------
-
+  private:
     /**
-     * @brief Compute the generalized-α advection velocity from `nvel_old` and `nvel_older`.
-     * @return Advection velocity vector sized to `nodec * 3`.
+     * @brief Generalized-alpha advection velocity.
+     * @return Advection velocity vector.
      */
     std::vector<double> ComputeAdvectionVel();
 
     /**
-     * @brief Compute SUPG/PSPG stabilization coefficients `tau1` and LSIC coefficients `tau2`.
-     * @param adv_vel Advection velocity vector (size `nodec * 3`).
+     * @brief Compute SUPG/PSPG/LSIC stabilization coefficients.
+     * @param adv_vel Advection velocity vector.
      */
     void MakNSStabCoeff(const std::vector<double> &adv_vel);
 
     /**
-     * @brief Assemble the stabilized Navier–Stokes FEM matrix and RHS.
-     * @param adv_vel Advection velocity vector used in the convective term.
+     * @brief Assemble stabilized Navier-Stokes matrix and RHS.
+     * @param adv_vel Advection velocity vector.
      */
     void AssembleNSSystem(const std::vector<double> &adv_vel);
-
-    /**
-     * @brief Solve the stabilized Navier–Stokes system and update nodal velocity/pressure.
-     */
-    void SolveNS();
-
-    /**
-     * @brief Update time-advanced nodal variables (`nvel_old`, `npres_old`, etc.).
-     */
-    void UpdateNodalVar();
-
-    // --- For PhaseField ---
-    /**
-     * @brief Project the liquid/gas indicator from particles to control points.
-     */
-    void Particle2NodePhi();
-
-    /**
-     * @brief Compute the total liquid volume from nodal volume fraction.
-     * @return Total liquid volume.
-     */
-    double CalLiquidVol();
-
-    /**
-     * @brief Set element-wise density and viscosity based on the nodal volume fraction.
-     */
-    void SetPFDomain();
-
-    // --- For data IO ---
-    /**
-     * @brief Read fluid restart data from per-rank `*_re.txt` files.
-     */
-    void RestartInput() override;
-
-    /**
-     * @brief Write fluid restart data to per-rank `*_re.txt` files.
-     */
-    void RestartOutput() override;
-
-    /**
-     * @brief Interpolate control-point fields to visualization nodes for VTK output.
-     */
-    void Cp2NodeVTK();
-
-    /**
-     * @brief Write fluid mesh data to VTK HDF5 visualization files.
-     * @param iview Output view index.
-     * @param istep Current time step.
-     */
-    void OutputMeshDataVTKHDF(int iview, int istep);
 };
+
 } // namespace stabilizedfem

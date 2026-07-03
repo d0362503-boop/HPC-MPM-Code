@@ -1,11 +1,9 @@
 #pragma once
 
-#include <vector>
-#include "material_point.h"
 #include "bc.h"
+#include "material_point.h"
+#include <vector>
 
-void SearchClosestPoint2Node(int nid, MaterialPoint& point, double& distance);
+void SearchClosestPoint2Node(int nid, MaterialPoint &point, double &distance);
 
-void SearchFluidSolidIntf(); 
-
-void RigidWallBCCheck ();
+void SearchFluidSolidIntf();

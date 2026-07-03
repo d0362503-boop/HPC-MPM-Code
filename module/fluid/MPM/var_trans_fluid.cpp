@@ -50,25 +50,11 @@ void StabilizedMPM::Particle2Node() {
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
 
-    VectorAssign(nodec * 3, this->nvel);
-    VectorAssign(nodec * 3, this->naccel);
-    for (int n = 0; n < nodec; n++) {
-        if (this->nmass[n] > mtol) {
-            this->nvel[n + nuc] = this->nmome[n + nuc] / this->nmass[n];
-            this->nvel[n + nvc] = this->nmome[n + nvc] / this->nmass[n];
-            this->nvel[n + nwc] = this->nmome[n + nwc] / this->nmass[n];
-            this->naccel[n + nuc] = this->nforce[n + nuc] / this->nmass[n];
-            this->naccel[n + nvc] = this->nforce[n + nvc] / this->nmass[n];
-            this->naccel[n + nwc] = this->nforce[n + nwc] / this->nmass[n];
-        }
-    }
+    this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
+    this->ApplyVelocityBC(this->nvel);
 
-    this->ubc.BCSetVal(nuc, this->nvel);
-    this->vbc.BCSetVal(nvc, this->nvel);
-    this->wbc.BCSetVal(nwc, this->nvel);
-    this->ubc.BCSetZero(nuc, this->naccel);
-    this->vbc.BCSetZero(nvc, this->naccel);
-    this->wbc.BCSetZero(nwc, this->naccel);
+    this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {nuc, nvc, nwc});
+    this->ApplyAccelerationBC(this->naccel);
 
     return;
 }

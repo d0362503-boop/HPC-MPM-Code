@@ -128,6 +128,7 @@ void MaterialPoint::CalPointUnitNormal() {
 std::array<std::array<double, 3>, 3>
 MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, double af_coeff,
                                    const std::vector<std::array<double, 3>> &dsf) const noexcept {
+
     std::array<std::array<double, 3>, 3> ddg{};
     for (int ni = 0; ni < nenode; ni++) {
         int nid = nc[ni];

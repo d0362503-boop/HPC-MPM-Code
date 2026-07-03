@@ -1,78 +1,68 @@
 #include <cmath>
-#include <mpi.h>
-#include <iostream>
 #include <iomanip>
-#include "../../module/dataset.h"
-#include "../../module/mesh.h"
-#include "../../module/restart.h"
-#include "../../module/mpi_data.h"
+#include <iostream>
+#include <mpi.h>
+
 #include "../../module/data_io.h"
 #include "../../module/dataset.h"
 #include "../../module/material_point.h"
+#include "../../module/mesh.h"
+#include "../../module/mpi_data.h"
+#include "../../module/solid/explicit/explicit_mpm_solid.h"
+#include "../../module/solid/solid_material_point.h"
 
+using namespace explicitmpm;
 
-// -----------------------
-void datain_para();
-void Particle2NodeS();
-void solve_linear_system();
-void Node2ParticleS();
-// -----------------------
+void Solid_Explicit_ULMPM() {
 
-void Solid_Explicit_ULMPM () {
+    ExplicitSolidMPM sp;
 
-    datain_para();
+    sp.DataInput();
 
-    if (rstflag == 1 || rstflag == 3) RestartInSp();
+    if (rstflag == 1 || rstflag == 3) sp.RestartInput();
 
-    BuildMesh ();
+    BuildMesh();
 
     BuildControlPoint();
 
-    sp.MakNodeVol();
+    MakNodalVol();
 
     istep = ista - 1;
     int iview = istep / iout;
     real_time = dt * double(istep);
 
-    output_sp(iview, istep);
+    sp.OutputPointDataVTKHDF(iview, istep);
 
     for (istep = ista; istep <= iend; istep++) {
 
-    // -----------------------------------------------
+        // -----------------------------------------------
         real_time = dt * double(istep);
         if (istep <= nlstep) {
             facl = dlstep * double(istep);
-        }
-        else {
+        } else {
             facl = 1.0e0;
         }
-    // -----------------------------------------------
+        // -----------------------------------------------
 
         sp.MeshPointLinklist();
 
-        Particle2NodeS();
+        sp.Particle2Node();
 
-        solve_linear_system();
+        sp.SolveSolid();
 
-        Node2ParticleS();
+        sp.Node2Particle();
 
-        if (nprocs != 1) moveparticle_s();
+        if (nprocs != 1) sp.Moveparticle();
 
-        if (istep/iout*iout == istep) {
+        if (istep / iout * iout == istep) {
             iview++;
-            output_sp(iview, istep);
+            sp.OutputPointDataVTKHDF(iview, istep);
         }
 
-        if (istep%100 == 0 && myrank == 0) {
-            std::cout<< " ===== Now Computing ===== " << "\n";
-            std::cout<< "istep:" << std::setw(10) << istep << "\n"; 
-            std::cout<< "time:" << std::setw(15) << real_time 
-                 << std::setw(10) << "iview:" << std::setw(10) << iview << "\n";
-            std::cout<< " ========================== " << "\n";
-        }
+        if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
     }
 
-    if (rstflag == 2 || rstflag == 3) RestartOutSp();
+    if (rstflag == 2 || rstflag == 3) sp.RestartOutput();
 
     return;
 }

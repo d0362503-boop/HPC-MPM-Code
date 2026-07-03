@@ -127,6 +127,8 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
             this->UpdateDefGrad(pid, nenode, this->alpha_f, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 
+            this->UpdateVolume(pid, this->det_def_grad[pid]);
+
             this->UpdateConstitutiveModel(pid, stress_k, this->det_def_grad, def_grad_NR, delta_def_grad);
 
             this->ImplicitDsfCorr(ncm, nenode, dsf);

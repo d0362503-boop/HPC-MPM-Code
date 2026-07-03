@@ -1,3 +1,30 @@
+<sp.solswitch, rstflag, nlstep>  !Beam 3D
+FLIP  2  1
+<ista, iend, iout>
+1  10000  20
+<dt, mtol, wfem.spec_rad, sp.spec_rad>
+1.0e-3  1.0e-7  0.5e0  0.5e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+1.5e0  0.4e0  0.4e0
+<xyelem>
+150  40  40
+<idimc>  ! ---- Open-form B-Spline order ----
+2  2  2
+<npxye>
+3  3  3
+<sp.rho, rhol, rmul, rhog, rmug, fs_height>
+1.0e3  1.0e3  1.0e0  1.205e0  1.81e-5  0.4e0
+<nmat, npropmax>
+1  2
+<iprop1, nprop1>
+2  2    
+<mat_prop1>
+1.4e6  0.4e0
+<bb>
+0.0e0  0.0e0  0.0e0
+
 <sp.solswitch, rstflag, nlstep>  !Turek
 FLIP  2  1
 <ista, iend, iout>
@@ -34,7 +61,7 @@ FLIP  2  1
 <ista, iend, iout>
 1  10000  20
 <dt, mtol, wfem.spec_rad, sp.spec_rad>
-1.0e-3  1.0e-12  0.5e0  0.25e0
+1.0e-3  1.0e-12  0.5e0  0.5e0
 <xymin>
 0.0e0  0.0e0  0.0e0
 <xymax>
@@ -52,16 +79,16 @@ FLIP  2  1
 <iprop1, nprop1>
 3  3    
 <mat_prop1>
-5.0e-3  0.0e0  5.0e0
+5.0e-3  0.0e0  5.0e-1
 <bb>
 0.0e0  0.0e0  0.0e0
 
-<sp.solswitch, NR_flag, rstflag, nlstep>  !Beam
-TPIC  1  2  1
+<sp.solswitch, rstflag, nlstep>  !Beam
+TPIC  2  1
 <ista, iend, iout>
 1  3000  5
-<dt, th, mtol, sp.gamma_nb, sp.beta_nb>
-1.0e-3  0.5e0  1.0e-12  0.5e0  0.25e0
+<dt, mtol, wfem.spec_rad, sp.spec_rad>
+1.0e-3  1.0e-12  0.5e0  0.5e0
 <xymin>
 0.0e0  0.0e0  0.0e0
 <xymax>
