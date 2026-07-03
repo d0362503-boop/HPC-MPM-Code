@@ -48,6 +48,13 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 
 - **Doxygen documentation comments (`/** ... */` or `///`) belong in header files only.** Implementation files should not duplicate interface documentation.
 
+### Comment rules
+
+- **Variable comments: no Doxygen; keep to 3–5 words.** Use plain inline or trailing comments to explain purpose briefly, e.g. `int nstep;  // current time step`.
+- **Function comments: always Doxygen in headers.** Document every public/protected function with `/** ... */` or `///`.
+  - If the function takes parameters, explain the **physical meaning** of each parameter, not just its type.
+  - If the function returns a value, explain the **physical meaning** of the returned value.
+
 ## 5. Critical Parallel Rules
 
 **`node` vs `nodec`:** Computations and PETSc must use `nodec` (control points), never `node` (visualization nodes). Mixing them causes `MatAssemblyEnd` crashes.
