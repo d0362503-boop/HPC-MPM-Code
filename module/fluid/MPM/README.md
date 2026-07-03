@@ -28,7 +28,7 @@ MaterialPoint (base)
 
 ## Inflow Particles
 
-Inflow generation is split into three layers:
+Inflow generation is split into three layers. The dispatch and generation helpers are `private` overrides in `StabilizedMPM`; they are invoked polymorphically through the `MaterialPoint` base class.
 
 1. **Detection** — `MaterialPoint::InflowMeshisFilled` checks whether any marked boundary cell has a fill ratio above `0.95`.
 2. **Dispatch** — `MaterialPoint::GenerateInflowParticles` switches between:

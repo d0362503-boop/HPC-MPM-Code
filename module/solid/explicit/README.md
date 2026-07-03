@@ -17,16 +17,19 @@ The class supports the same interpolation family as the fluid MPM path (PIC, FLI
 | File | Purpose |
 |------|---------|
 | `explicit_mpm_solid.h` | `ExplicitSolidMPM` class declaration. |
-| `var_trans_solid_explicit.cpp` | P2G (`Particle2Node`), acceleration solve (`SolveSolid`), MUSL (`DoMUSL`), and G2P (`Node2Particle`). |
+| `var_trans_solid_explicit.cpp` | P2G (`Particle2Node`), acceleration solve (`SolveSolid`), and G2P (`Node2Particle`). |
 | `fbar_projection.cpp` | F-bar volumetric locking correction (`ComputeDefGradBar`). |
 | `CMakeLists.txt` | Module build rules; all `.cpp` files are compiled into `mpm_modules`. |
 
-## Class responsibilities
+## Public interface
 
 - `DataInput()` — read standalone explicit-solid input parameters and particle data.
 - `Particle2Node()` — reset nodal arrays, loop over particles to deposit mass/volume/momentum/force, then synchronize and apply velocity BCs.
 - `SolveSolid()` — compute `naccel = nforce / nmass` with small-mass cutoff and acceleration BCs.
 - `Node2Particle()` — update particle kinematics from the grid, run MUSL, update the deformation gradient (with optional F-bar correction), and update particle position/volume/stress.
+
+## Private helpers
+
 - `DoMUSL()` — re-project particle momentum to the grid after the G2P velocity update so the subsequent position/deformation-gradient update uses a consistent grid velocity.
 - `ComputeDefGradBar()` — nodal F-bar projection that corrects the volumetric part of the incremental deformation gradient to avoid locking.
 
