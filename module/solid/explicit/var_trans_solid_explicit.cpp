@@ -102,7 +102,9 @@ void ExplicitSolidMPM::DoMUSL() {
 
 void ExplicitSolidMPM::Node2Particle() {
 
-    this->G2PVelocityAndMUSL();
+    this->G2PVelocity();
+
+    this->DoMUSL();
 
     this->UpdateDeformationGradient();
 
@@ -111,7 +113,7 @@ void ExplicitSolidMPM::Node2Particle() {
     return;
 }
 
-void ExplicitSolidMPM::G2PVelocityAndMUSL() {
+void ExplicitSolidMPM::G2PVelocity() {
 
     int nenode;
     std::vector<int> ncm;
@@ -148,8 +150,6 @@ void ExplicitSolidMPM::G2PVelocityAndMUSL() {
             pid = this->idp2p[pid];
         }
     }
-
-    this->DoMUSL();
 
     return;
 }
