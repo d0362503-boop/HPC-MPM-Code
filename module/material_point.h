@@ -37,6 +37,67 @@ class MaterialPoint {
     BoundaryCondition uinfbc, vinfbc, winfbc;
 
     /**
+     * @brief Apply prescribed Dirichlet boundary values to a velocity/displacement vector.
+     * @param nvel Vector to be modified in-place at constrained DOFs.
+     */
+    virtual void ApplyVelocityBC(std::vector<double> &nvel) {
+        this->ubc.BCSetVal(nuc, nvel);
+        this->vbc.BCSetVal(nvc, nvel);
+        this->wbc.BCSetVal(nwc, nvel);
+
+        return;
+    }
+
+    /**
+     * @brief Zero out a vector at constrained Dirichlet DOFs (typical for acceleration/residual).
+     * @param naccel Vector to be zeroed in-place at constrained DOFs.
+     */
+    virtual void ApplyAccelerationBC(std::vector<double> &naccel) {
+        this->ubc.BCSetZero(nuc, naccel);
+        this->vbc.BCSetZero(nvc, naccel);
+        this->wbc.BCSetZero(nwc, naccel);
+
+        return;
+    }
+
+    /**
+     * @brief Divide a nodal vector by a nodal weight with a small-weight cutoff.
+     * @param result    Output vector (zero-initialized and overwritten in-place).
+     * @param numerator Nodal vector to divide.
+     * @param weight    Nodal weight vector used as denominator (e.g. mass or volume).
+     * @param offsets   Component offsets into the nodal vectors.
+     */
+    void CutOffSmallNodalVar(std::vector<double> &result, const std::vector<double> &numerator,
+                             const std::vector<double> &weight, const std::vector<int> &offsets) {
+
+        VectorAssign(numerator.size(), result);
+        for (int n = 0; n < nodec; n++) {
+            if (weight[n] > mtol) {
+                for (int offset : offsets) { result[n + offset] = numerator[n + offset] / weight[n]; }
+            }
+        }
+
+        return;
+    }
+
+    /**
+     * @brief In-place nodal division by a nodal weight with a small-weight cutoff.
+     * @param var     Nodal vector to divide in-place.
+     * @param weight  Nodal weight vector used as denominator.
+     * @param offsets Component offsets into the nodal vector.
+     */
+    void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight,
+                             const std::vector<int> &offsets) {
+        for (int n = 0; n < nodec; n++) {
+            if (weight[n] > mtol) {
+                for (int offset : offsets) { var[n + offset] /= weight[n]; }
+            }
+        }
+
+        return;
+    }
+
+    /**
      * @brief Read boundary-condition data for the current physics object from an input stream.
      * @param infile Input stream positioned at the boundary-condition section.
      */
@@ -131,7 +192,7 @@ class MaterialPoint {
     void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
 
     /**
-     * @brief Commit particle kinematics: update FLIP velocity via Newmark-β, update position, and apply optional
+     * @brief Commit particle kinematics: update velocity via Newmark-β, update position, and apply optional
      * particle-shifting correction.
      * @param accel_old Nodal/particle acceleration from the previous step.
      * @param disp      Nodal displacement increment applied to particle coordinates.

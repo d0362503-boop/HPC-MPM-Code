@@ -133,6 +133,30 @@ void SolidMaterialPointBase::DetermineRigidBC() {
     return;
 }
 
+void SolidMaterialPointBase::UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm,
+                                           const std::vector<double> &sf, const std::vector<std::array<double, 3>> &dsf,
+                                           std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+                                           std::vector<std::array<std::array<double, 3>, 3>> &def_grad) {
+
+    std::array<std::array<double, 3>, 3> ddg{};
+    ddg = this->ComputeDeltaDefGrad(ncm, nenode, af_coeff, dsf);
+
+    delta_def_grad[pid] = ddg;
+
+    // --- Deformation gradient update: F^{n+1} = dF * F^n ---
+    std::array<std::array<double, 3>, 3> F{};
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            for (int k = 0; k < 3; k++) { F[i][j] += ddg[i][k] * this->def_grad[pid][k][j]; }
+        }
+    }
+    def_grad[pid] = F;
+
+    this->det_def_grad[pid] = DetMat3(F);
+
+    return;
+}
+
 void SolidMaterialPointBase::UpdateConstitutiveModel(
     int pid,                                                           //
     std::vector<std::array<double, 6>> &stress,                        //

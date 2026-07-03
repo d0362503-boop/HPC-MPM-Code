@@ -100,6 +100,57 @@ class SolidMaterialPointBase : public MaterialPoint {
         return nfext;
     }
 
+    /**
+     * @brief Update the deformation gradient and its incremental correction for particle `pid`.
+     * @param pid             Particle index.
+     * @param nenode          Number of element nodes.
+     * @param af_coeff        Generalized-α coefficient for the displacement increment.
+     * @param ncm             Node IDs of the element supporting the particle.
+     * @param sf              Shape-function values.
+     * @param dsf             Shape-function gradients.
+     * @param delta_def_grad  Output incremental deformation-gradient tensor for each node.
+     * @param def_grad        Output total deformation-gradient tensor for each node.
+     */
+    void UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm, const std::vector<double> &sf,
+                       const std::vector<std::array<double, 3>> &dsf,
+                       std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+                       std::vector<std::array<std::array<double, 3>, 3>> &def_grad);
+
+    /**
+     * @brief Update particle volume from the given determinant of deformation gradient.
+     * @param pid Particle index.
+     * @param det Determinant of the (possibly F-bar corrected) deformation gradient.
+     */
+    void UpdateVolume(int pid, double det) { this->vol[pid] = det * this->vol0[pid]; }
+
+    /**
+     * @brief Apply prescribed Dirichlet boundary values to a velocity/displacement vector,
+     *        including rigid-body constraints.
+     * @param nvel Vector to be modified in-place at constrained DOFs.
+     */
+    void ApplyVelocityBC(std::vector<double> &nvel) override {
+        MaterialPoint::ApplyVelocityBC(nvel);
+        this->rigid_bc.BCSetVal(nuc, nvel);
+        this->rigid_bc.BCSetVal(nvc, nvel);
+        this->rigid_bc.BCSetVal(nwc, nvel);
+
+        return;
+    }
+
+    /**
+     * @brief Zero out a vector at constrained Dirichlet DOFs (typical for acceleration/residual),
+     *        including rigid-body constraints.
+     * @param naccel Vector to be zeroed in-place at constrained DOFs.
+     */
+    void ApplyAccelerationBC(std::vector<double> &naccel) override {
+        MaterialPoint::ApplyAccelerationBC(naccel);
+        this->rigid_bc.BCSetZero(nuc, naccel);
+        this->rigid_bc.BCSetZero(nvc, naccel);
+        this->rigid_bc.BCSetZero(nwc, naccel);
+
+        return;
+    }
+
     virtual void SolveSolid() = 0;
 
     /**

@@ -63,22 +63,6 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     void SolveSolid() override;
 
     /**
-     * @brief Update the deformation gradient and its incremental correction for particle `pid`.
-     * @param pid             Particle index.
-     * @param nenode          Number of element nodes.
-     * @param af_coeff        Generalized-α coefficient for the displacement increment.
-     * @param ncm             Node IDs of the element supporting the particle.
-     * @param sf              Shape-function values.
-     * @param dsf             Shape-function gradients.
-     * @param delta_def_grad  Output incremental deformation-gradient tensor for each node.
-     * @param def_grad        Output total deformation-gradient tensor for each node.
-     */
-    void UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm, const std::vector<double> &sf,
-                       const std::vector<std::array<double, 3>> &dsf,
-                       std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
-                       std::vector<std::array<std::array<double, 3>, 3>> &def_grad);
-
-    /**
      * @brief Initialize stress state at the start of the Newton–Raphson loop.
      * @return Tuple or structured result holding initial stress and related data.
      */

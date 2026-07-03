@@ -72,12 +72,8 @@ class StabilizedFEM : public MaterialPoint {
     };
 
     virtual void BCSet() {
-        this->ubc.BCSetVal(nuc, this->nvel);
-        this->vbc.BCSetVal(nvc, this->nvel);
-        this->wbc.BCSetVal(nwc, this->nvel);
-        this->ubc.BCSetZero(nuc, this->naccel);
-        this->vbc.BCSetZero(nvc, this->naccel);
-        this->wbc.BCSetZero(nwc, this->naccel);
+        this->ApplyVelocityBC(this->nvel);
+        this->ApplyAccelerationBC(this->naccel);
         this->pbc.BCSetVal(0, this->npres);
 
         return;

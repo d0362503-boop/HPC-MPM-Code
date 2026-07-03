@@ -32,8 +32,6 @@ void BlockFSI::DetectFSIInterface() {
         this->solid_.nphi[n] = this->solid_.nvof[n] / nvol[n];
         if (this->solid_.nphi[n] > this->phi_cut) { this->fsi_intf.nbc[this->fsi_intf.ibc++] = n; }
         this->solid_.nphi[n] = std::clamp(this->solid_.nphi[n], 0.0e0, 1.0e0);
-        // if (this->solid_.nphi[n] < 0.01e0) this->solid_.nphi[n] = 0.0e0;
-        // if (this->solid_.nphi[n] > 0.99e0) this->solid_.nphi[n] = 1.0e0;
     }
 
     return;

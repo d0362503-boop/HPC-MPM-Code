@@ -49,56 +49,11 @@ void ImplicitSolidMPM::Particle2Node() {
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
 
-    VectorAssign(nodec * 3, this->nvel);
-    VectorAssign(nodec * 3, this->naccel);
-    for (int n = 0; n < nodec; n++) {
-        if (this->nmass[n] > mtol) {
-            this->nvel[n + nuc] = this->nmome[n + nuc] / this->nmass[n];
-            this->nvel[n + nvc] = this->nmome[n + nvc] / this->nmass[n];
-            this->nvel[n + nwc] = this->nmome[n + nwc] / this->nmass[n];
-            this->naccel[n + nuc] = this->nforce[n + nuc] / this->nmass[n];
-            this->naccel[n + nvc] = this->nforce[n + nvc] / this->nmass[n];
-            this->naccel[n + nwc] = this->nforce[n + nwc] / this->nmass[n];
-        }
-    }
+    this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
+    this->ApplyVelocityBC(this->nvel);
 
-    this->ubc.BCSetVal(nuc, this->nvel);
-    this->vbc.BCSetVal(nvc, this->nvel);
-    this->wbc.BCSetVal(nwc, this->nvel);
-    this->ubc.BCSetZero(nuc, this->naccel);
-    this->vbc.BCSetZero(nvc, this->naccel);
-    this->wbc.BCSetZero(nwc, this->naccel);
-
-    this->rigid_bc.BCSetVal(nuc, this->nvel);
-    this->rigid_bc.BCSetVal(nvc, this->nvel);
-    this->rigid_bc.BCSetVal(nwc, this->nvel);
-    this->rigid_bc.BCSetZero(nuc, this->naccel);
-    this->rigid_bc.BCSetZero(nvc, this->naccel);
-    this->rigid_bc.BCSetZero(nwc, this->naccel);
-
-    return;
-}
-
-void ImplicitSolidMPM::UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm,
-                                     const std::vector<double> &sf, const std::vector<std::array<double, 3>> &dsf,
-                                     std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
-                                     std::vector<std::array<std::array<double, 3>, 3>> &def_grad) {
-    std::array<std::array<double, 3>, 3> ddg{};
-    ddg = this->ComputeDeltaDefGrad(ncm, nenode, af_coeff, dsf);
-
-    delta_def_grad[pid] = ddg;
-
-    // --- Deformation gradient update ---
-    std::array<std::array<double, 3>, 3> F{};
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            for (int k = 0; k < 3; k++) { F[i][j] += ddg[i][k] * this->def_grad[pid][k][j]; }
-        }
-    }
-    def_grad[pid] = F;
-
-    this->det_def_grad[pid] = DetMat3(F);
-    this->vol[pid] = this->det_def_grad[pid] * this->vol0[pid];
+    this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {nuc, nvc, nwc});
+    this->ApplyAccelerationBC(this->naccel);
 
     return;
 }
@@ -136,9 +91,7 @@ void ImplicitSolidMPM::Node2Particle() {
 
             this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, delta_def_grad, this->def_grad);
 
-            // std::array<std::array<double, 3>, 3> F = this->def_grad[pid];
-            // this->det_def_grad[pid] = DetMat3(F);
-            // this->vol[pid] = this->det_def_grad[pid] * this->vol0[pid];
+            this->UpdateVolume(pid, this->det_def_grad[pid]);
 
             this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad, delta_def_grad);
 

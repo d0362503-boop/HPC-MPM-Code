@@ -1,92 +1,79 @@
-#include <vector>
+#include <array>
 #include <cmath>
-#include <mpi.h>
-#include <iostream>
-#include <iomanip>
-#include "../../mesh.h"
+#include <vector>
+
+#include "../../cal_mat.h"
 #include "../../dataset.h"
 #include "../../material_point.h"
-#include "../../shape_function.h"
-#include "../../cal_mat.h"
+#include "../../mesh.h"
 #include "../../mpi_data.h"
-#include "../../solid/implicit/implicit_mpm_solid.h"
-#include "fbar_projection.h"
+#include "../../shape_function.h"
+#include "explicit_mpm_solid.h"
 
-using namespace std;
-using namespace implicitmpm;
+using namespace explicitmpm;
 
-void cal_def_grad_bar (vector<array<array<double, 3>, 3>>& delta_def_grad,
-                       const vector<double>& det_delta_def_grad) {
-
+void ExplicitSolidMPM::ComputeDefGradBar(std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+                                         const std::vector<double> &det_delta_def_grad) {
     int nenode;
-    vector<int> ncm; 
-    vector<double> sf;
-    vector<array<double, 3>> dsf;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
 
-    vector<double> nJbar(nodec, 0.0e0);
+    // --- Step 1: project uncorrected new Jacobian (weighted by particle volume) to control points ---
+    std::vector<double> nJbar(nodec, 0.0e0);
     for (int m = 0; m < nelem; m++) {
-        int pid = sp.idepf[m];
+        int pid = this->idepf[m];
         while (pid != -1) {
-            std::array<double, 3> xyp = sp.coord[pid];
+            const double J_new = this->det_def_grad_bar[pid] * det_delta_def_grad[pid];
+            const double J_new_vol = J_new * this->vol[pid];
 
+            std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
-                int nid = ncm[ni];
-                double sfi = sf[ni];
-                nJbar[nid] += sfi * (sp.det_def_grad_bar[pid] * det_delta_def_grad[pid]) * sp.vol[pid];
+                const int nid = ncm[ni];
+                const double sfi = sf[ni];
+                nJbar[nid] += sfi * J_new_vol;
             }
-            pid = sp.idp2p[pid];
+            pid = this->idp2p[pid];
         }
     }
 
     NodeVarComm(nJbar, 0);
 
-    for (int n = 0; n < nodec; n++) {
-        if (sp.nvof[n] > mtol) {
-            nJbar[n] /= sp.nvof[n];
-        }
-        else {
-            nJbar[n] = 0.0e0;
-        }
-    }
+    this->CutOffSmallNodalVar(nJbar, this->nvof, {0});
 
+    // --- Step 2: interpolate corrected Jacobian and update F-bar deformation gradient ---
     for (int m = 0; m < nelem; m++) {
-        int pid = sp.idepf[m];
+        int pid = this->idepf[m];
         while (pid != -1) {
-            std::array<double, 3> xyp = sp.coord[pid];
-
+            std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+
             double Jbar = 0.0e0;
             for (int ni = 0; ni < nenode; ni++) {
-                int nid = ncm[ni];
-                double sfi = sf[ni];
+                const int nid = ncm[ni];
+                const double sfi = sf[ni];
                 Jbar += sfi * nJbar[nid];
             }
 
-            double J = sp.det_def_grad_bar[pid] * det_delta_def_grad[pid];
+            const double J = this->det_def_grad_bar[pid] * det_delta_def_grad[pid];
+            const double scale = std::cbrt(Jbar / J);
+            auto &dF = delta_def_grad[pid];
             for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) {
-                    delta_def_grad[pid][i][j] *= cbrt((Jbar / J));
-                }
+                for (int j = 0; j < 3; j++) { dF[i][j] *= scale; }
             }
 
             std::array<std::array<double, 3>, 3> F_bar{};
+            const auto &F_bar_old = this->def_grad_bar[pid];
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) {
-                    for (int k = 0; k < 3; k++) {
-                        F_bar[i][j] += delta_def_grad[pid][i][k] * sp.def_grad_bar[pid][k][j];
-                    }
+                    for (int k = 0; k < 3; k++) { F_bar[i][j] += dF[i][k] * F_bar_old[k][j]; }
                 }
             }
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) {
-                    sp.def_grad_bar[pid][i][j] = F_bar[i][j];
-                }
-            }
-            sp.det_def_grad_bar[pid] = Jbar;
-            //det_mat3(F_bar, sp.det_def_grad_bar[pid]);
+            this->def_grad_bar[pid] = F_bar;
+            this->det_def_grad_bar[pid] = Jbar;
 
-            pid = sp.idp2p[pid];
+            pid = this->idp2p[pid];
         }
     }
 
