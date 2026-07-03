@@ -59,12 +59,7 @@ void Solid_Explicit_ULMPM() {
             sp.OutputPointDataVTKHDF(iview, istep);
         }
 
-        if (istep % 100 == 0 && myrank == 0) {
-            std::cout << " ===== Now Computing ===== " << "\n";
-            std::cout << "istep:" << std::setw(10) << istep << "\n";
-            std::cout << "time:" << std::setw(15) << real_time << std::setw(10) << "iview:" << std::setw(10) << iview << "\n";
-            std::cout << " ========================== " << "\n";
-        }
+        if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
     }
 
     if (rstflag == 2 || rstflag == 3) sp.RestartOutput();
