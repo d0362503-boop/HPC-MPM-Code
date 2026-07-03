@@ -6,18 +6,18 @@ This directory implements the **implicit Material Point Method (MPM) solid mecha
 
 Unlike the explicit MPM counterpart, this solver assembles and factorizes a sparse tangent-stiffness matrix every NR iteration.
 
-| Matrix | DOF | Purpose |
-|--------|-----|---------|
+| Matrix  | DOF         | Purpose                        |
+| ------- | ----------- | ------------------------------ |
 | `SM_` | 3 (u, v, w) | Momentum / displacement system |
 
 ---
 
 ## File Inventory
 
-| File | Responsibility |
-|------|----------------|
-| `implicit_mpm_solid.h` | Class declaration, constructor wiring (`SM_.owner_ = this`) |
-| `solve_solid_implicit.cpp` | NR loop, system assembly, tangent-modulus computation, diagonal preconditioner |
+| File                             | Responsibility                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `implicit_mpm_solid.h`         | Class declaration, constructor wiring (`SM_.owner_ = this`)                                    |
+| `solve_solid_implicit.cpp`     | NR loop, system assembly, tangent-modulus computation, diagonal preconditioner                   |
 | `var_trans_solid_implicit.cpp` | P2G (`Particle2Node`), G2P (`Node2Particle`), deformation-gradient update, particle shifting |
 
 ---
@@ -33,23 +33,31 @@ SolidMaterialPointBase
 `ImplicitSolidMPM` **overrides** the base-class virtual hooks for polymorphic BC handling:
 
 ### `BuildPetscBCList(CrsMat& mat)`
+
 Collects 3-DOF BC global IDs:
+
 - `ubc`, `vbc`, `wbc` — standard velocity/displacement BCs
 - `rigid_bc` — rigid-body constraints (applied to u, v, w)
 
 ### `BCResidualSet(std::vector<double>& rr)`
+
 Zeroes constrained DOFs in a residual vector:
+
 - `ubc` on u, `vbc` on v, `wbc` on w
 - `rigid_bc` on u, v, w
 
 ### `BCNRSet()`
+
 Sets Dirichlet values for the current NR iteration.
 
 ### `UpdateNRIncrement()`
+
 Applies the converged Newton correction `SM_.x_lhs` to the nodal displacement `ndispl`.
 
 ### `DataInput()`
+
 Loads the standalone implicit-solid case input:
+
 - orchestration file (`file.dat`)
 - parameter file
 - derived mesh/time scalars via `InitializeMeshAndTimeParameters()`
@@ -119,11 +127,13 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 ### 5. Variable Transfer (`var_trans_solid_implicit.cpp`)
 
 #### `Particle2Node`
+
 - P2G: mass, volume, momentum, force → `nmass`, `nvof`, `nmome`, `nforce`
 - Nodal velocity / acceleration: `nvel = nmome / nmass`, `naccel = nforce / nmass`
 - Apply BC values (`BCSetVal`) and zero out constrained accelerations (`BCSetZero`)
 
 #### `Node2Particle`
+
 - Predict velocity / acceleration with Newmark-β
 - Commit nodal kinematics (`CommitNodalKinematics`)
 - G2P: update particle displacement gradient (`UpdateDefGrad`), stress, velocity, acceleration
