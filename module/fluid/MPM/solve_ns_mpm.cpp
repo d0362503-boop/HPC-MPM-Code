@@ -154,9 +154,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     VectorAssign(this->NS_.nmata, this->NS_.amat);
     // VectorAssign(nodec * 4, this->NS_.adiag);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
-
     for (int m = 0; m < nelem; m++) {
-
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];

@@ -25,7 +25,6 @@ void StabilizedMPM::Particle2Node() {
     VectorAssign(nodec * 3, this->nmome);
     VectorAssign(nodec * 3, this->nforce);
     for (int m = 0; m < nelem; m++) {
-
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
@@ -86,7 +85,6 @@ void StabilizedMPM::Node2Particle() {
     std::vector<std::array<double, 3>> dsf;
 
     for (int m = 0; m < nelem; m++) {
-
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
