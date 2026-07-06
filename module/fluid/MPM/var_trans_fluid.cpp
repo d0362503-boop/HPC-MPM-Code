@@ -32,9 +32,6 @@ void StabilizedMPM::Particle2Node() {
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
-                double dsfi1 = dsf[ni][0];
-                double dsfi2 = dsf[ni][1];
-                double dsfi3 = dsf[ni][2];
                 this->StandardVarP2G(pid, nid, sfi, this->mass, this->nmass);
                 this->StandardVarP2G(pid, nid, sfi, this->vol, this->nvof);
                 this->VelP2G(pid, nid, sfi);
@@ -94,9 +91,6 @@ void StabilizedMPM::Node2Particle() {
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
-                double dsfi1 = dsf[ni][0];
-                double dsfi2 = dsf[ni][1];
-                double dsfi3 = dsf[ni][2];
                 this->pic.VarG2P(pid, nid, sfi, this->pres, this->npres); // ---- Pressure ----
                 this->pic.VarG2P(pid, nid, sfi, displ, this->ndispl);     // ---- Displacement ----
                 this->PICFamilyAccelG2P(pid, ni, nid, sfi, dsf);
