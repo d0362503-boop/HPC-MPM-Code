@@ -66,7 +66,7 @@ class TPIC {
         std::array<double, 3> vel_grad_temp{};
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
-                vel_grad_temp[i] += point_var_grad[pid][i][j] * (xyc[j][nid] - point_coord[pid][j]);
+                vel_grad_temp[i] += point_var_grad[pid][i][j] * (xyc[nid][j] - point_coord[pid][j]);
             }
         }
 
@@ -120,7 +120,7 @@ class APIC {
         }
 
         for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) { vel_grad_temp[i] += BD_vel_temp[i][j] * (xyc[j][nid] - point_coord[pid][j]); }
+            for (int j = 0; j < 3; j++) { vel_grad_temp[i] += BD_vel_temp[i][j] * (xyc[nid][j] - point_coord[pid][j]); }
         }
 
         node_var[nid + nuc] += sfi * point_mass[pid] * (point_var[pid][0] + vel_grad_temp[0]);

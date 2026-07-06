@@ -84,7 +84,8 @@ void ImplicitSolidMPM::SolveSolid() {
 
         if (!NR_flag) { // --- Linear not need Newton Raphson ---
             if (myrank == 0) {
-                std::cout << "Solid_converge:" << std::setw(10) << NR_it << std::setw(10) << iter << "\n";
+                std::cout << "Solid_converge:" << std::setw(10) << NR_it //
+                          << std::setw(10) << iter << "\n";
             }
         } else { // --- Nonlinear need Newton Raphson ---
             if (this->SM_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
@@ -122,7 +123,6 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, this->alpha_f, ncm, sf, dsf, delta_def_grad, def_grad_NR);
@@ -177,8 +177,8 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
                 // --- For Generalized-α (if α_f = 1, back to Newmark-β) ---
                 std::array<double, 3> nfint, nfext;
-                nfint = ComputeInternalForce(ni, pid, dsf, sts_af);
-                nfext = ComputeExternalForce(pid, sfi);
+                nfint = this->ComputeInternalForce(ni, pid, dsf, sts_af);
+                nfext = this->ComputeExternalForce(pid, sfi);
 
                 this->SM_.b_rhs[nid + nuc] += nfint[0] + nfext[0];
                 this->SM_.b_rhs[nid + nvc] += nfint[1] + nfext[1];

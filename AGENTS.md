@@ -28,7 +28,7 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
 - **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h`, selected by `solswitch` string.
-- **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Known issue: parallel ownership bug with shared overlap nodes (documented in `module/solver/README.md`).
+- **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Parallel ownership and inactive-row handling are now explicit; see `module/solver/README.md`.
 
 ## 4. Code Style
 
@@ -47,6 +47,13 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 - In class member functions, call other member functions with explicit `this->`.
 
 - **Doxygen documentation comments (`/** ... */` or `///`) belong in header files only.** Implementation files should not duplicate interface documentation.
+
+### Comment rules
+
+- **Variable comments: no Doxygen; keep to 3–5 words.** Use plain inline or trailing comments to explain purpose briefly, e.g. `int nstep;  // current time step`.
+- **Function comments: always Doxygen in headers.** Document every public/protected function with `/** ... */` or `///`.
+  - If the function takes parameters, explain the **physical meaning** of each parameter, not just its type.
+  - If the function returns a value, explain the **physical meaning** of the returned value.
 
 ## 5. Critical Parallel Rules
 

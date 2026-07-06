@@ -35,7 +35,7 @@ MaterialPoint  (base)
             └── PF_  : CrsMat  (ndof = 1, owner_ = this)
 ```
 
-`StabilizedFEM` **declares** two virtual hooks that the generic `CrsMat` calls back via the `owner_` pointer.  Their **implementations** live in `src_fsi/bc_setting.cpp` (shared with the solid BC logic):
+`StabilizedFEM` **declares** virtual BC hooks that the generic `CrsMat` calls back via the `owner_` pointer.  The hooks are `protected` so that `FSIFluid` can extend them; their default implementations live in `stabilized_fem.h` (for `BCSet`) and `src_fsi/bc_setting.cpp` (for `BuildPetscBCList` / `BCResidualSet`, shared with the solid BC logic):
 
 ### `BuildPetscBCList(CrsMat& mat)`
 Collects all Dirichlet/essential boundary-condition global IDs for the PETSc `MatZeroRows` pass:
@@ -53,6 +53,8 @@ These overrides replace the former free-function `BCResidualSet` that contained 
 ---
 
 ## Numerical Method
+
+The phase helpers below (`ComputeAdvectionVel`, `MakNSStabCoeff`, `AssembleNSSystem`) are private members called by `SolveNS`.
 
 ### 1. Generalized-α Predictor
 ```cpp

@@ -120,7 +120,7 @@ Shared control points are owned by a tie-break based on `aelemmin`.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
 
-**Open concern: LGMAP size and PETSc ownership consistency.** `BuildPetscMat()` creates the distributed PETSc matrix with local size `local_node * ndof`, but `BuildLGMAP()` currently constructs the local-to-global mapping with `nodec` block entries (owned plus ghost). This relies on the partitioner numbering owned control points as the first `local_node` local indices, so that PETSc only reads the first `local_node` entries of the mapping. If that assumption is ever violated—for example, by a different partitioner or ghost-layer ordering—the matrix layout and ownership will disagree and assembly will fail or silently corrupt shared rows. A more robust fix would be to pass only the owned subset (`l2g_block_map[interior_list[i]]`) as the LGMAP entries.
+**Resolved: LGMAP size and PETSc ownership consistency.** `BuildLGMAP()` now builds explicit owned-first PETSc-local maps through `BuildPetscLocalMaps()`. `petsc_local_to_natural` places owned control points first, followed by ghost control points, and `petsc_local_block_gids` maps these `nodec` PETSc-local indices to global node IDs. `BuildPetscMat()` creates the matrix with local size `local_node * ndof` and attaches an LGMAP of size `nodec` (owned + ghost). PETSc interprets the first `local_node * ndof` entries as owned rows and uses the remaining entries as ghost/assembly indices. `CheckOwnershipMetadata()` validates that `owned_natural_ids`, `ghost_natural_ids`, and the local-to-natural map sum to the expected global control-point count.
 
 ### 3.2 Matrix setup
 

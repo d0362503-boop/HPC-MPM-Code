@@ -30,39 +30,25 @@ SolidMaterialPointBase
             └── SM_ : CrsMat  (ndof = 3, owner_ = this, FEM_flag = false)
 ```
 
-`ImplicitSolidMPM` **overrides** the base-class virtual hooks for polymorphic BC handling:
+`ImplicitSolidMPM` exposes the standard solver driver hooks and keeps the Newton–Raphson internals private.
 
-### `BuildPetscBCList(CrsMat& mat)`
+### Public interface
 
-Collects 3-DOF BC global IDs:
+- `DataInput()` — loads the standalone implicit-solid case input (orchestration file, parameter file, mesh/time scalars, BC data, particle data).
+- `Particle2Node()` — P2G transfer for mass, volume, momentum, and force.
+- `Node2Particle()` — G2P transfer and particle kinematic update.
+- `SolveSolid()` — driver for one implicit time step.
 
-- `ubc`, `vbc`, `wbc` — standard velocity/displacement BCs
-- `rigid_bc` — rigid-body constraints (applied to u, v, w)
+### Private helpers / overrides
 
-### `BCResidualSet(std::vector<double>& rr)`
+The following overrides are invoked polymorphically through the `MaterialPoint` base class or called internally by `SolveSolid`:
 
-Zeroes constrained DOFs in a residual vector:
-
-- `ubc` on u, `vbc` on v, `wbc` on w
-- `rigid_bc` on u, v, w
-
-### `BCNRSet()`
-
-Sets Dirichlet values for the current NR iteration.
-
-### `UpdateNRIncrement()`
-
-Applies the converged Newton correction `SM_.x_lhs` to the nodal displacement `ndispl`.
-
-### `DataInput()`
-
-Loads the standalone implicit-solid case input:
-
-- orchestration file (`file.dat`)
-- parameter file
-- derived mesh/time scalars via `InitializeMeshAndTimeParameters()`
-- solid BC data through `InputBCData(infile)`
-- solid particle data through `InputPointData(infile)`
+- `BuildPetscBCList(CrsMat& mat)` — collects 3-DOF BC global IDs (`ubc`, `vbc`, `wbc`, `rigid_bc`) for PETSc.
+- `BCResidualSet(std::vector<double>& rr)` — zeroes constrained DOFs in a residual vector.
+- `BCNRSet()` — sets Dirichlet values for the current NR iteration.
+- `UpdateNRIncrement()` — applies the converged Newton correction `SM_.x_lhs` to `ndispl`.
+- `AssembleSystem(...)` — assembles the tangent matrix `SM_.amat` and residual `SM_.b_rhs`.
+- `ComputeTangentModulus(...)` — computes the 3×3 nodal stiffness block from the material tangent and stress state.
 
 ---
 

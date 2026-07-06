@@ -18,6 +18,7 @@
 using namespace implicitmpm;
 
 void ImplicitSolidMPM::Particle2Node() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;

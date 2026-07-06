@@ -42,7 +42,7 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
     /**
      * @brief G2P velocity update followed by MUSL projection.
      */
-    void G2PVelocityAndMUSL();
+    void G2PVelocity();
 
     /**
      * @brief MUSL velocity projection.
