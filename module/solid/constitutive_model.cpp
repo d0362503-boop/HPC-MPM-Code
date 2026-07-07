@@ -8,7 +8,7 @@ void ConstitutiveModel::MatRigid(std::array<double, 6> &stress) {
 
     for (int n = 0; n < 6; n++) { stress[n] = 0.0e0; }
 
-    if (this->implicit_flag == true) { this->stif_mat = {}; }
+    if (this->implicit_flag) { this->stif_mat = {}; }
 
     return;
 }
@@ -43,7 +43,7 @@ void ConstitutiveModel::MatLinElast(std::array<double, 6> &stress,
 
     for (int n = 0; n < 6; n++) { stress[n] += dsig[n]; }
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
         this->stif_mat = {};
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
@@ -88,7 +88,7 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
     stress[4] = sig[0][2];
     stress[5] = sig[0][1];
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
         // --- Material Stiffness ---
         std::array<double, 2> CC{};
         CC[0] = lmd / jac;                // --- lamda' ---
@@ -153,7 +153,7 @@ void ConstitutiveModel::MatStVk(std::array<double, 6> &stress, const std::array<
     stress[4] = sig[0][2];
     stress[5] = sig[0][1];
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
         // --- Material Stiffness ---
         std::array<double, 2> CC{};
         CC[0] = lmd / jac; // --- lamda' ---
@@ -212,7 +212,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
 
     double first_inv = TraceMat3(be_iso);
     double second_inv = 0.5e0 * (pow(first_inv, 2) - TraceMat3(be2_iso));
-    double hp = bulk * log(jac) / jac;
+    double hp = bulk * std::log(jac) / jac;
 
     std::array<std::array<double, 3>, 3> sig{};
     for (int i = 0; i < 3; ++i) {
@@ -229,7 +229,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
     stress[4] = sig[0][2];
     stress[5] = sig[0][1];
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
 
         std::array<std::array<double, 3>, 3> dev_sig{};
         for (int i = 0; i < 3; i++) {

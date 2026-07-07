@@ -26,7 +26,7 @@ void MaterialPoint::GeneralizedAlphaParaSet() {
     return;
 }
 
-std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() const {
+std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() const noexcept {
     double para1 = 1.0e0 / (this->gamma_nb * dt);
     double para2 = (1.0e0 - this->gamma_nb) / this->gamma_nb;
 
