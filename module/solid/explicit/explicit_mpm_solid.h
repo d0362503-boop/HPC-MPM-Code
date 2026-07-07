@@ -68,7 +68,7 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
      * @param delta_def_grad      Incremental deformation gradient (modified in-place).
      * @param det_delta_def_grad  Determinant of incremental deformation gradient.
      */
-    void ComputeDefGradBar(std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+    void ComputeDefGradBar(const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
                            const std::vector<double> &det_delta_def_grad);
 };
 

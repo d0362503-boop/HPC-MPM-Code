@@ -67,7 +67,7 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
 
     double lmd = nu * yng / ((1.0e0 + nu) * (1.0e0 - 2.0e0 * nu));
     double mu = yng / (2.0e0 * (1.0e0 + nu));
-    double lnjac = log(jac_bar);
+    double lnjac = std::log(jac_bar);
 
     std::array<std::array<double, 3>, 3> be{};
     for (int i = 0; i < 3; ++i) {

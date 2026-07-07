@@ -12,7 +12,7 @@
 
 using namespace explicitmpm;
 
-void ExplicitSolidMPM::ComputeDefGradBar(std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
                                          const std::vector<double> &det_delta_def_grad) {
     int nenode;
     std::vector<int> ncm;
@@ -58,13 +58,13 @@ void ExplicitSolidMPM::ComputeDefGradBar(std::vector<std::array<std::array<doubl
 
             const double J = this->det_def_grad_bar[pid] * det_delta_def_grad[pid];
             const double scale = std::cbrt(Jbar / J);
-            auto &dF = delta_def_grad[pid];
+            auto dF = delta_def_grad[pid];
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) { dF[i][j] *= scale; }
             }
 
             std::array<std::array<double, 3>, 3> F_bar{};
-            const auto &F_bar_old = this->def_grad_bar[pid];
+            const auto F_bar_old = this->def_grad_bar[pid];
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) {
                     for (int k = 0; k < 3; k++) { F_bar[i][j] += dF[i][k] * F_bar_old[k][j]; }
