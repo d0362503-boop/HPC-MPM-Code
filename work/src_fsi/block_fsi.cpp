@@ -105,7 +105,7 @@ void BlockFSI::SolveFSISystem() {
         }
     }
 
-    // this->CalDragLiftCoeffBySurfaceTraction();
+    // this->CalDragLiftCoeffForTurekCFD();
 
     this->fluid_.naccel = this->fluid_.GeneralizedAlphaNodeAccelUpdate();
 
@@ -147,7 +147,8 @@ void BlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vecto
     return;
 }
 
-void BlockFSI::CalDragLiftCoeffBySurfaceTraction() {
+void BlockFSI::CalDragLiftCoeffForTurekCFD() {
+
     const double cylinder_center_x = 0.2e0;
     const double cylinder_center_z = 0.2e0;
     const double cylinder_radius = 0.05e0;
