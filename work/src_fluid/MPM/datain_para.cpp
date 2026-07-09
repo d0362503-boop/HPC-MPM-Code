@@ -69,8 +69,10 @@ void StabilizedMPM::DataInput() {
 
     InitializeMeshAndTimeParameters();
 
-    // ----- Newmark beta parameter -----
+    // --- Generalized α & Newmark β parameter Init ---
+    this->GeneralizedAlphaParaSet();
     this->NewmarkBetaParaSet();
+    // --------------------------------
 
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);

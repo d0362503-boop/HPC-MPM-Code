@@ -135,6 +135,7 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
             // --- Transfer stress to (n+α_f) time interlevel ---
             std::array<double, 6> sts_af = stress_k[pid];
+            double volp = this->vol[pid];
 
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -164,15 +165,15 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
                         this->SM_.amat[ida + this->SM_.block_id[4]] += am * emd_lu;
                         this->SM_.amat[ida + this->SM_.block_id[8]] += am * emd_lu;
                     }
-                    this->SM_.amat[ida + this->SM_.block_id[0]] += af * K_mat[0][0] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[1]] += af * K_mat[0][1] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[2]] += af * K_mat[0][2] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[3]] += af * K_mat[1][0] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[4]] += af * K_mat[1][1] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[5]] += af * K_mat[1][2] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[6]] += af * K_mat[2][0] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[7]] += af * K_mat[2][1] * this->vol[pid];
-                    this->SM_.amat[ida + this->SM_.block_id[8]] += af * K_mat[2][2] * this->vol[pid];
+                    this->SM_.amat[ida + this->SM_.block_id[0]] += af * K_mat[0][0] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[1]] += af * K_mat[0][1] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[2]] += af * K_mat[0][2] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[3]] += af * K_mat[1][0] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[4]] += af * K_mat[1][1] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[5]] += af * K_mat[1][2] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[6]] += af * K_mat[2][0] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[7]] += af * K_mat[2][1] * volp;
+                    this->SM_.amat[ida + this->SM_.block_id[8]] += af * K_mat[2][2] * volp;
                 }
 
                 // --- For Generalized-α (if α_f = 1, back to Newmark-β) ---
