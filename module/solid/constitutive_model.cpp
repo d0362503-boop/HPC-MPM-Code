@@ -185,7 +185,7 @@ void ConstitutiveModel::MatStVk(std::array<double, 6> &stress, const std::array<
 }
 
 void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std::array<std::array<double, 3>, 3> &FF,
-                                        const std::vector<double> &mat_prop, double jac) {
+                                        const std::vector<double> &mat_prop, double jac, double jac_bar) {
 
     double c1 = mat_prop[0];
     double c2 = mat_prop[1];
@@ -211,8 +211,8 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
     }
 
     double first_inv = TraceMat3(be_iso);
-    double second_inv = 0.5e0 * (pow(first_inv, 2) - TraceMat3(be2_iso));
-    double hp = bulk * std::log(jac) / jac;
+    double second_inv = 0.5e0 * (std::pow(first_inv, 2) - TraceMat3(be2_iso));
+    double hp = bulk * std::log(jac_bar) / jac;
 
     std::array<std::array<double, 3>, 3> sig{};
     for (int i = 0; i < 3; ++i) {
@@ -298,7 +298,7 @@ void ConstitutiveModel::UpdateStress(int model_type, std::array<double, 6> &stre
     } else if (model_type == 2) { // --- St.Venant-Kirchhoff ---
         this->MatStVk(stress, F, mat_prop, jac);
     } else if (model_type == 3) { // --- Mooney-Rivlin ---
-        this->MatMooneyRivlin(stress, F, mat_prop, jac);
+        this->MatMooneyRivlin(stress, F, mat_prop, jac, jac_bar);
     }
 
     return;

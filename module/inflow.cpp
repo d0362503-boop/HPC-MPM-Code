@@ -1,5 +1,5 @@
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <mpi.h>
 #include <vector>
@@ -23,8 +23,7 @@ bool MaterialPoint::InflowMeshisFilled(const BoundaryCondition &infbc) {
     return isfilled;
 }
 
-void MaterialPoint::GenerateInflowParticles(int dir, MaterialPoint &ifp,
-                                            const BoundaryCondition &infbc) {
+void MaterialPoint::GenerateInflowParticles(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {
 
     if (!this->infbc_isfilled) { this->infbc_isfilled = InflowMeshisFilled(infbc); }
 
@@ -38,6 +37,7 @@ void MaterialPoint::GenerateInflowParticles(int dir, MaterialPoint &ifp,
 }
 
 void MaterialPoint::AssignUniqueInflowIds(MaterialPoint &ifp) const {
+
     if (ifp.num == 0) return;
 
     int local_max_id = -1;
@@ -53,4 +53,6 @@ void MaterialPoint::AssignUniqueInflowIds(MaterialPoint &ifp) const {
 
     const int next_id = global_max_id + 1 + id_offset;
     for (int i = 0; i < ifp.num; ++i) { ifp.id[i] = next_id + i; }
+
+    return;
 }
