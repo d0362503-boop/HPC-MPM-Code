@@ -2,17 +2,11 @@
 # Solid Module - Solid mechanics solvers
 # -----------------------------------------------------------------------------
 
-# Select subdirectory based on solid method
-if(SOLID_METHOD STREQUAL "EXPLICIT")
-    set(SOLID_SUBDIR explicit)
-    message(STATUS "Using EXPLICIT solid method in module/solid")
-else()
-    set(SOLID_SUBDIR implicit)
-    message(STATUS "Using IMPLICIT solid method in module/solid")
-endif()
-
-# Add selected subdirectory
-add_subdirectory(${SOLID_SUBDIR})
+# Include all solid method implementations. The active driver is selected in
+# work/CMakeLists.txt together with the matching call in MPM_main.cpp.
+add_subdirectory(explicit)
+add_subdirectory(implicit)
+message(STATUS "Including EXPLICIT and IMPLICIT solid methods in module/solid")
 
 # Automatically collect all .cpp files in current directory (excluding subdirectories)
 file(GLOB SOLID_BASE_SOURCES

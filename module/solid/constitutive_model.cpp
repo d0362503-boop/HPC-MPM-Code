@@ -193,7 +193,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
 
     std::array<std::array<double, 3>, 3> FF_iso{};
     for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) { FF_iso[i][j] = 1.0e0 / std::cbrt(jac) * FF[i][j]; }
+        for (int j = 0; j < 3; ++j) { FF_iso[i][j] = 1.0e0 / std::cbrt(jac_bar) * FF[i][j]; }
     }
 
     std::array<std::array<double, 3>, 3> be_iso{};
