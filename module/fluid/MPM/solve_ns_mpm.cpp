@@ -31,8 +31,6 @@ void StabilizedMPM::SolveNS() {
 
     const int iter_max = 1000;
 
-    this->MakNSStabCoeff(); // ---- Stabilized coefficient ----
-
     VectorAssign(nodec * 3, this->ndispl);
     VectorAssign(nodec, this->npres);
     VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
@@ -61,12 +59,17 @@ void StabilizedMPM::SolveNS() {
     return;
 }
 
-void StabilizedMPM::MakNSStabCoeff() {
+void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
 
     int nex = xyelem[0];
     int ney = xyelem[1];
     int nez = xyelem[2];
     double rnu = this->rmu / this->rho;
+
+    std::vector<double> nvel_af(nodec * 3);
+    for (int n = 0; n < nodec * 3; n++) {
+        nvel_af[n] = (1.0e0 - this->alpha_f) * this->nvel[n] + this->alpha_f * nvel_k[n];
+    }
 
     int nenode;
     std::vector<int> ncm;
@@ -76,25 +79,27 @@ void StabilizedMPM::MakNSStabCoeff() {
     VectorAssign(this->num, this->tau1);
     VectorAssign(this->num, this->tau2);
     for (int m = 0; m < nelem; m++) {
-        int ize = m / (nex * ney);
-        int iye = (m - ize * (nex * ney)) / nex;
-        int ixe = m - ize * (nex * ney) - iye * nex;
+        // int ize = m / (nex * ney);
+        // int iye = (m - ize * (nex * ney)) / nex;
+        // int ixe = m - ize * (nex * ney) - iye * nex;
 
-        std::array<double, 3> xye;
-        xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
+        // std::array<double, 3> xye;
+        // xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
+        // xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
+        // xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
 
         int pid = this->idepf[m];
         while (pid != -1) {
+            std::array<double, 3> xyp = this->coord[pid];
+            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+
             double uu = 0.0e0, vv = 0.0e0, ww = 0.0e0;
-            MakSf(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
-                uu += sfi * this->nvel[nid + nuc];
-                vv += sfi * this->nvel[nid + nvc];
-                ww += sfi * this->nvel[nid + nwc];
+                uu += sfi * nvel_af[nid + nuc];
+                vv += sfi * nvel_af[nid + nvc];
+                ww += sfi * nvel_af[nid + nwc];
             }
             double uvw = uu * uu + vv * vv + ww * ww;
 
@@ -145,6 +150,8 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     double fx = bb[0] * facl;
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;
+
+    this->MakNSStabCoeff(nvel_k); // ---- Stabilized coefficient ----
 
     int nenode;
     std::vector<int> ncm;

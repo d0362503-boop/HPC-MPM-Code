@@ -70,7 +70,7 @@ void StabilizedMPM::DataInput() {
     InitializeMeshAndTimeParameters();
 
     // --- Generalized α & Newmark β parameter Init ---
-    this->GeneralizedAlphaParaSet();
+    // this->GeneralizedAlphaParaSet();
     this->NewmarkBetaParaSet();
     // --------------------------------
 

@@ -18,7 +18,7 @@ class StabilizedMPM : public MaterialPoint {
 
     enum class StabCoeff { PSPG, VMS };
     // Stabilization-coefficient selector
-    static constexpr StabCoeff stab_coeff = StabCoeff::PSPG;
+    static constexpr StabCoeff stab_coeff = StabCoeff::VMS;
 
     // SUPG/PSPG and LSIC stabilization coefficients
     std::vector<double> tau1, tau2;
@@ -29,7 +29,7 @@ class StabilizedMPM : public MaterialPoint {
         this->ode_order = 2;
         this->NS_.ndof = 4;
         this->NS_.FEM_flag = false;
-        this->NS_.use_petsc = true;
+        this->NS_.use_petsc = false;
         this->NS_.amg_rebuild_freq = 1; // rebuild AMG every step
         this->NS_.owner_ = this;
     }
@@ -114,8 +114,10 @@ class StabilizedMPM : public MaterialPoint {
         return;
     };
 
-    /** @brief Compute VMS/PSPG stabilization coefficients. */
-    void MakNSStabCoeff();
+    /** @brief Compute VMS/PSPG stabilization coefficients.
+     * @param nvel_k   Nodal velocity vector.
+     */
+    void MakNSStabCoeff(const std::vector<double> &nvel_k);
 
     /**
      * @brief Assemble stabilized Navier-Stokes matrix and RHS.

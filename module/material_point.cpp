@@ -218,7 +218,7 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionParticleShiftin
     }
     MPI_Allreduce(MPI_IN_PLACE, &geup_dot, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    double b_0 = (geup_dot < mtol) ? 0.0e0 : (eu_norm / geup_dot);
+    double b_0 = (geup_dot < 1.0e-30) ? 0.0e0 : (eu_norm / geup_dot);
 
     for (int n = 0; n < this->num; n++) {
         delta_corr[n][0] = -b_0 * geup[n][0];
