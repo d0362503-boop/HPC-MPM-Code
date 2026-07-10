@@ -94,6 +94,7 @@ void MaterialPoint::CommitParticleKinematics(const std::vector<std::array<double
             if (advected_coord[i] < xyminw[i] || advected_coord[i] > xymaxw[i]) { advected_outside = true; }
         }
 
+        // Reject shifting-induced boundary crossings.
         if (has_shift && !advected_outside) {
             for (int i = 0; i < 3; i++) {
                 double shifted_coord = advected_coord[i] + delta_corr[n][i];
