@@ -105,10 +105,20 @@ void FluidGenerator::BuildData() {
     g_wp.wbc.fbc.resize(nodec);
     g_wp.pbc.fbc.resize(nodec);
 
+    g_wp.uinfbc.nbc.resize(nodec);
+    g_wp.vinfbc.nbc.resize(nodec);
+    g_wp.winfbc.nbc.resize(nodec);
+    g_wp.uinfbc.fbc.resize(nodec);
+    g_wp.vinfbc.fbc.resize(nodec);
+    g_wp.winfbc.fbc.resize(nodec);
+
     g_wp.ubc.ibc = 0;
     g_wp.vbc.ibc = 0;
     g_wp.wbc.ibc = 0;
     g_wp.pbc.ibc = 0;
+    g_wp.uinfbc.ibc = 0;
+    g_wp.vinfbc.ibc = 0;
+    g_wp.winfbc.ibc = 0;
     for (int k = 0; k < znodec; k++) {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
@@ -170,10 +180,15 @@ void FluidGenerator::BuildData() {
 }
 
 void FluidGenerator::WriteBcData(std::ofstream &outfile) {
-    g_wp.ubc.BCOutput(outfile, "uwbc");
-    g_wp.vbc.BCOutput(outfile, "vwbc");
-    g_wp.wbc.BCOutput(outfile, "wwbc");
-    g_wp.pbc.BCOutput(outfile, "hpbc");
+    g_wp.ubc.BCOutput(outfile, "ubc");
+    g_wp.vbc.BCOutput(outfile, "vbc");
+    g_wp.wbc.BCOutput(outfile, "wbc");
+    g_wp.pbc.BCOutput(outfile, "pbc");
+
+    // Inflow boundaries (node IDs only)
+    g_wp.uinfbc.BCOutput(outfile, "uinfbc", false);
+    g_wp.vinfbc.BCOutput(outfile, "vinfbc", false);
+    g_wp.winfbc.BCOutput(outfile, "winfbc", false);
 }
 
 void FluidGenerator::WriteTextOutputs() {

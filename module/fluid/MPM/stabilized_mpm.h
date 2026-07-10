@@ -18,7 +18,7 @@ class StabilizedMPM : public MaterialPoint {
 
     enum class StabCoeff { PSPG, VMS };
     // Stabilization-coefficient selector
-    static constexpr StabCoeff stab_coeff = StabCoeff::VMS;
+    static constexpr StabCoeff stab_coeff = StabCoeff::PSPG;
 
     // SUPG/PSPG and LSIC stabilization coefficients
     std::vector<double> tau1, tau2;
@@ -122,8 +122,7 @@ class StabilizedMPM : public MaterialPoint {
      * @param naccel_k Nodal acceleration vector.
      * @param nvel_k   Nodal velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &naccel_k,
-                          const std::vector<double> &nvel_k);
+    void AssembleNSSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;
@@ -137,8 +136,7 @@ class StabilizedMPM : public MaterialPoint {
      * @param ifp   Inflow particle buffer.
      * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp,
-                                          const BoundaryCondition &infbc) override;
+    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 
     /**
      * @brief Generate inflow particles by cloning existing particles.
@@ -146,8 +144,7 @@ class StabilizedMPM : public MaterialPoint {
      * @param ifp   Inflow particle buffer.
      * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp,
-                                           const BoundaryCondition &infbc) override;
+    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 };
 
 } // namespace stabilizedmpm
