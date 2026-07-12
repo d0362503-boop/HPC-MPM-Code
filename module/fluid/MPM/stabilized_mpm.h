@@ -124,7 +124,8 @@ class StabilizedMPM : public MaterialPoint {
      * @param naccel_k Nodal acceleration vector.
      * @param nvel_k   Nodal velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k);
+    void AssembleNSSystem(const std::vector<double> &nvel_k, //
+                          const std::vector<double> &naccel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;

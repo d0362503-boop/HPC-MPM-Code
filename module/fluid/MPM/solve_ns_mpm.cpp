@@ -66,11 +66,6 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
     int nez = xyelem[2];
     double rnu = this->rmu / this->rho;
 
-    std::vector<double> nvel_af(nodec * 3);
-    for (int n = 0; n < nodec * 3; n++) {
-        nvel_af[n] = (1.0e0 - this->alpha_f) * this->nvel[n] + this->alpha_f * nvel_k[n];
-    }
-
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -79,15 +74,6 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
     VectorAssign(this->num, this->tau1);
     VectorAssign(this->num, this->tau2);
     for (int m = 0; m < nelem; m++) {
-        // int ize = m / (nex * ney);
-        // int iye = (m - ize * (nex * ney)) / nex;
-        // int ixe = m - ize * (nex * ney) - iye * nex;
-
-        // std::array<double, 3> xye;
-        // xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        // xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        // xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
-
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
@@ -97,9 +83,9 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
-                uu += sfi * nvel_af[nid + nuc];
-                vv += sfi * nvel_af[nid + nvc];
-                ww += sfi * nvel_af[nid + nwc];
+                uu += sfi * nvel_k[nid + nuc];
+                vv += sfi * nvel_k[nid + nvc];
+                ww += sfi * nvel_k[nid + nwc];
             }
             double uvw = uu * uu + vv * vv + ww * ww;
 
@@ -151,7 +137,22 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;
 
-    this->MakNSStabCoeff(nvel_k); // ---- Stabilized coefficient ----
+    const double af = this->alpha_f;
+    const double af0 = 1.0e0 - this->alpha_f;
+    const double am = this->alpha_m;
+    const double am0 = 1.0e0 - this->alpha_m;
+
+    std::vector<double> nvel_af(nodec * 3), naccel_am(nodec * 3);
+    for (int n = 0; n < nodec * 3; n++) {
+        naccel_am[n] = am0 * this->naccel[n] + am * naccel_k[n];
+        nvel_af[n] = af0 * this->nvel[n] + af * nvel_k[n];
+    }
+    std::vector<double> npres_af(nodec);
+    for (int n = 0; n < nodec; n++) { //
+        npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
+    }
+
+    this->MakNSStabCoeff(nvel_af); // ---- Stabilized coefficient ----
 
     int nenode;
     std::vector<int> ncm;
@@ -159,7 +160,6 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(this->NS_.nmata, this->NS_.amat);
-    // VectorAssign(nodec * 4, this->NS_.adiag);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
@@ -185,25 +185,25 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                 double dsfi2 = dsf[ni][1];
                 double dsfi3 = dsf[ni][2];
                 // --- Pressure ----
-                pres_k += sfi * this->npres[nid];
+                pres_k += sfi * npres_af[nid];
                 // --- Acceleration ---
-                accel_k[0] += sfi * naccel_k[nid + nuc];
-                accel_k[1] += sfi * naccel_k[nid + nvc];
-                accel_k[2] += sfi * naccel_k[nid + nwc];
+                accel_k[0] += sfi * naccel_am[nid + nuc];
+                accel_k[1] += sfi * naccel_am[nid + nvc];
+                accel_k[2] += sfi * naccel_am[nid + nwc];
                 // --- Gradient of pressure ---
-                grad_pres_k[0] += dsfi1 * this->npres[nid];
-                grad_pres_k[1] += dsfi2 * this->npres[nid];
-                grad_pres_k[2] += dsfi3 * this->npres[nid];
+                grad_pres_k[0] += dsfi1 * npres_af[nid];
+                grad_pres_k[1] += dsfi2 * npres_af[nid];
+                grad_pres_k[2] += dsfi3 * npres_af[nid];
                 // --- Gradient of velocity ---
-                grad_vel_k[0][0] += dsfi1 * nvel_k[nid + nuc];
-                grad_vel_k[0][1] += dsfi2 * nvel_k[nid + nuc];
-                grad_vel_k[0][2] += dsfi3 * nvel_k[nid + nuc];
-                grad_vel_k[1][0] += dsfi1 * nvel_k[nid + nvc];
-                grad_vel_k[1][1] += dsfi2 * nvel_k[nid + nvc];
-                grad_vel_k[1][2] += dsfi3 * nvel_k[nid + nvc];
-                grad_vel_k[2][0] += dsfi1 * nvel_k[nid + nwc];
-                grad_vel_k[2][1] += dsfi2 * nvel_k[nid + nwc];
-                grad_vel_k[2][2] += dsfi3 * nvel_k[nid + nwc];
+                grad_vel_k[0][0] += dsfi1 * nvel_af[nid + nuc];
+                grad_vel_k[0][1] += dsfi2 * nvel_af[nid + nuc];
+                grad_vel_k[0][2] += dsfi3 * nvel_af[nid + nuc];
+                grad_vel_k[1][0] += dsfi1 * nvel_af[nid + nvc];
+                grad_vel_k[1][1] += dsfi2 * nvel_af[nid + nvc];
+                grad_vel_k[1][2] += dsfi3 * nvel_af[nid + nvc];
+                grad_vel_k[2][0] += dsfi1 * nvel_af[nid + nwc];
+                grad_vel_k[2][1] += dsfi2 * nvel_af[nid + nwc];
+                grad_vel_k[2][2] += dsfi3 * nvel_af[nid + nwc];
             }
             // --- Deviatoric stress ---
             std::array<std::array<double, 3>, 3> dev_stress_k{};
@@ -266,26 +266,29 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                     double scwv = volp * dsfi3 * dsfj2 * t2;
 
                     if (nid == njd) {
-                        this->NS_.amat[ida + this->NS_.block_id[0]] += emd_lu;
-                        this->NS_.amat[ida + this->NS_.block_id[5]] += emd_lu;
-                        this->NS_.amat[ida + this->NS_.block_id[10]] += emd_lu;
+                        this->NS_.amat[ida + this->NS_.block_id[0]] += am * emd_lu;
+                        this->NS_.amat[ida + this->NS_.block_id[5]] += am * emd_lu;
+                        this->NS_.amat[ida + this->NS_.block_id[10]] += am * emd_lu;
                     }
-                    this->NS_.amat[ida + this->NS_.block_id[0]] += this->nb_para[0] * (su + scu);
-                    this->NS_.amat[ida + this->NS_.block_id[1]] += this->nb_para[0] * (suv + scuv);
-                    this->NS_.amat[ida + this->NS_.block_id[2]] += this->nb_para[0] * (suw + scuw);
-                    this->NS_.amat[ida + this->NS_.block_id[3]] -= esgx;
-                    this->NS_.amat[ida + this->NS_.block_id[4]] += this->nb_para[0] * (svu + scvu);
-                    this->NS_.amat[ida + this->NS_.block_id[5]] += this->nb_para[0] * (sv + scv);
-                    this->NS_.amat[ida + this->NS_.block_id[6]] += this->nb_para[0] * (svw + scvw);
-                    this->NS_.amat[ida + this->NS_.block_id[7]] -= esgy;
-                    this->NS_.amat[ida + this->NS_.block_id[8]] += this->nb_para[0] * (swu + scwu);
-                    this->NS_.amat[ida + this->NS_.block_id[9]] += this->nb_para[0] * (swv + scwv);
-                    this->NS_.amat[ida + this->NS_.block_id[10]] += this->nb_para[0] * (sw + scw);
-                    this->NS_.amat[ida + this->NS_.block_id[11]] -= esgz;
-                    this->NS_.amat[ida + this->NS_.block_id[12]] += this->nb_para[0] * Cow1 + this->nb_para[3] * egtx;
-                    this->NS_.amat[ida + this->NS_.block_id[13]] += this->nb_para[0] * Cow2 + this->nb_para[3] * egty;
-                    this->NS_.amat[ida + this->NS_.block_id[14]] += this->nb_para[0] * Cow3 + this->nb_para[3] * egtz;
-                    this->NS_.amat[ida + this->NS_.block_id[15]] += elt;
+                    this->NS_.amat[ida + this->NS_.block_id[0]] += this->nb_para[0] * af * (su + scu);
+                    this->NS_.amat[ida + this->NS_.block_id[1]] += this->nb_para[0] * af * (suv + scuv);
+                    this->NS_.amat[ida + this->NS_.block_id[2]] += this->nb_para[0] * af * (suw + scuw);
+                    this->NS_.amat[ida + this->NS_.block_id[3]] -= af * esgx;
+                    this->NS_.amat[ida + this->NS_.block_id[4]] += this->nb_para[0] * af * (svu + scvu);
+                    this->NS_.amat[ida + this->NS_.block_id[5]] += this->nb_para[0] * af * (sv + scv);
+                    this->NS_.amat[ida + this->NS_.block_id[6]] += this->nb_para[0] * af * (svw + scvw);
+                    this->NS_.amat[ida + this->NS_.block_id[7]] -= af * esgy;
+                    this->NS_.amat[ida + this->NS_.block_id[8]] += this->nb_para[0] * af * (swu + scwu);
+                    this->NS_.amat[ida + this->NS_.block_id[9]] += this->nb_para[0] * af * (swv + scwv);
+                    this->NS_.amat[ida + this->NS_.block_id[10]] += this->nb_para[0] * af * (sw + scw);
+                    this->NS_.amat[ida + this->NS_.block_id[11]] -= af * esgz;
+                    this->NS_.amat[ida + this->NS_.block_id[12]] += this->nb_para[0] * af * Cow1 //
+                                                                    + this->nb_para[3] * am * egtx;
+                    this->NS_.amat[ida + this->NS_.block_id[13]] += this->nb_para[0] * af * Cow2 //
+                                                                    + this->nb_para[3] * am * egty;
+                    this->NS_.amat[ida + this->NS_.block_id[14]] += this->nb_para[0] * af * Cow3 //
+                                                                    + this->nb_para[3] * am * egtz;
+                    this->NS_.amat[ida + this->NS_.block_id[15]] += af * elt;
                 }
 
                 std::array<double, 4> RHS_G{}, RHS_S{};
@@ -318,7 +321,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
 
     NodeVarComm(this->NS_.b_rhs, {nuc, nvc, nwc, npc});
 
-    this->AddInertialForceToRHS(this->NS_, naccel_k);
+    this->AddInertialForceToRHS(this->NS_, naccel_am);
 
     // ---- Diagional Scalling Prec ----
     if (!this->NS_.use_petsc) { this->NS_.BuildDiagonalPreconditioner(this->NS_.ndof); }
