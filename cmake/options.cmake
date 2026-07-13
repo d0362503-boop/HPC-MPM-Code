@@ -12,13 +12,6 @@
 # relevant add_subdirectory(...) lines in data/generate/CMakeLists.txt and
 # data/divide/CMakeLists.txt, respectively.
 
-# Solver method selection
-set(FLUID_METHOD "FEM" CACHE STRING "Fluid solver method: FEM or MPM")
-set_property(CACHE FLUID_METHOD PROPERTY STRINGS "FEM" "MPM")
-
-set(SOLID_METHOD "IMPLICIT" CACHE STRING "Solid solver method: EXPLICIT or IMPLICIT")
-set_property(CACHE SOLID_METHOD PROPERTY STRINGS "EXPLICIT" "IMPLICIT")
-
 # PETSc options
 option(BUILD_PETSC "Build PETSc from bundled Ext tarball" ON)
 set(PETSC_DIR "${CMAKE_SOURCE_DIR}/external/petsc" CACHE PATH "PETSc installation directory")

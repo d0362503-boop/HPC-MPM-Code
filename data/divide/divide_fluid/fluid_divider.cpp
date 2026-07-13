@@ -12,6 +12,11 @@ void FluidDivider::LoadBoundaryData(std::ifstream &infile) {
     this->fluid_points_.vbc.BCInput(infile);
     this->fluid_points_.wbc.BCInput(infile);
     this->fluid_points_.pbc.BCInput(infile);
+
+    // Inflow boundaries (node IDs only)
+    this->fluid_points_.uinfbc.BCInput(infile, false);
+    this->fluid_points_.vinfbc.BCInput(infile, false);
+    this->fluid_points_.winfbc.BCInput(infile, false);
 }
 
 void FluidDivider::LoadPointData(std::ifstream &infile) {
@@ -49,6 +54,14 @@ void FluidDivider::PartitionProcess(int rank_id) {
                      this->inxyminc_, this->inxymaxc_);
     this->BcRenumber(this->partition_points_.pbc, this->fluid_points_.pbc, xynodec, xynodecw,
                      this->inxyminc_, this->inxymaxc_);
+
+    // Inflow boundaries (node IDs only)
+    this->BcRenumber(this->partition_points_.uinfbc, this->fluid_points_.uinfbc, xynodec, xynodecw,
+                     this->inxyminc_, this->inxymaxc_, false);
+    this->BcRenumber(this->partition_points_.vinfbc, this->fluid_points_.vinfbc, xynodec, xynodecw,
+                     this->inxyminc_, this->inxymaxc_, false);
+    this->BcRenumber(this->partition_points_.winfbc, this->fluid_points_.winfbc, xynodec, xynodecw,
+                     this->inxyminc_, this->inxymaxc_, false);
 }
 
 void FluidDivider::WriteBoundaryData(std::ofstream &outfile) {
@@ -56,6 +69,11 @@ void FluidDivider::WriteBoundaryData(std::ofstream &outfile) {
     this->partition_points_.vbc.BCOutput(outfile, "vwbc");
     this->partition_points_.wbc.BCOutput(outfile, "wwbc");
     this->partition_points_.pbc.BCOutput(outfile, "hpbc");
+
+    // Inflow boundaries (node IDs only)
+    this->partition_points_.uinfbc.BCOutput(outfile, "uinfbc", false);
+    this->partition_points_.vinfbc.BCOutput(outfile, "vinfbc", false);
+    this->partition_points_.winfbc.BCOutput(outfile, "winfbc", false);
 }
 
 void FluidDivider::WritePointData(std::ofstream &outfile) {

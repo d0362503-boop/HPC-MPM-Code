@@ -23,7 +23,7 @@ void CrsMat::BuildCrsMat(int num_block) {
 
     int idimp2 = *max_element(begin(idimc), end(idimc));
 
-    int nmatptmp = nodec * pow((idimp2 + idimp2 + 1), 3);
+    int nmatptmp = nodec * std::pow((idimp2 + idimp2 + 1), 3);
     std::vector<int> matcolidp(nmatptmp, -1);
     VectorAssign(nodec + 1, this->matrow, -1);
 

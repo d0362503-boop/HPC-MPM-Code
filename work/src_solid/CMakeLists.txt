@@ -3,9 +3,8 @@
 # -----------------------------------------------------------------------------
 
 # Keep all candidate subdirectories visible here.
-# Uncomment exactly one case. This must stay consistent with SOLID_METHOD in
-# cmake/options.cmake because module/solid still uses that option to select the
-# matching solid mechanics implementation.
+# Uncomment exactly one case. The matching implementation is already compiled
+# into mpm_modules, so this choice only selects which driver main is linked.
 #
 # add_subdirectory(explicit)
 add_subdirectory(implicit)

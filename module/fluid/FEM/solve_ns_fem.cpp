@@ -152,7 +152,6 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
     std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(this->NS_.nmata, this->NS_.amat);
-    // VectorAssign(nodec * 4, this->NS_.adiag);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
     for (int m = 0; m < nelem; m++) {
         double t1 = this->tau1[m];
@@ -215,9 +214,9 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
                     double akpv = G_Weight * dsfi2 * ust_nj * t1;
                     double akpw = G_Weight * dsfi3 * ust_nj * t1;
                     // --- Diffusion Matrix (Galerkin part) ---
-                    double su = G_Weight * (2.0 * dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
-                    double sv = G_Weight * (dsfi1 * dsfj1 + 2.0 * dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
-                    double sw = G_Weight * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + 2.0 * dsfi3 * dsfj3) * rmuf;
+                    double su = G_Weight * (2.0e0 * dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
+                    double sv = G_Weight * (dsfi1 * dsfj1 + 2.0e0 * dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
+                    double sw = G_Weight * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + 2.0e0 * dsfi3 * dsfj3) * rmuf;
                     double suv = G_Weight * (dsfi2 * dsfj1) * rmuf;
                     double suw = G_Weight * (dsfi3 * dsfj1) * rmuf;
                     double svu = G_Weight * (dsfi1 * dsfj2) * rmuf;

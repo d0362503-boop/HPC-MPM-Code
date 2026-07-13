@@ -22,6 +22,7 @@ void StabilizedMPM::Particle2Node() {
 
     VectorAssign(nodec, this->nmass);
     VectorAssign(nodec, this->nvof);
+    VectorAssign(nodec, this->npres_old);
     VectorAssign(nodec * 3, this->nmome);
     VectorAssign(nodec * 3, this->nforce);
     for (int m = 0; m < nelem; m++) {
@@ -34,6 +35,7 @@ void StabilizedMPM::Particle2Node() {
                 double sfi = sf[ni];
                 this->StandardVarP2G(pid, nid, sfi, this->mass, this->nmass);
                 this->StandardVarP2G(pid, nid, sfi, this->vol, this->nvof);
+                this->StandardVarP2G(pid, nid, sfi, this->mass, this->pres, this->npres_old);
                 this->VelP2G(pid, nid, sfi);
                 this->AccelP2G(pid, nid, sfi);
             }
@@ -43,8 +45,12 @@ void StabilizedMPM::Particle2Node() {
 
     NodeVarComm(this->nmass, 0);
     NodeVarComm(this->nvof, 0);
+    NodeVarComm(this->npres_old, 0);
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
+
+    this->CutOffSmallNodalVar(this->npres_old, this->nmass, {0});
+    this->pbc.BCSetVal(0, this->npres_old);
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
     this->ApplyVelocityBC(this->nvel);
@@ -104,7 +110,7 @@ void StabilizedMPM::Node2Particle() {
 
     std::vector<std::array<double, 3>> delta_corr;
     delta_corr = this->DeltaCorrectionParticleShifting();
-    // particle_shifting_SPH_like(wp, wp_move, spring_force);
+    // delta_corr = this->SPHLikeParticleShifting();
 
     this->CommitParticleKinematics(accel_old, displ, delta_corr);
 

@@ -38,7 +38,7 @@ void FluidGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> g_wp.gamma_nb >> g_wp.beta_nb;
+    infile >> dt >> mtol >> g_wp.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -105,15 +105,30 @@ void FluidGenerator::BuildData() {
     g_wp.wbc.fbc.resize(nodec);
     g_wp.pbc.fbc.resize(nodec);
 
+    g_wp.uinfbc.nbc.resize(nodec);
+    g_wp.vinfbc.nbc.resize(nodec);
+    g_wp.winfbc.nbc.resize(nodec);
+    g_wp.uinfbc.fbc.resize(nodec);
+    g_wp.vinfbc.fbc.resize(nodec);
+    g_wp.winfbc.fbc.resize(nodec);
+
     g_wp.ubc.ibc = 0;
     g_wp.vbc.ibc = 0;
     g_wp.wbc.ibc = 0;
     g_wp.pbc.ibc = 0;
+    g_wp.uinfbc.ibc = 0;
+    g_wp.vinfbc.ibc = 0;
+    g_wp.winfbc.ibc = 0;
     for (int k = 0; k < znodec; k++) {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
                 int id = i + xnodec * j + xnodec * ynodec * k;
-                if (i == 0 || i == xnodec - 1) {
+                if ((i != 0 || i != xnodec - 1) && k == znodec - 1) {
+                    g_wp.ubc.nbc[g_wp.ubc.ibc] = id;
+                    g_wp.ubc.fbc[g_wp.ubc.ibc] = 1.0e0;
+                    g_wp.ubc.ibc++;
+                }
+                if (i == 0 || i == xnodec - 1 || k == 0) {
                     g_wp.ubc.nbc[g_wp.ubc.ibc] = id;
                     g_wp.ubc.fbc[g_wp.ubc.ibc] = 0.0e0;
                     g_wp.ubc.ibc++;
@@ -123,10 +138,15 @@ void FluidGenerator::BuildData() {
                     g_wp.vbc.fbc[g_wp.vbc.ibc] = 0.0e0;
                     g_wp.vbc.ibc++;
                 }
-                if (k == 0 || k == znodec - 1) {
+                if (k == 0 || k == znodec - 1 || i == 0 || i == xnodec - 1) {
                     g_wp.wbc.nbc[g_wp.wbc.ibc] = id;
                     g_wp.wbc.fbc[g_wp.wbc.ibc] = 0.0e0;
                     g_wp.wbc.ibc++;
+                }
+                if (i == 0 && k == 0) {
+                    g_wp.pbc.nbc[g_wp.pbc.ibc] = id;
+                    g_wp.pbc.fbc[g_wp.pbc.ibc] = 0.0e0;
+                    g_wp.pbc.ibc++;
                 }
             }
         }
@@ -149,14 +169,14 @@ void FluidGenerator::BuildData() {
                         double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ip++) {
                             double xp = ecx + dec2p[ip][0];
-                            if (zp <= 1.0e0) {
-                                g_wp.coord[g_wp.num][0] = xp;
-                                g_wp.coord[g_wp.num][1] = yp;
-                                g_wp.coord[g_wp.num][2] = zp;
-                                g_wp.matid[g_wp.num] = 0;
-                                g_wp.id[g_wp.num] = g_wp.num;
-                                g_wp.num++;
-                            }
+                            // if (zp <= 1.0e0) {
+                            g_wp.coord[g_wp.num][0] = xp;
+                            g_wp.coord[g_wp.num][1] = yp;
+                            g_wp.coord[g_wp.num][2] = zp;
+                            g_wp.matid[g_wp.num] = 0;
+                            g_wp.id[g_wp.num] = g_wp.num;
+                            g_wp.num++;
+                            // }
                         }
                     }
                 }
@@ -170,10 +190,15 @@ void FluidGenerator::BuildData() {
 }
 
 void FluidGenerator::WriteBcData(std::ofstream &outfile) {
-    g_wp.ubc.BCOutput(outfile, "uwbc");
-    g_wp.vbc.BCOutput(outfile, "vwbc");
-    g_wp.wbc.BCOutput(outfile, "wwbc");
-    g_wp.pbc.BCOutput(outfile, "hpbc");
+    g_wp.ubc.BCOutput(outfile, "ubc");
+    g_wp.vbc.BCOutput(outfile, "vbc");
+    g_wp.wbc.BCOutput(outfile, "wbc");
+    g_wp.pbc.BCOutput(outfile, "pbc");
+
+    // Inflow boundaries (node IDs only)
+    g_wp.uinfbc.BCOutput(outfile, "uinfbc", false);
+    g_wp.vinfbc.BCOutput(outfile, "vinfbc", false);
+    g_wp.winfbc.BCOutput(outfile, "winfbc", false);
 }
 
 void FluidGenerator::WriteTextOutputs() {
@@ -181,7 +206,7 @@ void FluidGenerator::WriteTextOutputs() {
     this->WriteGridDataFile("griddata.txt");
 
     std::cout << "Making water point file" << "\n";
-    std::ofstream pointfile = OpenOutputFile("wpdata.txt");
+    std::ofstream pointfile = OpenOutputFile("pointdata.txt");
     pointfile << std::setw(10) << g_wp.num << "\n";
     OutputVector(pointfile, g_wp.num, g_wp.coord);
     for (int i = 0; i < g_wp.num; i++) {

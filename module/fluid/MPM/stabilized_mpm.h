@@ -29,7 +29,7 @@ class StabilizedMPM : public MaterialPoint {
         this->ode_order = 2;
         this->NS_.ndof = 4;
         this->NS_.FEM_flag = false;
-        this->NS_.use_petsc = true;
+        this->NS_.use_petsc = false;
         this->NS_.amg_rebuild_freq = 1; // rebuild AMG every step
         this->NS_.owner_ = this;
     }
@@ -114,16 +114,18 @@ class StabilizedMPM : public MaterialPoint {
         return;
     };
 
-    /** @brief Compute VMS/PSPG stabilization coefficients. */
-    void MakNSStabCoeff();
+    /** @brief Compute VMS/PSPG stabilization coefficients.
+     * @param nvel_k   Nodal velocity vector.
+     */
+    void MakNSStabCoeff(const std::vector<double> &nvel_k);
 
     /**
      * @brief Assemble stabilized Navier-Stokes matrix and RHS.
      * @param naccel_k Nodal acceleration vector.
      * @param nvel_k   Nodal velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &naccel_k,
-                          const std::vector<double> &nvel_k);
+    void AssembleNSSystem(const std::vector<double> &nvel_k, //
+                          const std::vector<double> &naccel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;
@@ -137,8 +139,7 @@ class StabilizedMPM : public MaterialPoint {
      * @param ifp   Inflow particle buffer.
      * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp,
-                                          const BoundaryCondition &infbc) override;
+    void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 
     /**
      * @brief Generate inflow particles by cloning existing particles.
@@ -146,8 +147,7 @@ class StabilizedMPM : public MaterialPoint {
      * @param ifp   Inflow particle buffer.
      * @param infbc Inflow boundary condition.
      */
-    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp,
-                                           const BoundaryCondition &infbc) override;
+    void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 };
 
 } // namespace stabilizedmpm

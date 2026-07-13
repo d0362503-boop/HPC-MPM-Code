@@ -121,7 +121,7 @@ class MaterialPoint {
      * @brief Compute the nodal acceleration at the Generalized-α intermediate time level.
      * @return Vector of intermediate accelerations sized to `nodec * 3`.
      */
-    std::vector<double> GeneralizedAlphaNodeAccelUpdate() const;
+    std::vector<double> GeneralizedAlphaNodeAccelUpdate() const noexcept;
 
     // --- Newmark-β part ---
     double gamma_nb, beta_nb;
@@ -340,6 +340,12 @@ class MaterialPoint {
      * @return Correction displacement vector for each particle.
      */
     std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
+
+    /**
+     * @brief Compute an SPH-like spring-force particle-shifting correction.
+     * @return Correction displacement vector for each particle.
+     */
+    std::vector<std::array<double, 3>> SPHLikeParticleShifting();
     // ----------------------------------
 
     // ----- Control point variable -----

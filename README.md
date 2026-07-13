@@ -75,8 +75,6 @@ Active build options (most are defined in `cmake/options.cmake`; `MPM_ENABLE_NAT
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `FLUID_METHOD` | `FEM` | `FEM` or `MPM` |
-| `SOLID_METHOD` | `IMPLICIT` | `EXPLICIT` or `IMPLICIT` |
 | `MPM_ENABLE_NATIVE_ARCH` | `ON` | Enable `-march=native` |
 | `BUILD_PETSC` | `ON` | Build PETSc from bundled tarball |
 | `USE_HDF5` | `ON` | Enable VTK HDF5 output |
@@ -99,7 +97,7 @@ You must also keep `MPM_main.cpp` consistent. For example, with `src_fsi` select
 MPMBlockFSI();
 ```
 
-`work/src_solid/CMakeLists.txt` also requires its uncommented subdirectory to match `SOLID_METHOD`.
+`work/src_solid/CMakeLists.txt` also requires uncommenting exactly one subdirectory (`explicit` or `implicit`).
 
 ### Selecting data tools
 
@@ -128,17 +126,17 @@ cmake -S . -B build
 cmake --build build -j8
 ```
 
-Fluid build:
+Fluid build (select `src_fluid` in `work/CMakeLists.txt`):
 
 ```bash
-cmake -S . -B build -DFLUID_METHOD=FEM
+cmake -S . -B build
 cmake --build build -j8
 ```
 
-Solid implicit build:
+Solid implicit build (select `src_solid` and uncomment `implicit` in `work/src_solid/CMakeLists.txt`):
 
 ```bash
-cmake -S . -B build -DSOLID_METHOD=IMPLICIT
+cmake -S . -B build
 cmake --build build -j8
 ```
 

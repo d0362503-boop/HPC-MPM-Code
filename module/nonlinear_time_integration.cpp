@@ -26,7 +26,7 @@ void MaterialPoint::GeneralizedAlphaParaSet() {
     return;
 }
 
-std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() const {
+std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() const noexcept {
     double para1 = 1.0e0 / (this->gamma_nb * dt);
     double para2 = (1.0e0 - this->gamma_nb) / this->gamma_nb;
 
@@ -82,14 +82,24 @@ void MaterialPoint::CommitParticleKinematics(const std::vector<std::array<double
                                              const std::vector<std::array<double, 3>> &delta_corr) {
     const bool has_shift = !delta_corr.empty();
     for (int n = 0; n < this->num; n++) {
+        std::array<double, 3> advected_coord;
+        bool advected_outside = false;
         for (int i = 0; i < 3; i++) {
             if (this->solswitch == MapScheme::FLIP) {
                 this->vel[n][i] += dt * ((1.0e0 - this->gamma_nb) * accel_old[n][i] //
                                          + this->gamma_nb * this->accel[n][i]);
             }
-            this->coord[n][i] += disp[n][i];
-            // ---- particle shifting ----
-            if (has_shift) this->coord[n][i] += delta_corr[n][i];
+            advected_coord[i] = this->coord[n][i] + disp[n][i];
+            this->coord[n][i] = advected_coord[i];
+            if (advected_coord[i] < xyminw[i] || advected_coord[i] > xymaxw[i]) { advected_outside = true; }
+        }
+
+        // Reject shifting-induced boundary crossings.
+        if (has_shift && !advected_outside) {
+            for (int i = 0; i < 3; i++) {
+                double shifted_coord = advected_coord[i] + delta_corr[n][i];
+                if (shifted_coord > xyminw[i] && shifted_coord < xymaxw[i]) { this->coord[n][i] = shifted_coord; }
+            }
         }
     }
 

@@ -8,7 +8,7 @@ void ConstitutiveModel::MatRigid(std::array<double, 6> &stress) {
 
     for (int n = 0; n < 6; n++) { stress[n] = 0.0e0; }
 
-    if (this->implicit_flag == true) { this->stif_mat = {}; }
+    if (this->implicit_flag) { this->stif_mat = {}; }
 
     return;
 }
@@ -43,7 +43,7 @@ void ConstitutiveModel::MatLinElast(std::array<double, 6> &stress,
 
     for (int n = 0; n < 6; n++) { stress[n] += dsig[n]; }
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
         this->stif_mat = {};
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
@@ -67,7 +67,7 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
 
     double lmd = nu * yng / ((1.0e0 + nu) * (1.0e0 - 2.0e0 * nu));
     double mu = yng / (2.0e0 * (1.0e0 + nu));
-    double lnjac = log(jac_bar);
+    double lnjac = std::log(jac_bar);
 
     std::array<std::array<double, 3>, 3> be{};
     for (int i = 0; i < 3; ++i) {
@@ -88,7 +88,7 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
     stress[4] = sig[0][2];
     stress[5] = sig[0][1];
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
         // --- Material Stiffness ---
         std::array<double, 2> CC{};
         CC[0] = lmd / jac;                // --- lamda' ---
@@ -153,7 +153,7 @@ void ConstitutiveModel::MatStVk(std::array<double, 6> &stress, const std::array<
     stress[4] = sig[0][2];
     stress[5] = sig[0][1];
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
         // --- Material Stiffness ---
         std::array<double, 2> CC{};
         CC[0] = lmd / jac; // --- lamda' ---
@@ -185,7 +185,7 @@ void ConstitutiveModel::MatStVk(std::array<double, 6> &stress, const std::array<
 }
 
 void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std::array<std::array<double, 3>, 3> &FF,
-                                        const std::vector<double> &mat_prop, double jac) {
+                                        const std::vector<double> &mat_prop, double jac, double jac_bar) {
 
     double c1 = mat_prop[0];
     double c2 = mat_prop[1];
@@ -193,7 +193,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
 
     std::array<std::array<double, 3>, 3> FF_iso{};
     for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) { FF_iso[i][j] = 1.0e0 / std::cbrt(jac) * FF[i][j]; }
+        for (int j = 0; j < 3; ++j) { FF_iso[i][j] = 1.0e0 / std::cbrt(jac_bar) * FF[i][j]; }
     }
 
     std::array<std::array<double, 3>, 3> be_iso{};
@@ -211,8 +211,8 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
     }
 
     double first_inv = TraceMat3(be_iso);
-    double second_inv = 0.5e0 * (pow(first_inv, 2) - TraceMat3(be2_iso));
-    double hp = bulk * log(jac) / jac;
+    double second_inv = 0.5e0 * (std::pow(first_inv, 2) - TraceMat3(be2_iso));
+    double hp = bulk * std::log(jac_bar) / jac;
 
     std::array<std::array<double, 3>, 3> sig{};
     for (int i = 0; i < 3; ++i) {
@@ -229,7 +229,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
     stress[4] = sig[0][2];
     stress[5] = sig[0][1];
 
-    if (this->implicit_flag == true) {
+    if (this->implicit_flag) {
 
         std::array<std::array<double, 3>, 3> dev_sig{};
         for (int i = 0; i < 3; i++) {
@@ -298,7 +298,7 @@ void ConstitutiveModel::UpdateStress(int model_type, std::array<double, 6> &stre
     } else if (model_type == 2) { // --- St.Venant-Kirchhoff ---
         this->MatStVk(stress, F, mat_prop, jac);
     } else if (model_type == 3) { // --- Mooney-Rivlin ---
-        this->MatMooneyRivlin(stress, F, mat_prop, jac);
+        this->MatMooneyRivlin(stress, F, mat_prop, jac, jac_bar);
     }
 
     return;

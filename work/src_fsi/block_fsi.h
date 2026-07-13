@@ -82,5 +82,5 @@ class BlockFSI {
     /**
      * @brief Specifically for Turek CFD problem (Cylinder flow)
      */
-    void CalDragLiftCoeffBySurfaceTraction();
+    void CalDragLiftCoeffForTurekCFD();
 };
