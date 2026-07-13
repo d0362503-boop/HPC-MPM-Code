@@ -219,7 +219,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
             if (this->Fbar_flag) {
                 this->UpdateVolume(pid, this->det_def_grad_bar[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad_bar, this->def_grad_bar,
-                                              this->delta_def_grad);
+                                              this->delta_def_grad_bar);
             } else {
                 this->UpdateVolume(pid, this->det_def_grad[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad,

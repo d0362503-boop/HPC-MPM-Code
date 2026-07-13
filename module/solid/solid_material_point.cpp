@@ -30,6 +30,7 @@ void SolidMaterialPointBase::InitializePointData() {
     VectorAssign(this->num, this->def_grad);
 
     if (this->Fbar_flag) {
+        VectorAssign(this->num, this->delta_def_grad_bar);
         VectorAssign(this->num, this->det_def_grad_bar, 1.0e0);
         VectorAssign(this->num, this->def_grad_bar);
     }
@@ -72,8 +73,10 @@ void SolidMaterialPointBase::Moveparticle() {
     this->par_comm_.PointVarComm(this->num, this->def_grad); // --- Point deformation gradient ---
 
     if (Fbar_flag) {
-        // ---- Point determinant of deformation gradient bar ----
+        // --- Point determinant of deformation gradient bar ---
         this->par_comm_.PointVarComm(this->num, this->det_def_grad_bar);
+        // --- Point delta deformation gradient bar ---
+        this->par_comm_.PointVarComm(this->num, this->delta_def_grad_bar);
         // --- Point deformation gradient bar ---
         this->par_comm_.PointVarComm(this->num, this->def_grad_bar);
     }

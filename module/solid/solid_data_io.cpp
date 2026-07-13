@@ -34,7 +34,10 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
     }
     for (int ip = 0; ip < this->num; ip++) {
         this->def_grad[ip] = eye_mat;
-        if (this->Fbar_flag) this->def_grad_bar[ip] = eye_mat;
+        if (this->Fbar_flag) {
+            this->def_grad_bar[ip] = eye_mat;
+            this->delta_def_grad_bar[ip] = eye_mat;
+        }
         this->vol[ip] = this->vol0[ip];
     }
 
