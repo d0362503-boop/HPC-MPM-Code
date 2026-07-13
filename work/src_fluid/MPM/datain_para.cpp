@@ -35,7 +35,7 @@ void StabilizedMPM::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->gamma_nb >> this->beta_nb;
+    infile >> dt >> mtol >> this->spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');

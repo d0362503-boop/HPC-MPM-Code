@@ -340,6 +340,12 @@ class MaterialPoint {
      * @return Correction displacement vector for each particle.
      */
     std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
+
+    /**
+     * @brief Compute an SPH-like spring-force particle-shifting correction.
+     * @return Correction displacement vector for each particle.
+     */
+    std::vector<std::array<double, 3>> SPHLikeParticleShifting();
     // ----------------------------------
 
     // ----- Control point variable -----

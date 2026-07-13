@@ -19,6 +19,6 @@ target_link_libraries(mpm_divide_common
 
 # Keep all candidate subdirectories visible here.
 # Uncomment exactly the cases you want to build.
-# add_subdirectory(divide_fluid fluid)
+add_subdirectory(divide_fluid fluid)
 # add_subdirectory(divide_solid solid)
-add_subdirectory(divide_fsi fsi)
+# add_subdirectory(divide_fsi fsi)
