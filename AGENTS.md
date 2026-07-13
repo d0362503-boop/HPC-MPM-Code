@@ -27,7 +27,7 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
 - **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
-- **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h`, selected by `solswitch` string.
+- **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h` / `map_and_interpolate.cpp`, selected by `solswitch` (`MapScheme` enum parsed from the input string).
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Parallel ownership and inactive-row handling are now explicit; see `module/solver/README.md`.
 
 ## 4. Code Style
