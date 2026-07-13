@@ -81,6 +81,8 @@ std::vector<std::array<double, 3>> MaterialPoint::SPHLikeParticleShifting() {
                 mxy[i] = -1;
             } else if (std::abs(this->coord[ip][i] - xymax[i]) < radius) {
                 mxy[i] = 1;
+            } else {
+                mxy[i] = 0;
             }
         }
 
