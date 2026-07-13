@@ -23,6 +23,10 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 - Data tools (`makinput_*`, `makdivide_*`) should be created with `mpm_add_data_tool()` / `mpm_add_divide_tool()` from `cmake/MPMTools.cmake` so link rules stay consistent.
 - The configuration stage prints an `MPM Configuration Summary` showing compiler, build type, active solver, MPI, PETSc, HDF5, and ZLIB.
 
+`build/file.dat` is read from the `build/` working directory at runtime.
+Paths inside `file.dat` should point to files under `build/` such as `./data/generate/...`, `./data/divide/...`, and `./res/...`.
+Do not point `file.dat` back at source-tree paths under `../data/...`.
+
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
