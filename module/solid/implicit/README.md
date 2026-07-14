@@ -123,7 +123,7 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 - Predict velocity / acceleration with Newmark-β
 - Commit nodal kinematics (`CommitNodalKinematics`)
 - G2P: update particle displacement gradient (`UpdateDefGrad`), stress, velocity, acceleration
-- Update particle position: `coord += disp + delta_corr`
+- Update particle position: `coord += disp + disp_corr`
 - Particle shifting (`DeltaCorrectionParticleShifting`) for uniform distribution
 
 ---

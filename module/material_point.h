@@ -196,11 +196,11 @@ class MaterialPoint {
      * particle-shifting correction.
      * @param accel_old Nodal/particle acceleration from the previous step.
      * @param disp      Nodal displacement increment applied to particle coordinates.
-     * @param delta_corr Optional particle-shifting correction displacement.
+     * @param disp_corr Optional particle-shifting correction displacement.
      */
     void CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                   const std::vector<std::array<double, 3>> &disp,
-                                  const std::vector<std::array<double, 3>> &delta_corr = {});
+                                  const std::vector<std::array<double, 3>> &disp_corr = {});
 
     /**
      * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
@@ -337,15 +337,26 @@ class MaterialPoint {
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
+     *
+     * Based on the particle shifting scheme in Chandra et al.,
+     * "Stabilized mixed material point method for incompressible fluid flow analysis,"
+     * Computer Methods in Applied Mechanics and Engineering, 419, 116644, 2024.
+     *
      * @return Correction displacement vector for each particle.
      */
     std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
 
     /**
-     * @brief Compute an SPH-like spring-force particle-shifting correction.
+     * @brief Compute a pairwise repulsive particle-shifting correction.
+     *
+     * Based on the isotropic position correction in Ando et al.,
+     * "Preserving Fluid Sheets with Adaptively Sampled Anisotropic Particles,"
+     * IEEE Transactions on Visualization and Computer Graphics, 2012,
+     * Sec. 5.2, Eq. (18).
+     *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> SPHLikeParticleShifting();
+    std::vector<std::array<double, 3>> PairwiseRepulsiveParticleShifting();
     // ----------------------------------
 
     // ----- Control point variable -----

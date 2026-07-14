@@ -17,7 +17,7 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 
 Shared helpers live outside this directory:
 
-- `module/particle_shifting.cpp` — `DeltaCorrectionParticleShifting()` and `SPHLikeParticleShifting()`.
+- `module/particle_shifting.cpp` — `DeltaCorrectionParticleShifting()` and `PairwiseRepulsiveParticleShifting()`.
 - `module/nonlinear_time_integration.cpp` — `PredictNewmarkBetaVelAndAccel`, `CommitNodalKinematics`, `CommitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
@@ -136,15 +136,15 @@ The MPM fluid default is the native solver; set `NS_.use_petsc = true` to use PE
 2. Reset particle velocity/acceleration and TPIC/APIC state.
 3. Interpolate pressure, displacement, acceleration, and velocity back to particles (scheme-aware).
 4. Recompute APIC `inv_Dmat` if needed.
-5. Compute a particle-shifting correction (`DeltaCorrectionParticleShifting` by default; `SPHLikeParticleShifting` is available but currently disabled).
+5. Compute a particle-shifting correction (`PairwiseRepulsiveParticleShifting` is currently active; `DeltaCorrectionParticleShifting` is available but commented out in `Node2Particle`).
 6. Commit particle kinematics (`CommitParticleKinematics`), which updates FLIP velocity, advects positions, and optionally applies the shifting correction while rejecting shifts that cross the domain boundary.
 
 ## Particle Shifting
 
 Two particle-shifting strategies are implemented in `module/particle_shifting.cpp`:
 
-- **`DeltaCorrectionParticleShifting()`** — default.  Builds a volume-deficit field on control points and returns a correction displacement that pushes particles away from over-dense regions.
-- **`SPHLikeParticleShifting()`** — SPH-like spring force between neighboring particles within a local radius.  Currently commented out in `Node2Particle`.
+- **`PairwiseRepulsiveParticleShifting()`** — currently active in `Node2Particle`.  Computes a pairwise repulsive correction between neighboring particles within a local support radius and returns a correction displacement.
+- **`DeltaCorrectionParticleShifting()`** — alternative.  Builds a volume-deficit field on control points and returns a correction displacement that pushes particles away from over-dense regions.  Currently commented out in `Node2Particle`.
 
 ## Inflow Particles
 
