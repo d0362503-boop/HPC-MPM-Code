@@ -116,7 +116,7 @@ For each particle:
 1. Evaluate shape functions and gradients at the particle position.
 2. Apply `ImplicitDsfCorr` to correct gradients for the deformed configuration.
 3. Interpolate velocity, acceleration, pressure, and pressure gradient to the α-level using `alpha_f` / `alpha_m`.
-4. Compute the deviatoric stress from the velocity gradient.
+4. Compute the total stress tensor `stress_k` from the velocity gradient: the deviatoric part plus `-pres_k` on the diagonal.
 5. Accumulate the 4×4 block matrix into `NS_.amat` and the RHS into `NS_.b_rhs`.
 
 The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `AddInertialForceToRHS` adds the inertial contribution.
@@ -143,7 +143,7 @@ The MPM fluid default is the native solver; set `NS_.use_petsc = true` to use PE
 
 Two particle-shifting strategies are implemented in `module/particle_shifting.cpp`:
 
-- **`PairwiseRepulsiveParticleShifting()`** — currently active in `Node2Particle`.  Computes a pairwise repulsive correction between neighboring particles within a local support radius and returns a correction displacement.
+- **`PairwiseRepulsiveParticleShifting()`** — currently active in `Node2Particle`.  Computes a pairwise repulsive correction between neighboring particles within a local support radius and returns a correction displacement.  It uses a uniform spatial-hash grid with cell size `dxy` and a 3×3×3 cell neighbor search to avoid the $O(N^2)$ all-pairs cost; per-particle `support = cbrt(vol[ip])` is still used for the actual distance filter and for deciding which boundary particles to send as MPI ghosts.
 - **`DeltaCorrectionParticleShifting()`** — alternative.  Builds a volume-deficit field on control points and returns a correction displacement that pushes particles away from over-dense regions.  Currently commented out in `Node2Particle`.
 
 ## Inflow Particles

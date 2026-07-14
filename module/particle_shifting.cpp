@@ -69,7 +69,9 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsiveParticleShift
     std::vector<std::array<double, 3>> disp_corr;
     VectorAssign(this->num, disp_corr);
 
-    // --- adjacent ghost point communication ---
+    // -------------------------------------------------------------------------
+    // 1. Ghost particle communication (per-particle support)
+    // -------------------------------------------------------------------------
     std::vector<std::vector<int>> send_ids(isb);
     for (int ip = 0; ip < this->num; ip++) {
         const double support = std::cbrt(this->vol[ip]);
@@ -129,7 +131,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsiveParticleShift
     this->par_comm_.nrps = 0;
     for (int i = 0; i < isb; i++) { this->par_comm_.nrps += this->par_comm_.nrp[i]; }
 
-    std::vector<std::array<double, 3>> bufs(this->par_comm_.nmps), bufr(this->par_comm_.nrps);
+    std::vector<std::array<double, 3>> bufs(this->par_comm_.nmps);
     int sip = 0;
     for (int i = 0; i < isb; i++) {
         for (int ip = 0; ip < this->par_comm_.nsp[i]; ip++) {
@@ -139,36 +141,113 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsiveParticleShift
         sip += this->par_comm_.nsp[i];
     }
 
+    std::vector<std::array<double, 3>> bufr(this->par_comm_.nrps);
     this->par_comm_.PointVarSendrecv(bufs, bufr, 1);
-    // ------
 
-    // Combine local and ghost coordinates into a single neighbor source list.
-    std::vector<std::array<double, 3>> all_coords = this->coord;
-    all_coords.insert(all_coords.end(), bufr.begin(), bufr.end());
-    const int total_neighbors = static_cast<int>(all_coords.size());
+    const int nghost = this->par_comm_.nrps;
+    const int np_total = this->num + nghost;
+
+    // -------------------------------------------------------------------------
+    // 2. Spatial hash grid using dxy as cell size, handling quasi-3D
+    // -------------------------------------------------------------------------
+    std::array<double, 3> box_min{};
+    std::array<double, 3> box_max{};
+    std::array<int, 3> ncells{};
+    for (int d = 0; d < 3; d++) {
+        bool has_lower_ghost = (xymin[d] > xyminw[d]);
+        bool has_upper_ghost = (xymax[d] < xymaxw[d]);
+
+        box_min[d] = xymin[d] - (has_lower_ghost ? dxy[d] : 0.0e0);
+        box_max[d] = xymax[d] + (has_upper_ghost ? dxy[d] : 0.0e0);
+
+        ncells[d] = xyelem[d];
+        if (has_lower_ghost) { ncells[d]++; }
+        if (has_upper_ghost) { ncells[d]++; }
+        if (ncells[d] < 1) { ncells[d] = 1; }
+    }
+    const int ncell_total = ncells[0] * ncells[1] * ncells[2];
+
+    std::vector<int> cell_head(ncell_total, -1);
+    std::vector<int> next_particle(np_total, -1);
+
+    auto Particle2Cell = [&](const std::array<double, 3> &x) {
+        int cx = static_cast<int>((x[0] - box_min[0]) / dxy[0]);
+        int cy = static_cast<int>((x[1] - box_min[1]) / dxy[1]);
+        int cz = static_cast<int>((x[2] - box_min[2]) / dxy[2]);
+
+        cx = std::max(0, std::min(cx, ncells[0] - 1));
+        cy = std::max(0, std::min(cy, ncells[1] - 1));
+        cz = std::max(0, std::min(cz, ncells[2] - 1));
+
+        return cx + cy * ncells[0] + cz * ncells[0] * ncells[1];
+    };
+
+    auto InsertParticle = [&](int pid, const std::array<double, 3> &x) {
+        int cell_id = Particle2Cell(x);
+        next_particle[pid] = cell_head[cell_id];
+        cell_head[cell_id] = pid;
+    };
+
+    for (int ip = 0; ip < this->num; ip++) { InsertParticle(ip, this->coord[ip]); }
+    for (int jp = 0; jp < nghost; jp++) { InsertParticle(this->num + jp, bufr[jp]); }
+
+    // -------------------------------------------------------------------------
+    // 3. 3x3x3 cell search with per-particle support
+    // -------------------------------------------------------------------------
     const double gamma_s = 50.0e0;
 
     for (int ip = 0; ip < this->num; ip++) {
         const double support = std::cbrt(this->vol[ip]);
         const double support_sq = support * support;
         const std::array<double, 3> &pi = this->coord[ip];
+
+        int base_cell = Particle2Cell(pi);
+        int cx = base_cell % ncells[0];
+        int tmp = base_cell / ncells[0];
+        int cy = tmp % ncells[1];
+        int cz = tmp / ncells[1];
+
         std::array<double, 3> sum{0.0e0, 0.0e0, 0.0e0};
 
-        for (int jp = 0; jp < total_neighbors; jp++) {
-            if (jp == ip) { continue; }
-            const std::array<double, 3> &pj = all_coords[jp];
-            const double dx = pj[0] - pi[0];
-            const double dy = pj[1] - pi[1];
-            const double dz = pj[2] - pi[2];
-            const double norm_sq = dx * dx + dy * dy + dz * dz;
-            if (norm_sq <= mtol * mtol || norm_sq >= support_sq) { continue; }
+        for (int dx = -1; dx <= 1; dx++) {
+            int nx = cx + dx;
+            if (nx < 0 || nx >= ncells[0]) { continue; }
+            for (int dy = -1; dy <= 1; dy++) {
+                int ny = cy + dy;
+                if (ny < 0 || ny >= ncells[1]) { continue; }
+                for (int dz = -1; dz <= 1; dz++) {
+                    int nz = cz + dz;
+                    if (nz < 0 || nz >= ncells[2]) { continue; }
 
-            const double norm = std::sqrt(norm_sq);
-            const double smooth_weight = 1.0e0 - norm_sq / support_sq;
-            const double inv_norm = 1.0e0 / norm;
-            sum[0] += dx * inv_norm * smooth_weight;
-            sum[1] += dy * inv_norm * smooth_weight;
-            sum[2] += dz * inv_norm * smooth_weight;
+                    int cell_id = nx + ny * ncells[0] + nz * ncells[0] * ncells[1];
+                    int jp = cell_head[cell_id];
+
+                    while (jp != -1) {
+                        if (jp == ip) {
+                            jp = next_particle[jp];
+                            continue;
+                        }
+
+                        const std::array<double, 3> &pj = (jp < this->num) ? this->coord[jp] : bufr[jp - this->num];
+
+                        const double ddx = pj[0] - pi[0];
+                        const double ddy = pj[1] - pi[1];
+                        const double ddz = pj[2] - pi[2];
+                        const double norm_sq = ddx * ddx + ddy * ddy + ddz * ddz;
+
+                        if (norm_sq > mtol * mtol && norm_sq < support_sq) {
+                            const double norm = std::sqrt(norm_sq);
+                            const double smooth_weight = 1.0e0 - norm_sq / support_sq;
+                            const double inv_norm = 1.0e0 / norm;
+                            sum[0] += ddx * inv_norm * smooth_weight;
+                            sum[1] += ddy * inv_norm * smooth_weight;
+                            sum[2] += ddz * inv_norm * smooth_weight;
+                        }
+
+                        jp = next_particle[jp];
+                    }
+                }
+            }
         }
 
         const double scale = -dt * gamma_s * support;
