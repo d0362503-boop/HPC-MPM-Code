@@ -6,14 +6,14 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 
 ## File Inventory
 
-| File | Responsibility |
-|------|----------------|
-| `stabilized_mpm.h` | `StabilizedMPM` class declaration, inflow buffer `ifp`, NS system owner, stabilization selector |
-| `var_trans_fluid.cpp` | `Particle2Node` (P2G) and `Node2Particle` (G2P), including APIC `Dmat`/`InvDmat` and particle-shifting call |
-| `solve_ns_mpm.cpp` | Newton–Raphson loop, VMS/PSPG stabilization coefficients, NS assembly/solve |
-| `fluid_point_inflow.cpp` | Empty-mesh and filled-mesh inflow particle generation |
-| `fluid_material_point.cpp` | `InitializePointData`, `Moveparticle` (migration + appending inflow particles) |
-| `fluid_mpm_data_io.cpp` | Input/output of BC/point data and plain-text restart |
+| File                       | Responsibility                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `stabilized_mpm.h`         | `StabilizedMPM` class declaration, inflow buffer `ifp`, NS system owner, stabilization selector             |
+| `var_trans_fluid.cpp`      | `Particle2Node` (P2G) and `Node2Particle` (G2P), including APIC `Dmat`/`InvDmat` and particle-shifting call |
+| `solve_ns_mpm.cpp`         | Newton–Raphson loop, VMS/PSPG stabilization coefficients, NS assembly/solve                                 |
+| `fluid_point_inflow.cpp`   | Empty-mesh and filled-mesh inflow particle generation                                                       |
+| `fluid_material_point.cpp` | `InitializePointData`, `MoveParticle` (migration + inflow), `MigrateParticleData`, `ApplyDLB`, `RebuildBoundaryConditions` |
+| `fluid_mpm_data_io.cpp`    | Input/output of BC/point data and plain-text restart; captures global BC IDs when `do_dlb` is on                     |
 
 Shared helpers live outside this directory:
 
@@ -35,12 +35,13 @@ MaterialPoint (base)
 
 `StabilizedMPM` differs from the FEM fluid path in a few key defaults:
 
-| Setting | MPM fluid default | FEM fluid default |
-|---------|-------------------|-------------------|
-| `ode_order` | `2` (displacement/velocity/acceleration) | `1` (velocity only) |
-| `NS_.FEM_flag` | `false` | `true` |
-| `NS_.use_petsc` | `false` (native `GPBiCGSafe`) | `true` (PETSc/HYPRE) |
-| `NS_.amg_rebuild_freq` | `1` | `20` |
+| Setting                | MPM fluid default                        | FEM fluid default    |
+| ---------------------- | ---------------------------------------- | -------------------- |
+| `ode_order`            | `2` (displacement/velocity/acceleration) | `1` (velocity only)  |
+| `NS_.FEM_flag`         | `false`                                  | `true`               |
+| `NS_.use_petsc`        | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
+| `NS_.use_schur_fieldsplit` | `true`                              | `true`               |
+| `NS_.amg_rebuild_freq` | `1`                                      | `20`                 |
 
 ## Driver Flow
 
@@ -58,9 +59,16 @@ for istep = ista .. iend
     Particle2Node()
     SolveNS()
     Node2Particle()
-    Moveparticle()      (if nprocs > 1)
+    if (do_dlb && istep % iout == 0)
+        ApplyDLB()          (if nprocs > 1: MoveParticle + repartition + rebuilds)
+    else
+        MoveParticle()      (if nprocs > 1)
     output / restart    (if istep % iout == 0)
 ```
+
+`ApplyDLB()` redistributes the background mesh across ranks from the particle
+distribution and rebuilds the partition-dependent data (mesh, `nvol`, BCs, `NS_`).
+See `module/DLB/README.md` for the full pipeline and its invariants.
 
 ## Time Integration
 
@@ -128,7 +136,11 @@ if (NS_.use_petsc)  →  PETSc KSP
 else                 →  GPBiCGSafe (native iterative solver)
 ```
 
-The MPM fluid default is the native solver; set `NS_.use_petsc = true` to use PETSc.
+The MPM fluid default is PETSc with `use_schur_fieldsplit = true`. Its monolithic (u,p)
+system is preconditioned by a lower Schur-complement field split: velocity and pressure
+blocks each get an HYPRE/BoomerAMG hierarchy, with `SELFP` as the Schur preconditioner.
+The FEM fluid `NS_` system uses the same setting; the MPM and FEM rebuild frequencies differ.
+Set `NS_.use_petsc = false` to fall back to the native solver.
 
 ### G2P and particle motion (`Node2Particle`)
 
@@ -153,16 +165,16 @@ Inflow generation follows the same three-layer dispatch as before (`InflowMeshis
 - `InflowParticles()` allocates the inflow buffer including scheme-specific TPIC/APIC state.
 - `GenerateInflowParticlesEmptyMesh` fills empty boundary cells with a Gaussian sub-grid.
 - `GenerateInflowParticlesFilledMesh` clones particles that moved one cell inward; it copies the scheme-specific state (velocity/acceleration gradients or APIC B-matrices) by G2P interpolation.
-- `Moveparticle` communicates the scheme-specific state for both regular migration and inflow appending.
+- `MoveParticle` communicates the scheme-specific state for both regular migration and inflow appending.
 
-> **Calling-order note:** `MeshPointLinklist()` is called **before** `SolveNS()`/`Node2Particle()`, while inflow runs inside `Moveparticle()` **after** particle advection.  The linked list is therefore intentionally one step behind; the filled-mesh generator relies on this.
+> **Calling-order note:** `MeshPointLinklist()` is called **before** `SolveNS()`/`Node2Particle()`, while inflow runs inside `MoveParticle()` **after** particle advection.  The linked list is therefore intentionally one step behind; the filled-mesh generator relies on this.
 
 ## Data I/O
 
-| Routine | Format | Content |
-|---------|--------|---------|
-| `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`) | `coord`, `id`, `matid`, `mass`, `vol`, `pres`, `vel`, `accel`, TPIC/APIC matrices |
-| `OutputPointDataVTKHDF` | VTK HDF5, single shared file per view (`*-w.vtkhdf`) | Particle coordinates, velocity, pressure, ID |
+| Routine                          | Format                                               | Content                                                                           |
+| -------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`)                    | `coord`, `id`, `matid`, `mass`, `vol`, `pres`, `vel`, `accel`, TPIC/APIC matrices |
+| `OutputPointDataVTKHDF`          | VTK HDF5, single shared file per view (`*-w.vtkhdf`) | Particle coordinates, velocity, pressure, ID                                      |
 
 ## Integration with the Rest of the Codebase
 

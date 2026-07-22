@@ -13,17 +13,58 @@
 #include "solver/crsmat.h"
 #include "solver/solver.h"
 
+namespace mpm_dlb {
+struct Region;
+}
+
 class MaterialPoint {
   public:
     // --- MPI part ---
     ParticleCommunication par_comm_;
+    bool do_dlb = false; // enable dynamic load balance
 
     /**
-     * @brief Determine which MPI rank owns each particle based on its current coordinate.
+     * @brief Build a normal particle-migration plan from the current MPI regions.
+     * @param regions One inclusive background-element region per MPI rank, ordered by rank.
      */
-    void DetermineParticleRank();
+    void DetermineParticleRank(const std::vector<mpm_dlb::Region> &regions);
 
-    virtual void Moveparticle() {};
+    /**
+     * @brief Build a DLB particle-migration plan for a newly rebalanced set of MPI regions.
+     * @param regions One inclusive background-element region per MPI rank, ordered by rank.
+     *
+     * Particles outside the global background mesh are marked for removal.  Particles inside
+     * the mesh may be transferred to any rank; the resulting peer list is stored in
+     * `par_comm_.comm_ranks` for the subsequent point-variable communication.
+     */
+    void DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> &regions);
+
+    /**
+     * @brief Redistribute particles to a newly rebalanced MPI partition.
+     * @param regions One inclusive background-element region per MPI rank, ordered by rank.
+     *
+     * The function prepares the DLB particle communication plan, updates the local particle count,
+     * and transfers the physics-specific particle state.
+     */
+    void RebalanceDLBParticles(const std::vector<mpm_dlb::Region> &regions);
+
+    /**
+     * @brief Apply one complete dynamic load-balance update to this MPM object.
+     *
+     * Samples particles, repartitions MPI regions, redistributes particle data,
+     * and rebuilds mesh, control-point, nodal-volume, and BC data.  Time-step
+     * scheduling and solver-system rebuilds remain the responsibility of the caller.
+     */
+    virtual void ApplyDLB();
+
+    /**
+     * @brief Migrate all physics-specific particle state using the current particle communication plan.
+     *
+     * `par_comm_` and the new local particle count must be prepared before this function is called.
+     */
+    virtual void MigrateParticleData() {}
+
+    virtual void MoveParticle() {};
     // ------------------------------
 
     // --- BC set ---
@@ -102,6 +143,14 @@ class MaterialPoint {
      * @param infile Input stream positioned at the boundary-condition section.
      */
     virtual void InputBCData(std::ifstream &infile) {};
+
+    /**
+     * @brief Rebuild local boundary-condition IDs after a DLB region change.
+     *
+     * The default is empty because FEM objects do not participate in particle
+     * DLB.  MPM solid and fluid objects rebuild their physics-specific BCs.
+     */
+    virtual void RebuildBoundaryConditions() {}
     // ---------------
 
     // --- For Implicit MPM ---
@@ -178,7 +227,7 @@ class MaterialPoint {
             mat.AssemblePetscMat(mat.ndof);
             iter = mat.SolveWithPetsc(mat.ndof, NR_it);
         } else {
-            iter = GPBiCGSafe(mat);
+            iter = GPBiCGAR(mat);
         }
 
         return iter;

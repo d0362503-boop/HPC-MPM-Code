@@ -15,6 +15,9 @@
 #include "../mpi_data.h"
 
 void CrsMat::BuildCrsMat(int num_block) {
+
+    if (this->use_petsc) { this->ResetPetscSolver(); }
+
     this->nmat = 0;
 
     int nxp = xynodec[0];
@@ -72,6 +75,23 @@ void CrsMat::BuildCrsMat(int num_block) {
     VectorAssign(this->nmata, this->amat);
 
     if (this->use_petsc) { this->InitPetscSolver(this->ndof); }
+
+    return;
+}
+
+void CrsMat::ResetPetscSolver() {
+
+    if (this->scatter_to_all) { VecScatterDestroy(&this->scatter_to_all); }
+    if (this->seq_x) { VecDestroy(&this->seq_x); }
+    if (this->ksp) { KSPDestroy(&this->ksp); }
+    if (this->petsc_mat) { MatDestroy(&this->petsc_mat); }
+    if (this->petsc_b) { VecDestroy(&this->petsc_b); }
+    if (this->petsc_x) { VecDestroy(&this->petsc_x); }
+    if (this->petsc_var_lgmap_) { ISLocalToGlobalMappingDestroy(&this->petsc_var_lgmap_); }
+    if (this->petsc_block_lgmap_) { ISLocalToGlobalMappingDestroy(&this->petsc_block_lgmap_); }
+
+    this->prev_ksp_its_ = -1;
+    this->force_rebuild_next_ = false;
 
     return;
 }
@@ -415,23 +435,43 @@ void CrsMat::BuildKSPSolver() {
     KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
 
     KSPSetType(this->ksp, KSPFGMRES);
-    // KSPSetType(this->ksp, KSPBCGS);
 
     PC pc;
     KSPGetPC(this->ksp, &pc);
-    PCSetType(pc, PCHYPRE);
-    PCHYPRESetType(pc, "boomeramg");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_coarsen_type", "HMIS");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_interp_type", "ext+i");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_agg_nl", "2");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_P_max", "2");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_strong_threshold", "0.5");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_max_levels", "8");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_nodal_coarsen", "6");
+    this->ConfigurePreconditioner(pc);
 
-    KSPSetTolerances(this->ksp, 1.0e-12, 1.0e-15, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-10, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
+
+    return;
+}
+
+void CrsMat::ConfigurePreconditioner(PC pc) {
+
+    // The Schur split is only defined for the 4-DOF (u,v,w,p) block layout.
+    if (this->ndof == 4 && this->use_schur_fieldsplit) {
+        const PetscInt velocity_fields[] = {0, 1, 2};
+        const PetscInt pressure_field = 3;
+
+        PCSetType(pc, PCFIELDSPLIT);
+        PCFieldSplitSetBlockSize(pc, this->ndof);
+        PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
+        PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
+        PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+        PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+        PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+    } else {
+        PCSetType(pc, PCHYPRE);
+        PCHYPRESetType(pc, "boomeramg");
+    }
 
     return;
 }
@@ -449,6 +489,7 @@ void CrsMat::BuildPetscBCList() {
 }
 
 void CrsMat::InitPetscSolver(int ndof) {
+
     BuildLGMAP(ndof);
 
     BuildPetscMat(ndof);
@@ -601,14 +642,13 @@ int CrsMat::SolveWithPetsc(int ndof, int nr_it) {
     need_rebuild = need_rebuild || force_rebuild;
     this->force_rebuild_next_ = false;
 
-    // Keep fluid / solid preconditioners independent. When this solver needs
-    // a rebuild, explicitly reset only its own PC first so the old AMG
-    // hierarchy is released before PETSc constructs the new one. This avoids
-    // the larger peak-memory spike of "old AMG + new AMG" inside one solver
-    // while still allowing fluid and solid AMGs to coexist.
+    // Keep fluid / solid preconditioners independent. A field split owns its
+    // child PCs, so PETSc must rebuild them from the updated operator without
+    // externally resetting the split itself.
     if (need_rebuild) {
-        PCReset(pc);
+        if (!this->use_schur_fieldsplit) { PCReset(pc); }
         KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
+        if (!this->use_schur_fieldsplit) { this->ConfigurePreconditioner(pc); }
         PCSetReusePreconditioner(pc, PETSC_FALSE);
     } else {
         PCSetReusePreconditioner(pc, PETSC_TRUE);

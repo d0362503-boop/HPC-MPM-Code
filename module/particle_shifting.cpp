@@ -1,3 +1,4 @@
+#include "DLB/mpm_dlb.h"
 #include "dataset.h"
 #include "material_point.h"
 #include "mpi_data.h"
@@ -72,34 +73,34 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsiveParticleShift
     // -------------------------------------------------------------------------
     // 1. Ghost particle communication (per-particle support)
     // -------------------------------------------------------------------------
+    const std::vector<mpm_dlb::Region> &regions = mpm_dlb::CurrentRegions();
+    std::vector<std::array<double, 3>> peer_min(isb);
+    std::vector<std::array<double, 3>> peer_max(isb);
+    for (int i = 0; i < isb; ++i) {
+        const mpm_dlb::Region &peer = regions[naid[i]];
+        for (int d = 0; d < 3; ++d) {
+            peer_min[i][d] = xyminw[d] + dxy[d] * double(peer.elem_min[d]);
+            peer_max[i][d] = xyminw[d] + dxy[d] * double(peer.elem_max[d] + 1);
+        }
+    }
+
     std::vector<std::vector<int>> send_ids(isb);
     for (int ip = 0; ip < this->num; ip++) {
         const double support = std::cbrt(this->vol[ip]);
 
-        std::array<std::vector<int>, 3> shifts;
-        for (int d = 0; d < 3; d++) {
-            shifts[d].push_back(0);
-            if (this->coord[ip][d] - xymin[d] < support) { shifts[d].push_back(-1); }
-            if (xymax[d] - this->coord[ip][d] < support) { shifts[d].push_back(1); }
-        }
-
-        for (int sx : shifts[0]) {
-            for (int sy : shifts[1]) {
-                for (int sz : shifts[2]) {
-                    if (sx == 0 && sy == 0 && sz == 0) { continue; }
-
-                    int idsb = myrank + sx + sy * nxyr[0] + sz * nxyr[0] * nxyr[1];
-                    for (int i = 0; i < isb; i++) {
-                        if (naid[i] == idsb) {
-                            send_ids[i].push_back(ip);
-                            break;
-                        }
-                    }
+        for (int i = 0; i < isb; ++i) {
+            bool intersects_peer = true;
+            for (int d = 0; d < 3; ++d) {
+                if (this->coord[ip][d] + support <= peer_min[i][d] || this->coord[ip][d] - support >= peer_max[i][d]) {
+                    intersects_peer = false;
+                    break;
                 }
             }
+            if (intersects_peer) { send_ids[i].push_back(ip); }
         }
     }
 
+    this->par_comm_.comm_ranks = naid;
     this->par_comm_.nsp.assign(isb, 0);
     this->par_comm_.nrp.assign(isb, 0);
     this->par_comm_.nmps = 0;

@@ -22,7 +22,7 @@ The solver uses a **SUPG/PSPG stabilized formulation** with **generalized-α tim
 | `phase_field.cpp`  | Phase-field initialization, volume-fraction projection (`Particle2NodePhi`), material-property blending (`SetPFDomain`), liquid-volume calculation (`CalLiquidVol`) |
 | `fluid_fem_data_io.cpp` | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshDataVTKHDF`), VTK nodal interpolation (`Cp2NodeVTK`) |
 
-> **Note:** Fluid-specific boundary-condition overrides (`BuildPetscBCList`, `BCResidualSet`) are **declared** in `stabilized_fem.h` but **implemented** in `src_fsi/bc_setting.cpp` alongside the solid BC logic.
+> **Note:** Fluid-specific boundary-condition overrides (`BuildPetscBCList`, `BCResidualSet`) are **declared** in `stabilized_fem.h` but **implemented** in `work/src_fsi/bc_setting.cpp` alongside the solid BC logic.
 
 ---
 
@@ -35,7 +35,7 @@ MaterialPoint  (base)
             └── PF_  : CrsMat  (ndof = 1, owner_ = this)
 ```
 
-`StabilizedFEM` **declares** virtual BC hooks that the generic `CrsMat` calls back via the `owner_` pointer.  The hooks are `protected` so that `FSIFluid` can extend them; their default implementations live in `stabilized_fem.h` (for `BCSet`) and `src_fsi/bc_setting.cpp` (for `BuildPetscBCList` / `BCResidualSet`, shared with the solid BC logic):
+`StabilizedFEM` **declares** virtual BC hooks that the generic `CrsMat` calls back via the `owner_` pointer.  The hooks are `protected` so that `FSIFluid` can extend them; their default implementations live in `stabilized_fem.h` (for `BCSet`) and `work/src_fsi/bc_setting.cpp` (for `BuildPetscBCList` / `BCResidualSet`, shared with the solid BC logic):
 
 ### `BuildPetscBCList(CrsMat& mat)`
 Collects all Dirichlet/essential boundary-condition global IDs for the PETSc `MatZeroRows` pass:
@@ -89,6 +89,11 @@ else                 →  GPBiCGAR (custom iterative solver)
 ```
 After convergence, the solution vector `NS_.x_lhs` is unpacked back into `nvel` (u, v, w) and `npres` (p).
 
+`NS_` enables `use_schur_fieldsplit = true` by default. PETSc therefore applies a lower
+Schur field split to the four-component stabilized fluid system: components 0--2 form the
+velocity block and component 3 forms the pressure block. Both child blocks use
+HYPRE/BoomerAMG. `PF_` keeps the default monolithic AMG preconditioner.
+
 ### 5. Time-Advance (`UpdateNodeVar`)
 Shifts the velocity / pressure history arrays for the next time step:
 ```
@@ -117,7 +122,7 @@ npres_old  ← npres
 
 ## Integration with the Rest of the Codebase
 
-- **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; fluid-specific BC logic is injected through the virtual overrides declared here but implemented in `src_fsi/bc_setting.cpp`, so `crsmat.cpp` does **not** include `stabilized_fem.h`.
+- **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; fluid-specific BC logic is injected through the virtual overrides declared here but implemented in `work/src_fsi/bc_setting.cpp`, so `crsmat.cpp` does **not** include `stabilized_fem.h`.
 - **`MaterialPoint`** (`module/material_point.h`) — base class providing the `BuildPetscBCList` and `BCResidualSet` virtual hooks.
 - **Solvers** (`module/solver/solver.cpp`) — generic GPBiCG* routines call `mat.MatVecMult(xx)` and `mat.owner_->BCResidualSet(rr)` without knowing whether the matrix belongs to fluid or solid physics.
 

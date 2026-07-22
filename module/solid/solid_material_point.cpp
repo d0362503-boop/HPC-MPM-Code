@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "../DLB/mpm_dlb.h"
 #include "../bc.h"
 #include "../dataset.h"
 #include "../material_point.h"
@@ -46,12 +47,29 @@ void SolidMaterialPointBase::InitializePointData() {
     return;
 }
 
-void SolidMaterialPointBase::Moveparticle() {
-    this->DetermineParticleRank();
+void SolidMaterialPointBase::RebuildBoundaryConditions() {
+
+    this->ubc.RebuildLocalControlPointBC();
+    this->vbc.RebuildLocalControlPointBC();
+    this->wbc.RebuildLocalControlPointBC();
+
+    return;
+}
+
+void SolidMaterialPointBase::MoveParticle() {
+
+    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp == 0) return;
 
     this->num += this->par_comm_.nrps - this->par_comm_.nmps - this->par_comm_.nrmp;
+
+    this->MigrateParticleData();
+
+    return;
+}
+
+void SolidMaterialPointBase::MigrateParticleData() {
 
     // ---- Scalar part ----
     this->par_comm_.PointVarComm(this->num, this->id);           // ---- Point Global ID ----

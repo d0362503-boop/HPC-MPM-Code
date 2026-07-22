@@ -17,12 +17,12 @@ using namespace stabilizedmpm;
 
 void StabilizedMPM::InflowParticles() {
 
+    this->ifp.num = 0;
+
     int target_per_cell = npxye[0] * npxye[1] * npxye[2];
     int target_num = (this->uinfbc.ibc + this->vinfbc.ibc + this->winfbc.ibc) * target_per_cell;
 
     if (target_num == 0) return;
-
-    this->ifp.num = 0;
 
     VectorAssign(target_num, this->ifp.id);
     VectorAssign(target_num, this->ifp.matid);

@@ -63,6 +63,14 @@ class CrsMat {
      */
     void BuildCrsMat(int num_block);
 
+    /**
+     * @brief Release PETSc objects associated with the current matrix layout.
+     *
+     * This is called before rebuilding a matrix after DLB changes the local
+     * mesh and ownership layout.
+     */
+    void ResetPetscSolver();
+
     inline int FindIndex(int nid, int njd, int &ncol) const {
         int cole = this->matrow[nid + 1] - 1;
         int cols = this->matrow[nid] + ncol;
@@ -167,8 +175,8 @@ class CrsMat {
     Vec seq_x = nullptr;                 // sequential copy of solution on this rank
 
     // AMG lifecycle state (local to this solver, independent of other solvers)
-    int amg_rebuild_freq;   // rebuild preconditioner every N steps
-    int prev_ksp_its_ = -1; // KSP iterations of the previous solve
+    int amg_rebuild_freq = 1; // rebuild preconditioner every N steps
+    int prev_ksp_its_ = -1;   // KSP iterations of the previous solve
     bool force_rebuild_next_ = false;
     // Reusable buffers for RHS / initial-guess insertion (size = local_node*ndof)
     std::vector<PetscInt> petsc_indices_buf;
@@ -178,6 +186,7 @@ class CrsMat {
     std::vector<PetscInt> petsc_cols_buf;
 
     bool use_petsc = true;
+    bool use_schur_fieldsplit = false;
 
     std::vector<char> active_row_mask;
 
@@ -236,6 +245,18 @@ class CrsMat {
      * @brief Create and configure the PETSc KSP solver object.
      */
     void BuildKSPSolver();
+
+    /**
+     * @brief Configure the PETSc preconditioner for this system.
+     *
+     * Default is `PCHYPRE`/BoomerAMG. Stabilized fluid systems that set
+     * `use_schur_fieldsplit` instead get a velocity-pressure lower Schur
+     * field split, where velocity is components 0--2 and pressure is 3.
+     * The split requires the 4-DOF block layout; any other `ndof` falls
+     * back to BoomerAMG.
+     * @param pc PETSc preconditioner associated with `ksp`.
+     */
+    void ConfigurePreconditioner(PC pc);
 
     /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.

@@ -73,7 +73,7 @@ for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
     PredictNewmarkBetaVelAndAccel(...);     // predictor step
     AssembleSystem(naccel_k, nvel_k, stress_k);
-    iter = GPBiCGSafe(SM_);                 // linear solve
+    iter = SolveSystem(SM_, NR_it);         // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
     if CheckNRConvergence() break;
 ```

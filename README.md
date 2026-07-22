@@ -42,7 +42,7 @@ Default compile flags are `-O3 -DNDEBUG` with `-march=native` enabled by default
 | `Ext/` | Bundled source tarballs (PETSc, HDF5, optional Hypre) |
 | `external/` | Installed dependencies after bootstrap |
 | `docs/` | Developer notes and plans |
-| `res/` | Runtime resource files |
+| `build/res/` | Runtime visualization output |
 | `build/` | Required CMake binary directory |
 
 Key files:
@@ -86,15 +86,15 @@ Active build options (most are defined in `cmake/options.cmake`; `MPM_ENABLE_NAT
 The active driver is selected by uncommenting **exactly one** `add_subdirectory(...)` line in `work/CMakeLists.txt`:
 
 ```cmake
-# add_subdirectory(src_fluid)
+add_subdirectory(src_fluid)
 # add_subdirectory(src_solid)
-add_subdirectory(src_fsi)
+# add_subdirectory(src_fsi)
 ```
 
-You must also keep `MPM_main.cpp` consistent. For example, with `src_fsi` selected:
+You must also keep `MPM_main.cpp` consistent. The checked-in configuration selects `src_fluid`:
 
 ```cpp
-MPMBlockFSI();
+StabilizedMixedMPM();
 ```
 
 `work/src_solid/CMakeLists.txt` also requires uncommenting exactly one subdirectory (`explicit` or `implicit`).
@@ -119,7 +119,7 @@ add_subdirectory(divide_fsi fsi)
 
 ## Build Examples
 
-Default FSI build:
+Current fluid build:
 
 ```bash
 cmake -S . -B build
@@ -140,10 +140,10 @@ cmake -S . -B build
 cmake --build build -j8
 ```
 
-FSI data generator:
+Current fluid data generator:
 
 ```bash
-cmake --build build --target makinput_fsi -j8
+cmake --build build --target makinput_fluid -j8
 ```
 
 ## Running the Solver
