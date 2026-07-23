@@ -56,6 +56,10 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
   - If the function takes parameters, explain the **physical meaning** of each parameter, not just its type.
   - If the function returns a value, explain the **physical meaning** of the returned value.
 
+### Commit messages
+
+- **English only.** No Chinese or other non-English text in commit messages.
+
 ## 5. Critical Parallel Rules
 
 **`node` vs `nodec`:** Computations and PETSc must use `nodec` (control points), never `node` (visualization nodes). Mixing them causes `MatAssemblyEnd` crashes.

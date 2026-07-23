@@ -242,8 +242,8 @@ class MaterialPoint {
             KSPGetConvergedReason(mat.ksp, &reason);
             if (reason < 0) {
                 if (myrank == 0) {
-                    std::cout << "PETSc solve failed at step " << istep << ", NR_it " << NR_it << " (reason " << reason
-                              << "); falling back to native GPBiCGAR\n";
+                    std::cout << "PETSc solve failed at step =  " << istep << ", NR_it =  " << NR_it //
+                              << " (reason = " << reason << "); falling back to native GPBiCGAR\n";
                 }
                 mat.x_lhs = x_lhs_backup; // discard polluted PETSc iterate
                 mat.BuildDiagonalPreconditioner(mat.ndof);
