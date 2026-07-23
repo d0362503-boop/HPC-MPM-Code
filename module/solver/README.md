@@ -110,7 +110,7 @@ The PETSc path is:
 5. per solve:
    - `AssemblePetscMat(ndof)`
    - `UpdatePetscRhs(ndof)`
-   - `SolveWithPetsc(ndof, nr_it)`
+   - `SolveWithPetsc(ndof, NR_it)`
 
 With `use_petsc = true`, `BuildCrsMat` first calls `ResetPetscSolver()` to release the
 previous PETSc objects (`Mat`, `Vec`, `KSP`, lgmaps, scatter). This makes a matrix
@@ -333,10 +333,14 @@ Current production values:
 Runtime logic in `SolveWithPetsc()`:
 
 - periodic rebuild when `istep % amg_rebuild_freq == 0`
-- optional forced rebuild when iterations deteriorate strongly
+- at most one rebuild per time step: `NR_it > 0` always reuses the current
+  preconditioner, so the AMG hierarchy is built on the first Newton iteration
+  and lagged for the rest of the step
+- optional forced rebuild when iterations deteriorate strongly: a solve whose
+  KSP iteration count more than doubles versus the previous solve requests a
+  rebuild on the next solve (`force_rebuild_next_`), including later Newton
+  iterations
 - rebuild is local to the current solver only
-- for implicit solid MPM, later Newton iterations may rebuild again when the previous KSP
-  iteration count is already moderate (`prev_ksp_its_ >= 5`)
 
 Implementation detail for a monolithic AMG preconditioner:
 
@@ -356,19 +360,18 @@ For `use_schur_fieldsplit = true`, the same rebuild decision updates the operato
 preconditioner reuse, but deliberately skips `PCReset` and reconfiguration so that the existing
 FieldSplit child-PC structure remains intact.
 
-For solid, there is one extra Newton-specific rule in `SolveWithPetsc()`:
+The `NR_it > 0` suppression yields to a pending forced rebuild:
 
 ```cpp
-if (nr_it > 0 && !force_rebuild) {
-    need_rebuild = false;
-    if (!this->FEM_flag && this->prev_ksp_its_ >= 5) { need_rebuild = true; }
-}
+if (NR_it > 0 && !force_rebuild) { need_rebuild = false; }
 ```
 
-This is intentionally more aggressive than the older "reuse until things are obviously bad"
-policy. In implicit solid MPM the tangent matrix can change between Newton iterations even
-when the Krylov solve still converges, so allowing an earlier BoomerAMG rebuild is safer
-than repeatedly reusing an aging hierarchy.
+Lagging the preconditioner within a time step is safe because the matrix
+structure is fixed and its values only drift with the Newton iterate; the 2x
+iteration-growth rule catches the cases where the lagged hierarchy actually
+deteriorates. (The older proactive rule — rebuild whenever the previous solve
+needed more than a few iterations — effectively rebuilt every Newton iteration
+for the MPM fluid and has been removed.)
 
 ---
 

@@ -279,10 +279,10 @@ class CrsMat {
     /**
      * @brief Solve the linear system with PETSc and scatter the solution back to `x_lhs`.
      * @param ndof Degrees of freedom per node.
-     * @param nr_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
+     * @param NR_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
      * @return Number of KSP iterations, or -1 on failure.
      */
-    int SolveWithPetsc(int ndof, int nr_it = -1);
+    int SolveWithPetsc(int ndof, int NR_it = -1);
 
     /**
      * @brief Collect global IDs of Dirichlet boundary rows/columns into `petsc_bc_gids`.

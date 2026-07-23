@@ -587,9 +587,7 @@ void CrsMat::UpdatePetscRhs(int ndof) {
     return;
 }
 
-int CrsMat::SolveWithPetsc(int ndof, int nr_it) {
-    constexpr int kSolidRebuildIterTrigger = 5;
-
+int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     this->UpdatePetscRhs(ndof);
 
     // Initialise the PETSc guess vector from the current Newton iterate.
@@ -631,14 +629,10 @@ int CrsMat::SolveWithPetsc(int ndof, int nr_it) {
 
     const bool force_rebuild = this->force_rebuild_next_;
 
-    // Solid passes nr_it >= 0. In that case we only rebuild on the first
-    // Newton iteration unless a previous solve explicitly requested a
-    // rebuild. Fluid keeps nr_it == -1 and uses only the step-based / forced
-    // policy below.
-    if (nr_it > 0 && !force_rebuild) {
-        need_rebuild = false;
-        if (!this->FEM_flag && this->prev_ksp_its_ >= kSolidRebuildIterTrigger) { need_rebuild = true; }
-    }
+    // NR_it > 0 reuses the current preconditioner within the time step, so the
+    // AMG hierarchy is rebuilt at most once per step (unless a previous solve
+    // explicitly requested one via the 2x iteration-growth rule below).
+    if (NR_it > 0 && !force_rebuild) { need_rebuild = false; }
 
     need_rebuild = need_rebuild || force_rebuild;
     this->force_rebuild_next_ = false;
