@@ -309,9 +309,6 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
 
     NodeVarComm(this->NS_.b_rhs, {nuc, nvc, nwc, npc});
 
-    // ---- Diagional Scalling Prec (only for non-PETSc solver) ----
-    if (!this->NS_.use_petsc) { this->NS_.BuildDiagonalPreconditioner(this->NS_.ndof); }
-
     return;
 }
 

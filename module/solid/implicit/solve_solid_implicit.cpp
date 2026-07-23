@@ -197,8 +197,5 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
     this->AddInertialForceToRHS(this->SM_, naccel_am);
 
-    // ---- Diagional Scalling Prec ----
-    if (!this->SM_.use_petsc) { this->SM_.BuildDiagonalPreconditioner(this->SM_.ndof); }
-
     return;
 }

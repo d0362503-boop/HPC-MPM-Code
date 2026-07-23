@@ -462,6 +462,7 @@ void CrsMat::ConfigurePreconditioner(PC pc) {
         PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
         PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
 
+        PetscOptionsSetValue(nullptr, "-fieldsplit_1_mat_schur_complement_ainv_type", "lump");
         PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
         PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
         PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");

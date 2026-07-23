@@ -82,7 +82,7 @@ void StabilizedMPM::RestartInput() {
     reinfile >> this->num;
     reinfile.ignore(1000, '\n');
 
-    this->InputPointData(reinfile);
+    this->InitializePointData();
 
     if (this->num != 0) {
         InputVector(reinfile, this->num, this->coord);

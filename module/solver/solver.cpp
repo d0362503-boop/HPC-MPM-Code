@@ -508,6 +508,7 @@ double CrsMat::ComputeAbsResidual() {
 }
 
 bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
+
     double rkr;
     if (NR_it == 0) {
         r0r = this->ComputeRefResidual();

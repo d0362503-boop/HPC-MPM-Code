@@ -236,9 +236,9 @@ void MaterialPoint::ApplyDLB() {
 
     const int sample_skip = mpm_dlb::ComputeSampleSkip(this->coord.size());
 
-    const std::vector<std::array<double, 3>> local_samples = mpm_dlb::SelectSamples(this->coord, sample_skip);
+    const auto local_samples = mpm_dlb::SelectSamples(this->coord, sample_skip);
 
-    const std::vector<mpm_dlb::Region> regions = mpm_dlb::ComputeDLBRegions(local_samples);
+    const auto regions = mpm_dlb::ComputeDLBRegions(local_samples);
 
     this->RebalanceDLBParticles(regions);
 
