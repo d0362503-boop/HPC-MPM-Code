@@ -148,8 +148,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     }
     std::vector<double> npres_af(nodec);
     for (int n = 0; n < nodec; n++) { //
-        // npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
-        npres_af[n] = this->npres[n];
+        npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
     }
 
     this->MakNSStabCoeff(nvel_af); // ---- Stabilized coefficient ----
@@ -274,22 +273,22 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                     this->NS_.amat[ida + this->NS_.block_id[0]] += this->nb_para[0] * af * (su + scu);
                     this->NS_.amat[ida + this->NS_.block_id[1]] += this->nb_para[0] * af * (suv + scuv);
                     this->NS_.amat[ida + this->NS_.block_id[2]] += this->nb_para[0] * af * (suw + scuw);
-                    this->NS_.amat[ida + this->NS_.block_id[3]] -= esgx;
+                    this->NS_.amat[ida + this->NS_.block_id[3]] -= af * esgx;
                     this->NS_.amat[ida + this->NS_.block_id[4]] += this->nb_para[0] * af * (svu + scvu);
                     this->NS_.amat[ida + this->NS_.block_id[5]] += this->nb_para[0] * af * (sv + scv);
                     this->NS_.amat[ida + this->NS_.block_id[6]] += this->nb_para[0] * af * (svw + scvw);
-                    this->NS_.amat[ida + this->NS_.block_id[7]] -= esgy;
+                    this->NS_.amat[ida + this->NS_.block_id[7]] -= af * esgy;
                     this->NS_.amat[ida + this->NS_.block_id[8]] += this->nb_para[0] * af * (swu + scwu);
                     this->NS_.amat[ida + this->NS_.block_id[9]] += this->nb_para[0] * af * (swv + scwv);
                     this->NS_.amat[ida + this->NS_.block_id[10]] += this->nb_para[0] * af * (sw + scw);
-                    this->NS_.amat[ida + this->NS_.block_id[11]] -= esgz;
+                    this->NS_.amat[ida + this->NS_.block_id[11]] -= af * esgz;
                     this->NS_.amat[ida + this->NS_.block_id[12]] += this->nb_para[0] * af * Cow1 //
                                                                     + this->nb_para[3] * am * egtx;
                     this->NS_.amat[ida + this->NS_.block_id[13]] += this->nb_para[0] * af * Cow2 //
                                                                     + this->nb_para[3] * am * egty;
                     this->NS_.amat[ida + this->NS_.block_id[14]] += this->nb_para[0] * af * Cow3 //
                                                                     + this->nb_para[3] * am * egtz;
-                    this->NS_.amat[ida + this->NS_.block_id[15]] += elt;
+                    this->NS_.amat[ida + this->NS_.block_id[15]] += af * elt;
                 }
 
                 std::array<double, 4> RHS_G{}, RHS_S{};

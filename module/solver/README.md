@@ -326,7 +326,7 @@ Current production values:
 
 | System | Value |
 |--------|-------|
-| MPM fluid `NS_` | `1` when PETSc is explicitly enabled; native solve is the default |
+| MPM fluid `NS_` | `1` (PETSc + Schur field split is the default) |
 | FEM fluid `NS_` / `PF_` | `20` |
 | Implicit solid `SM_` | `1` |
 
