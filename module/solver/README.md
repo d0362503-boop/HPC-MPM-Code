@@ -110,7 +110,12 @@ The PETSc path is:
 5. per solve:
    - `AssemblePetscMat(ndof)`
    - `UpdatePetscRhs(ndof)`
-   - `SolveWithPetsc(ndof, nr_it)`
+   - `SolveWithPetsc(ndof, NR_it)`
+
+With `use_petsc = true`, `BuildCrsMat` first calls `ResetPetscSolver()` to release the
+previous PETSc objects (`Mat`, `Vec`, `KSP`, lgmaps, scatter). This makes a matrix
+rebuild safe after a DLB repartition changes `nodec` and the ownership layout
+(see `module/DLB/README.md`).
 
 ### 3.1 Ownership
 
@@ -245,7 +250,7 @@ Because `fsi_intf` changes every step, BC lists must be rebuilt before every sol
 
 ## 5. Current PETSc Solver Configuration
 
-All PETSc-based solves now use the same monolithic AMG preconditioner stack. The previous velocity-pressure `PCFIELDSPLIT` path has been removed.
+Monolithic AMG is the default preconditioner stack for PETSc-based `CrsMat` objects with `use_schur_fieldsplit = false`. The stabilized Navier--Stokes systems in both `StabilizedMPM` and `StabilizedFEM` set it to `true` and use the Schur field split described in Section 5.1a. The FEM phase-field system and the implicit-solid system keep the default `false` value.
 
 ### 5.1 Unified AMG preconditioner
 
@@ -253,27 +258,59 @@ All PETSc-based solves now use the same monolithic AMG preconditioner stack. The
 - preconditioner: `PCHYPRE`
 - AMG type: `BoomerAMG`
 
-This applies to every `CrsMat` that uses PETSc, regardless of `ndof` (1, 3, or 4).
+This applies to every PETSc-based `CrsMat` with `use_schur_fieldsplit = false`, regardless of `ndof` (1, 3, or 4).
 
-PETSc options set in code:
+The code explicitly sets the following PETSc choices:
 
 ```cpp
--pc_type hypre
--pc_hypre_type boomeramg
--pc_hypre_boomeramg_coarsen_type HMIS
--pc_hypre_boomeramg_interp_type ext+i
--pc_hypre_boomeramg_agg_nl 2
--pc_hypre_boomeramg_P_max 2
--pc_hypre_boomeramg_strong_threshold 0.8
--pc_hypre_boomeramg_max_levels 8
--pc_hypre_boomeramg_nodal_coarsen 6
+KSPFGMRES
+PCHYPRE + BoomerAMG
+rtol = 1.0e-12, atol = 1.0e-15, max_it = 1000
 ```
+
+The Schur field split sets its child-PC defaults with `PetscOptionsSetValue(...)` before
+`KSPSetFromOptions()`. See Section 5.1a for the resulting PETSc option names.
+
+### 5.1a Schur field split for stabilized fluid systems
+
+`StabilizedMPM::NS_` and `StabilizedFEM::NS_` enable `use_schur_fieldsplit` in their
+constructors. `ConfigurePreconditioner()` then configures:
+
+```cpp
+PCFIELDSPLIT with block size ndof (= 4)
+velocity field: block components {0, 1, 2}; pressure field: {3}
+PC_COMPOSITE_SCHUR + PC_FIELDSPLIT_SCHUR_FACT_LOWER
+Schur preconditioner: PC_FIELDSPLIT_SCHUR_PRE_SELFP
+both sub-solves: preonly + HYPRE BoomerAMG
+```
+
+The current split layout is specific to the four-DOF stabilized fluid system: the
+`"velocity"` split contains components 0--2 and the `"pressure"` split contains component 3.
+`ConfigurePreconditioner()` enforces this at runtime: with any `ndof` other than 4 it
+falls back to plain BoomerAMG even when `use_schur_fieldsplit` is set.
+The split names determine the PETSc option middle component, for example:
+
+```text
+-fieldsplit_velocity_pc_type hypre
+-fieldsplit_pressure_pc_type hypre
+```
+
+`-fieldsplit_` and `_pc_type` are PETSc syntax; only `velocity` and `pressure` come from the
+names passed to `PCFieldSplitSetFields()`.
+
+This split exists because the stabilized (u,p) rows differ strongly in scale, and a single
+monolithic AMG over the coupled block was not robust for the dam case. The split gives
+velocity and pressure their own AMG hierarchies while `SELFP` builds the Schur
+approximation for the stabilized `K_pp` term. The field split owns its child PCs, so the
+AMG rebuild path does not call `PCReset`: `KSPSetOperators()` supplies the updated matrix and
+`PCSetReusePreconditioner(pc, PETSC_FALSE)` makes PETSc rebuild the child preconditioners during
+the next setup while retaining the split configuration.
 
 ### 5.2 Solver independence
 
 Fluid and solid keep their AMG hierarchies independently.
 
-There is no longer any global "release other AMG" behavior, and the fieldsplit-specific flags (`use_fieldsplit`, `pressure_pc_use_amg`) have been removed. Fluid and solid AMG are allowed to coexist.
+There is no longer any global "release other AMG" behavior. The old fieldsplit flags (`use_fieldsplit`, `pressure_pc_use_amg`) were removed; the current Schur split is controlled solely by `use_schur_fieldsplit`. Fluid and solid AMG are allowed to coexist.
 
 ---
 
@@ -289,18 +326,23 @@ Current production values:
 
 | System | Value |
 |--------|-------|
-| Fluid `NS_` | `20` |
-| Solid `SM_` | `20` |
+| MPM fluid `NS_` | `1` (PETSc + Schur field split is the default) |
+| FEM fluid `NS_` / `PF_` | `20` |
+| Implicit solid `SM_` | `1` |
 
 Runtime logic in `SolveWithPetsc()`:
 
 - periodic rebuild when `istep % amg_rebuild_freq == 0`
-- optional forced rebuild when iterations deteriorate strongly
+- at most one rebuild per time step: `NR_it > 0` always reuses the current
+  preconditioner, so the AMG hierarchy is built on the first Newton iteration
+  and lagged for the rest of the step
+- optional forced rebuild when iterations deteriorate strongly: a solve whose
+  KSP iteration count more than doubles versus the previous solve requests a
+  rebuild on the next solve (`force_rebuild_next_`), including later Newton
+  iterations
 - rebuild is local to the current solver only
-- for implicit solid MPM, later Newton iterations may rebuild again when the previous KSP
-  iteration count is already moderate (`prev_ksp_its_ >= 5`)
 
-Implementation detail:
+Implementation detail for a monolithic AMG preconditioner:
 
 ```cpp
 if (need_rebuild) {
@@ -314,19 +356,22 @@ if (need_rebuild) {
 
 This avoids keeping "old AMG + new AMG" simultaneously inside one solver for too long, while still allowing fluid and solid preconditioners to coexist.
 
-For solid, there is one extra Newton-specific rule in `SolveWithPetsc()`:
+For `use_schur_fieldsplit = true`, the same rebuild decision updates the operator and disables
+preconditioner reuse, but deliberately skips `PCReset` and reconfiguration so that the existing
+FieldSplit child-PC structure remains intact.
+
+The `NR_it > 0` suppression yields to a pending forced rebuild:
 
 ```cpp
-if (nr_it > 0 && !force_rebuild) {
-    need_rebuild = false;
-    if (!this->FEM_flag && this->prev_ksp_its_ >= 5) { need_rebuild = true; }
-}
+if (NR_it > 0 && !force_rebuild) { need_rebuild = false; }
 ```
 
-This is intentionally more aggressive than the older "reuse until things are obviously bad"
-policy. In implicit solid MPM the tangent matrix can change between Newton iterations even
-when the Krylov solve still converges, so allowing an earlier BoomerAMG rebuild is safer
-than repeatedly reusing an aging hierarchy.
+Lagging the preconditioner within a time step is safe because the matrix
+structure is fixed and its values only drift with the Newton iterate; the 2x
+iteration-growth rule catches the cases where the lagged hierarchy actually
+deteriorates. (The older proactive rule — rebuild whenever the previous solve
+needed more than a few iterations — effectively rebuilt every Newton iteration
+for the MPM fluid and has been removed.)
 
 ---
 
@@ -365,9 +410,10 @@ Without this release, solid work arrays remained resident across time steps and 
 
 ## 9. Current 32-Rank Baseline
 
-### 9.1 Unified AMG baseline
+### 9.1 Historical monolithic AMG baseline
 
-All PETSc-based solves now use the same monolithic AMG preconditioner stack (`PCHYPRE` + `BoomerAMG`). For the Turek 10-step baseline:
+The earlier Turek baseline used a monolithic AMG preconditioner stack (`PCHYPRE` + `BoomerAMG`)
+for all PETSc-based solves. For the 10-step case:
 
 - `NS_iter ~= 8`
 
@@ -375,10 +421,10 @@ This is the reference used to judge whether future preconditioner changes are ac
 
 ### 9.2 Current recommended production run
 
-Current recommended configuration:
+Current configured default:
 
-- fluid: `monolithic AMG + FGMRES`
-- solid: `monolithic AMG + FGMRES`
+- stabilized fluid `NS_`: `Schur field split + FGMRES`
+- FEM phase field / implicit solid: `monolithic AMG + FGMRES`
 - local PETSc solution scatter
 - solid temporary arrays released every step
 
@@ -392,10 +438,11 @@ Successful 16-rank cavity-flow run after tightening tolerances:
 Current default policy in code is simple:
 
 - all PETSc KSP objects default to `KSPFGMRES`
-- both fluid and solid use the same preconditioner type: monolithic `BoomerAMG`
-- the only distinction left is the rebuild frequency and the physical BCs injected by each physics object
+- stabilized MPM and FEM fluid `NS_` systems use the Schur field split (Section 5.1a)
+- the FEM phase-field and implicit-solid systems use monolithic `BoomerAMG`
+- remaining distinctions are the rebuild frequency and the physical BCs injected by each physics object
 
-So the distinction between fluid and solid is now mainly in the physics (DOF count, BCs, rebuild cadence), not in the Krylov family or preconditioner structure.
+So the remaining distinction between systems is mainly in the physics (DOF count, BCs, rebuild cadence, and whether the system is a stabilized fluid `NS_` solve), not in the outer Krylov family.
 
 ---
 
@@ -437,10 +484,11 @@ For the current 32-rank Turek benchmark:
 | MPI ranks | `32` |
 | Runner | `build/run.sh` |
 | Fluid Krylov | `KSPFGMRES` |
-| Fluid PC | `PCHYPRE` + `BoomerAMG` |
+| Stabilized fluid `NS_` PC | lower Schur field split; child PCs use `PCHYPRE` + `BoomerAMG` |
+| FEM phase-field PC | `PCHYPRE` + `BoomerAMG` |
 | Solid Krylov | `KSPFGMRES` |
 | Solid PC | `PCHYPRE` + `BoomerAMG` |
-| Fluid rebuild freq | `20` |
-| Solid rebuild freq | `20` |
+| FEM fluid rebuild freq | `20` |
+| Implicit-solid rebuild freq | `1` |
 
 If future work targets more speed, the next high-value direction is likely a cleaner blocked PETSc assembly path, but it must preserve the current `NS_iter` behavior and 32-rank stability.

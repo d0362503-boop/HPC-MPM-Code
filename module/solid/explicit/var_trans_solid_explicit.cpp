@@ -194,11 +194,11 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
     std::vector<std::array<double, 3>> dsf;
 
     // --- Particle shifting correction ---
-    std::vector<std::array<double, 3>> delta_corr;
-    delta_corr = this->DeltaCorrectionParticleShifting();
+    std::vector<std::array<double, 3>> disp_corr;
+    disp_corr = this->DeltaCorrectionParticleShifting();
 
     // --- Particle coordinate / volume / stress update ---
-    const bool has_shift = !delta_corr.empty();
+    const bool has_shift = !disp_corr.empty();
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
@@ -212,14 +212,14 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
                 this->flip.VarG2P(pid, nid, sfi, this->coord, this->nvel);
             }
             if (has_shift) {
-                for (int i = 0; i < 3; i++) { this->coord[pid][i] += delta_corr[pid][i]; }
+                for (int i = 0; i < 3; i++) { this->coord[pid][i] += disp_corr[pid][i]; }
             }
 
             // 2. Volume and stress update
             if (this->Fbar_flag) {
                 this->UpdateVolume(pid, this->det_def_grad_bar[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad_bar, this->def_grad_bar,
-                                              this->delta_def_grad);
+                                              this->delta_def_grad_bar);
             } else {
                 this->UpdateVolume(pid, this->det_def_grad[pid]);
                 this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad,

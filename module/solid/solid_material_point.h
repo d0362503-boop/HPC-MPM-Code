@@ -22,6 +22,9 @@ class SolidMaterialPointBase : public MaterialPoint {
      */
     void InputBCData(std::ifstream &infile) override;
 
+    /** @brief Rebuild solid control-point BCs for the current DLB region. */
+    void RebuildBoundaryConditions() override;
+
     /**
      * @brief Read solid point data (coordinates, material IDs, velocities, etc.) from input stream.
      * @param inflie Input file stream .
@@ -55,7 +58,12 @@ class SolidMaterialPointBase : public MaterialPoint {
     /**
      * @brief Move particles that have crossed rank boundaries and exchange them via MPI.
      */
-    void Moveparticle() override;
+    void MoveParticle() override;
+
+    /**
+     * @brief Migrate all solid particle state using the prepared MPI communication plan.
+     */
+    void MigrateParticleData() override;
 
     // --- Stress computation ---
     double ComputeMeanStress(int pid) const noexcept {

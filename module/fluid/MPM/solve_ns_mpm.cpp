@@ -5,7 +5,6 @@
 #include "../../mpi_data.h"
 #include "../../shape_function.h"
 #include "../../solver/crsmat.h"
-#include "../../solver/solver.h"
 #include "stabilized_mpm.h"
 #include <array>
 #include <cmath>
@@ -43,7 +42,7 @@ void StabilizedMPM::SolveNS() {
 
         this->AssembleNSSystem(nvel_k, naccel_k);
 
-        int iter = this->SolveSystem(this->NS_, NR_it);
+        int iter = this->NS_.SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
 
@@ -206,9 +205,10 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                 grad_vel_k[2][2] += dsfi3 * nvel_af[nid + nwc];
             }
             // --- Deviatoric stress ---
-            std::array<std::array<double, 3>, 3> dev_stress_k{};
+            std::array<std::array<double, 3>, 3> stress_k{};
             for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) { dev_stress_k[i][j] = this->rmu * (grad_vel_k[i][j] + grad_vel_k[j][i]); }
+                for (int j = 0; j < 3; j++) { stress_k[i][j] = this->rmu * (grad_vel_k[i][j] + grad_vel_k[j][i]); }
+                stress_k[i][i] -= pres_k;
             }
 
             for (int ni = 0; ni < nenode; ni++) {
@@ -292,15 +292,12 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                 }
 
                 std::array<double, 4> RHS_G{}, RHS_S{};
-                RHS_G[0] =
-                    volp * (dsfi1 * dev_stress_k[0][0] + dsfi2 * dev_stress_k[0][1] + dsfi3 * dev_stress_k[0][2]) //
-                    - sfi * massp * fx - volp * dsfi1 * pres_k;
-                RHS_G[1] =
-                    volp * (dsfi1 * dev_stress_k[1][0] + dsfi2 * dev_stress_k[1][1] + dsfi3 * dev_stress_k[1][2]) //
-                    - sfi * massp * fy - volp * dsfi2 * pres_k;
-                RHS_G[2] =
-                    volp * (dsfi1 * dev_stress_k[2][0] + dsfi2 * dev_stress_k[2][1] + dsfi3 * dev_stress_k[2][2]) //
-                    - sfi * massp * fz - volp * dsfi3 * pres_k;
+                RHS_G[0] = volp * (dsfi1 * stress_k[0][0] + dsfi2 * stress_k[0][1] + dsfi3 * stress_k[0][2]) //
+                           - sfi * massp * fx; // - volp * dsfi1 * pres_k;
+                RHS_G[1] = volp * (dsfi1 * stress_k[1][0] + dsfi2 * stress_k[1][1] + dsfi3 * stress_k[1][2]) //
+                           - sfi * massp * fy; // - volp * dsfi2 * pres_k;
+                RHS_G[2] = volp * (dsfi1 * stress_k[2][0] + dsfi2 * stress_k[2][1] + dsfi3 * stress_k[2][2]) //
+                           - sfi * massp * fz; // - volp * dsfi3 * pres_k;
                 RHS_G[3] = volp * sfi * TraceMat3(grad_vel_k);
 
                 RHS_S[0] = volp * t2 * dsfi1 * TraceMat3(grad_vel_k);
@@ -322,9 +319,6 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     NodeVarComm(this->NS_.b_rhs, {nuc, nvc, nwc, npc});
 
     this->AddInertialForceToRHS(this->NS_, naccel_am);
-
-    // ---- Diagional Scalling Prec ----
-    if (!this->NS_.use_petsc) { this->NS_.BuildDiagonalPreconditioner(this->NS_.ndof); }
 
     return;
 }

@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <vector>
 
 class BoundaryCondition {
@@ -9,6 +10,8 @@ class BoundaryCondition {
     int ibc = 0;
     std::vector<int> nbc;
     std::vector<double> fbc;
+    std::vector<int> global_nbc;    // immutable global IDs
+    std::vector<double> global_fbc; // immutable prescribed values
 
     /**
      * @brief Read boundary-condition node IDs and prescribed values from input stream.
@@ -45,4 +48,37 @@ class BoundaryCondition {
      * @param variable Vector to be modified in-place.
      */
     void BCSetDt(int nn, std::vector<double> &variable);
+
+    /**
+     * @brief Cache this rank's control-point BCs as a global MPI-wide BC list.
+     *
+     * Local control-point IDs are converted to global IDs and gathered from all
+     * ranks.  The resulting data remains valid after a DLB repartition.
+     */
+    void CaptureGlobalControlPointBC();
+
+    /**
+     * @brief Rebuild local control-point BC IDs for the current MPI region.
+     */
+    void RebuildLocalControlPointBC();
+
+    /**
+     * @brief Cache this rank's element BCs as a global MPI-wide BC list.
+     *
+     * This is used by fluid inflow BCs, whose IDs refer to background elements.
+     */
+    void CaptureGlobalElementBC();
+
+    /**
+     * @brief Rebuild local background-element BC IDs for the current MPI region.
+     */
+    void RebuildLocalElementBC();
+
+  private:
+    /**
+     * @brief Gather and de-duplicate global BC entries from all MPI ranks.
+     * @param local_global_ids Global IDs represented by this rank's local BC entries.
+     * @param has_values Whether each BC entry has a prescribed scalar value.
+     */
+    void CacheGlobalEntries(const std::vector<int> &local_global_ids, bool has_values);
 };

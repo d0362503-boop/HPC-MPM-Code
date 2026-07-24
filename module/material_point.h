@@ -11,19 +11,59 @@
 #include "mesh.h"
 #include "mpi_data.h"
 #include "solver/crsmat.h"
-#include "solver/solver.h"
+
+namespace mpm_dlb {
+struct Region;
+}
 
 class MaterialPoint {
   public:
     // --- MPI part ---
     ParticleCommunication par_comm_;
+    bool do_dlb = false; // enable dynamic load balance
 
     /**
-     * @brief Determine which MPI rank owns each particle based on its current coordinate.
+     * @brief Build a normal particle-migration plan from the current MPI regions.
+     * @param regions One inclusive background-element region per MPI rank, ordered by rank.
      */
-    void DetermineParticleRank();
+    void DetermineParticleRank(const std::vector<mpm_dlb::Region> &regions);
 
-    virtual void Moveparticle() {};
+    /**
+     * @brief Build a DLB particle-migration plan for a newly rebalanced set of MPI regions.
+     * @param regions One inclusive background-element region per MPI rank, ordered by rank.
+     *
+     * Particles outside the global background mesh are marked for removal.  Particles inside
+     * the mesh may be transferred to any rank; the resulting peer list is stored in
+     * `par_comm_.comm_ranks` for the subsequent point-variable communication.
+     */
+    void DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> &regions);
+
+    /**
+     * @brief Redistribute particles to a newly rebalanced MPI partition.
+     * @param regions One inclusive background-element region per MPI rank, ordered by rank.
+     *
+     * The function prepares the DLB particle communication plan, updates the local particle count,
+     * and transfers the physics-specific particle state.
+     */
+    void RebalanceDLBParticles(const std::vector<mpm_dlb::Region> &regions);
+
+    /**
+     * @brief Apply one complete dynamic load-balance update to this MPM object.
+     *
+     * Samples particles, repartitions MPI regions, redistributes particle data,
+     * and rebuilds mesh, control-point, nodal-volume, and BC data.  Time-step
+     * scheduling and solver-system rebuilds remain the responsibility of the caller.
+     */
+    virtual void ApplyDLB();
+
+    /**
+     * @brief Migrate all physics-specific particle state using the current particle communication plan.
+     *
+     * `par_comm_` and the new local particle count must be prepared before this function is called.
+     */
+    virtual void MigrateParticleData() {}
+
+    virtual void MoveParticle() {};
     // ------------------------------
 
     // --- BC set ---
@@ -102,6 +142,14 @@ class MaterialPoint {
      * @param infile Input stream positioned at the boundary-condition section.
      */
     virtual void InputBCData(std::ifstream &infile) {};
+
+    /**
+     * @brief Rebuild local boundary-condition IDs after a DLB region change.
+     *
+     * The default is empty because FEM objects do not participate in particle
+     * DLB.  MPM solid and fluid objects rebuild their physics-specific BCs.
+     */
+    virtual void RebuildBoundaryConditions() {}
     // ---------------
 
     // --- For Implicit MPM ---
@@ -172,18 +220,6 @@ class MaterialPoint {
 
     virtual void UpdateNRIncrement() {};
 
-    int SolveSystem(CrsMat &mat, int NR_it = -1) const {
-        int iter;
-        if (mat.use_petsc) {
-            mat.AssemblePetscMat(mat.ndof);
-            iter = mat.SolveWithPetsc(mat.ndof, NR_it);
-        } else {
-            iter = GPBiCGSafe(mat);
-        }
-
-        return iter;
-    }
-
     /**
      * @brief Commit the converged nodal velocity and acceleration for the time step.
      * @param nvel_k   Converged nodal velocity vector.
@@ -196,11 +232,11 @@ class MaterialPoint {
      * particle-shifting correction.
      * @param accel_old Nodal/particle acceleration from the previous step.
      * @param disp      Nodal displacement increment applied to particle coordinates.
-     * @param delta_corr Optional particle-shifting correction displacement.
+     * @param disp_corr Optional particle-shifting correction displacement.
      */
     void CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                   const std::vector<std::array<double, 3>> &disp,
-                                  const std::vector<std::array<double, 3>> &delta_corr = {});
+                                  const std::vector<std::array<double, 3>> &disp_corr = {});
 
     /**
      * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
@@ -225,7 +261,7 @@ class MaterialPoint {
     std::vector<std::array<double, 6>> stress;
     std::vector<std::vector<double>> ustatev;
     std::array<std::array<double, 6>, 6> stif_mat;
-    std::vector<std::array<std::array<double, 3>, 3>> def_grad, def_grad_bar;
+    std::vector<std::array<std::array<double, 3>, 3>> def_grad, def_grad_bar, delta_def_grad_bar;
 
     virtual void InputPointData(std::ifstream &inflie) {};
 
@@ -337,15 +373,26 @@ class MaterialPoint {
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
+     *
+     * Based on the particle shifting scheme in Chandra et al.,
+     * "Stabilized mixed material point method for incompressible fluid flow analysis,"
+     * Computer Methods in Applied Mechanics and Engineering, 419, 116644, 2024.
+     *
      * @return Correction displacement vector for each particle.
      */
     std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
 
     /**
-     * @brief Compute an SPH-like spring-force particle-shifting correction.
+     * @brief Compute a pairwise repulsive particle-shifting correction.
+     *
+     * Based on the isotropic position correction in Ando et al.,
+     * "Preserving Fluid Sheets with Adaptively Sampled Anisotropic Particles,"
+     * IEEE Transactions on Visualization and Computer Graphics, 2012,
+     * Sec. 5.2, Eq. (18).
+     *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> SPHLikeParticleShifting();
+    std::vector<std::array<double, 3>> PairwiseRepulsiveParticleShifting();
     // ----------------------------------
 
     // ----- Control point variable -----

@@ -15,6 +15,8 @@ namespace explicitmpm {
 
 class ExplicitSolidMPM : public SolidMaterialPointBase {
   public:
+    ExplicitSolidMPM() { this->do_dlb = false; }
+
     /**
      * @brief Read and initialize standalone explicit-solid input data.
      */

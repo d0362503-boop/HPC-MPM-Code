@@ -18,10 +18,14 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     CrsMat SM_;
 
     ImplicitSolidMPM() {
+        this->do_dlb = false;
+        this->gamma_nb = 0.5e0;
+        this->beta_nb = 0.25e0;
         this->ode_order = 2;
         this->cm_.implicit_flag = true;
         this->SM_.ndof = 3;
         this->SM_.use_petsc = true;
+        this->SM_.use_schur_fieldsplit = false;
         this->SM_.FEM_flag = false;
         this->SM_.amg_rebuild_freq = 1; // keep solid AMG alive across this 10-step window unless iterations deteriorate
         this->SM_.owner_ = this;
@@ -46,6 +50,16 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Driver for one implicit solid time step.
      */
     void SolveSolid() override;
+
+    /** @brief Apply DLB and rebuild the implicit-solid matrix structure. */
+    void ApplyDLB() override {
+
+        MaterialPoint::ApplyDLB();
+
+        this->SM_.BuildCrsMat(9);
+
+        return;
+    };
 
   private:
     // Case-specific surface traction force.

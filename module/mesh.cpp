@@ -1,4 +1,5 @@
 #include "mesh.h"
+#include "DLB/mpm_dlb.h"
 #include "dataset.h"
 #include "material_point.h"
 #include "shape_function.h"
@@ -101,7 +102,7 @@ void BuildMesh() {
     int ynode = xynode[1];
     int znode = xynode[2];
 
-    xyn.assign(node, std::array<double, 3>{});
+    VectorAssign(node, xyn);
     for (int k = 0; k < znode; k++) {
         for (int j = 0; j < ynode; j++) {
             for (int i = 0; i < xnode; i++) {
@@ -113,7 +114,7 @@ void BuildMesh() {
         }
     }
 
-    nc.assign(nelem, std::array<int, 8>{});
+    VectorAssign(nelem, nc);
     for (int k = 0; k < zelem; k++) {
         for (int j = 0; j < yelem; j++) {
             for (int i = 0; i < xelem; i++) {
@@ -129,6 +130,8 @@ void BuildMesh() {
             }
         }
     }
+
+    mpm_dlb::CollectCurrentRegions();
 
     return;
 }

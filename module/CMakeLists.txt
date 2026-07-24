@@ -92,6 +92,7 @@ endif()
 # -----------------------------------------------------------------------------
 # Add Subdirectories
 # -----------------------------------------------------------------------------
+add_subdirectory(DLB)
 add_subdirectory(solver)
 add_subdirectory(fluid)
 add_subdirectory(solid)
