@@ -11,7 +11,6 @@
 #include "mesh.h"
 #include "mpi_data.h"
 #include "solver/crsmat.h"
-#include "solver/solver.h"
 
 namespace mpm_dlb {
 struct Region;
@@ -220,42 +219,6 @@ class MaterialPoint {
     }
 
     virtual void UpdateNRIncrement() {};
-
-    /**
-     * @brief Solve the linear system with PETSc or the native GPBiCGAR solver.
-     * @param mat    Linear system to solve (matrix, RHS, and solution vector).
-     * @param NR_it  Current Newton-Raphson iteration index.
-     * @return Number of linear solver iterations used.
-     *
-     * When the PETSc solve diverges, the native diagonal-scaled GPBiCGAR solver
-     * is retried on the same assembled matrix.
-     */
-    int SolveSystem(CrsMat &mat, int NR_it = -1) const {
-
-        int iter;
-        if (mat.use_petsc) {
-            std::vector<double> x_lhs_backup = mat.x_lhs; // keep NR iterate in case PETSc fails
-            mat.AssemblePetscMat(mat.ndof);
-            iter = mat.SolveWithPetsc(mat.ndof, NR_it);
-
-            KSPConvergedReason reason;
-            KSPGetConvergedReason(mat.ksp, &reason);
-            if (reason < 0) {
-                if (myrank == 0) {
-                    std::cout << "PETSc solve failed at step =  " << istep << ", NR_it =  " << NR_it //
-                              << " (reason = " << reason << "); falling back to native GPBiCGAR\n";
-                }
-                mat.x_lhs = x_lhs_backup; // discard polluted PETSc iterate
-                mat.BuildDiagonalPreconditioner(mat.ndof);
-                iter = GPBiCGAR(mat);
-            }
-        } else {
-            mat.BuildDiagonalPreconditioner(mat.ndof);
-            iter = GPBiCGAR(mat);
-        }
-
-        return iter;
-    }
 
     /**
      * @brief Commit the converged nodal velocity and acceleration for the time step.

@@ -89,12 +89,12 @@ for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet displacement/pressure values
     PredictNewmarkBetaVelAndAccel(...);     // predictor
     AssembleNSSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
-    iter = SolveSystem(NS_, NR_it);         // PETSc or native linear solve
+    iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
     if CheckNRConvergence(...) break;
 ```
 
-`SolveSystem` is inherited from `MaterialPoint`; it dispatches to `GPBiCGSafe` when `use_petsc == false` and to the PETSc path otherwise.
+`CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise.  If PETSc diverges, it uses native GPBiCGAR for the rest of that `istep`, so Newton residuals use the native matrix/vector state; PETSc is retried on the next time step.
 
 ## Numerical Method
 

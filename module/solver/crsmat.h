@@ -187,6 +187,7 @@ class CrsMat {
 
     bool use_petsc = true;
     bool use_schur_fieldsplit = false;
+    int petsc_fallback_step_ = -1; // step that fell back to native
 
     std::vector<char> active_row_mask;
 
@@ -283,6 +284,16 @@ class CrsMat {
      * @return Number of KSP iterations, or -1 on failure.
      */
     int SolveWithPetsc(int ndof, int NR_it = -1);
+
+    /**
+     * @brief Solve this assembled linear system with PETSc or native GPBiCGAR.
+     * @param NR_it Current Newton–Raphson iteration index.
+     * @return Number of linear solver iterations used.
+     *
+     * When the PETSc solve diverges, native diagonal-scaled GPBiCGAR retries
+     * the same assembled matrix.
+     */
+    int SolveSystem(int NR_it = -1);
 
     /**
      * @brief Collect global IDs of Dirichlet boundary rows/columns into `petsc_bc_gids`.

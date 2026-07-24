@@ -11,6 +11,40 @@
 #include <string>
 #include <vector>
 
+int CrsMat::SolveSystem(int NR_it) {
+
+    if (this->petsc_fallback_step_ >= 0 && istep > this->petsc_fallback_step_) {
+        this->use_petsc = true;
+        this->petsc_fallback_step_ = -1;
+    }
+
+    int iter;
+    if (this->use_petsc) {
+        std::vector<double> x_lhs_backup = this->x_lhs; // keep NR iterate in case PETSc fails
+        this->AssemblePetscMat(this->ndof);
+        iter = this->SolveWithPetsc(this->ndof, NR_it);
+
+        KSPConvergedReason reason;
+        KSPGetConvergedReason(this->ksp, &reason);
+        if (reason < 0) {
+            if (myrank == 0) {
+                std::cout << "PETSc solve failed at step =  " << istep << ", NR_it =  " << NR_it //
+                          << " (reason = " << reason << "); falling back to native GPBiCGAR\n";
+            }
+            this->x_lhs = x_lhs_backup; // discard polluted PETSc iterate
+            this->use_petsc = false;
+            this->petsc_fallback_step_ = istep;
+            this->BuildDiagonalPreconditioner(this->ndof);
+            iter = GPBiCGAR(*this);
+        }
+    } else {
+        this->BuildDiagonalPreconditioner(this->ndof);
+        iter = GPBiCGAR(*this);
+    }
+
+    return iter;
+}
+
 int GPBiCGSafe(CrsMat &mat) {
 
     const int var_size = mat.x_lhs.size();
@@ -56,7 +90,7 @@ int GPBiCGSafe(CrsMat &mat) {
 
     double rsr = rtr;
     btb = rtr;
-    double epsbtb = 1.0e-8 * btb;
+    double epsbtb = 1.0e-10 * btb;
     if (btb < 1.0e-18) int kmax = 0;
 
     double beta = 0.0e0;
@@ -180,7 +214,7 @@ int GPBiCGAR(CrsMat &mat) {
 
     double rsr = rtr;
     btb = rtr;
-    double epsbtb = 1.0e-8 * btb;
+    double epsbtb = 1.0e-10 * btb;
     if (btb < 1.0e-18) int kmax = 0;
 
     double beta = 0.0e0;
@@ -303,7 +337,7 @@ int GPBiCG(CrsMat &mat) {
 
     double rsr = rtr;
     btb = rtr;
-    double epsbtb = 1.0e-8 * btb;
+    double epsbtb = 1.0e-10 * btb;
 
     if (btb < 1.0e-18) int kmax = 0;
 

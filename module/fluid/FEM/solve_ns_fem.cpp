@@ -16,7 +16,6 @@
 #include "../../mpi_data.h"
 #include "../../shape_function.h"
 #include "../../solver/crsmat.h"
-#include "../../solver/solver.h"
 #include "stabilized_fem.h"
 
 using namespace stabilizedfem;
@@ -47,7 +46,7 @@ void StabilizedFEM::SolveNS() {
     std::copy(this->nvel.begin(), this->nvel.end(), this->NS_.x_lhs.begin());
     std::copy(this->npres.begin(), this->npres.end(), this->NS_.x_lhs.begin() + npc);
 
-    int iter = this->SolveSystem(NS_);
+    int iter = this->NS_.SolveSystem();
 
     // ---- Extract [nvel, npres] from x_lhs ----
     std::copy(this->NS_.x_lhs.begin(), this->NS_.x_lhs.begin() + npc, this->nvel.begin());

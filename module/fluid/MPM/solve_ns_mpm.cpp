@@ -5,7 +5,6 @@
 #include "../../mpi_data.h"
 #include "../../shape_function.h"
 #include "../../solver/crsmat.h"
-#include "../../solver/solver.h"
 #include "stabilized_mpm.h"
 #include <array>
 #include <cmath>
@@ -43,7 +42,7 @@ void StabilizedMPM::SolveNS() {
 
         this->AssembleNSSystem(nvel_k, naccel_k);
 
-        int iter = this->SolveSystem(this->NS_, NR_it);
+        int iter = this->NS_.SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
 
