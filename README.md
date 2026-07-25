@@ -104,17 +104,17 @@ StabilizedMixedMPM();
 Generators are selected in `data/generate/CMakeLists.txt`:
 
 ```cmake
-# add_subdirectory(fluid)
+add_subdirectory(fluid)
 # add_subdirectory(solid)
-add_subdirectory(fsi)
+# add_subdirectory(fsi)
 ```
 
 Partitioners are selected in `data/divide/CMakeLists.txt`:
 
 ```cmake
-# add_subdirectory(divide_fluid fluid)
+add_subdirectory(divide_fluid fluid)
 # add_subdirectory(divide_solid solid)
-add_subdirectory(divide_fsi fsi)
+# add_subdirectory(divide_fsi fsi)
 ```
 
 ## Build Examples
@@ -188,17 +188,17 @@ It launches `./MPM` with `mpirun` under `nohup` in the background (hyper-threadi
 Build and run a generator:
 
 ```bash
-cmake --build build --target makinput_fsi -j8
-cd build/data/generate/fsi
-./makinput_fsi
+cmake --build build --target makinput_fluid -j8
+cd build/data/generate/fluid
+./makinput_fluid
 ```
 
 Build and run a partitioner:
 
 ```bash
-cmake --build build --target makdivide_fsi -j8
-cd build/data/divide/fsi
-./makdivide_fsi
+cmake --build build --target makdivide_fluid -j8
+cd build/data/divide/fluid
+./makdivide_fluid
 ```
 
 The partitioner writes rank-split data under `myrank_data/`.

@@ -169,7 +169,8 @@ void MaterialPoint::DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> 
     }
 
     std::vector<int> receive_counts(nprocs, 0);
-    MPI_Alltoall(send_counts.data(), 1, MPI_INT, receive_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, //
+                 receive_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     this->par_comm_.comm_ranks.clear();
     this->par_comm_.nsp.clear();

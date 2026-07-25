@@ -41,6 +41,7 @@ MaterialPoint (base)
 | `NS_.FEM_flag`         | `false`                                  | `true`               |
 | `NS_.use_petsc`        | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
 | `NS_.use_schur_fieldsplit` | `true`                              | `true`               |
+| Pressure Pmat          | PETSc `SELFP + epsilon I`                | PETSc `SELFP`        |
 | `NS_.amg_rebuild_freq` | `1`                                      | `20`                 |
 
 ## Driver Flow
@@ -94,7 +95,7 @@ for NR_it = 0 .. iter_max
     if CheckNRConvergence(...) break;
 ```
 
-`CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise.  If PETSc diverges, it uses native GPBiCGAR for the rest of that `istep`, so Newton residuals use the native matrix/vector state; PETSc is retried on the next time step.
+`CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise. PETSc divergence is reported by the KSP reason; it does not automatically switch solvers.
 
 ## Numerical Method
 
@@ -133,13 +134,21 @@ The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After th
 
 ```cpp
 if (NS_.use_petsc)  →  PETSc KSP
-else                 →  GPBiCGSafe (native iterative solver)
+else                 →  GPBiCGAR (native iterative solver)
 ```
 
 The MPM fluid default is PETSc with `use_schur_fieldsplit = true`. Its monolithic (u,p)
 system is preconditioned by a lower Schur-complement field split: velocity and pressure
 blocks each get an HYPRE/BoomerAMG hierarchy, with `SELFP` as the Schur preconditioner.
-The FEM fluid `NS_` system uses the same setting; the MPM and FEM rebuild frequencies differ.
+Its `A_00` inverse approximation is PETSc's 3x3 `(u,v,w)` `blockdiag`, rather than a
+scalar diagonal.
+Because its `FEM_flag` is false, the MPM pressure Pmat is the regularized `SELFP + epsilon I`, with
+`epsilon = 1.0e-4 * abs(trace_active(SELFP)) / n_active`; inactive identity rows are excluded from
+the scale. The code keeps PETSc's `PC_FIELDSPLIT_SCHUR_PRE_SELFP` selection and shifts its internally
+built pressure Pmat in place after field-split setup; it does not switch to `SCHUR_PRE_USER`. The outer
+FGMRES system remains unchanged.
+The FEM fluid `NS_` system uses unshifted `SELFP` through `FEM_flag == true`; the MPM and FEM
+rebuild frequencies differ.
 Set `NS_.use_petsc = false` to fall back to the native solver.
 
 ### G2P and particle motion (`Node2Particle`)
