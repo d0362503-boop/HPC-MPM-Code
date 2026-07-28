@@ -251,7 +251,7 @@ void MaterialPoint::ApplyDLB() {
 
     MakNodalVol();
 
-    this->RebuildBoundaryConditions();
+    this->RebuildBC();
 
     return;
 }

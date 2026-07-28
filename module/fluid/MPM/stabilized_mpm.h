@@ -48,7 +48,7 @@ class StabilizedMPM : public MaterialPoint {
     void InputBCData(std::ifstream &infile) override;
 
     /** @brief Rebuild fluid control-point and inflow BCs for the current DLB region. */
-    void RebuildBoundaryConditions() override;
+    void RebuildBC() override;
 
     /** @brief Initialize fluid particle state. */
     void InitializePointData() override;

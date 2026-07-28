@@ -12,8 +12,8 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 | `var_trans_fluid.cpp`      | `Particle2Node` (P2G) and `Node2Particle` (G2P), including APIC `Dmat`/`InvDmat` and particle-shifting call |
 | `solve_ns_mpm.cpp`         | Newton–Raphson loop, VMS/PSPG stabilization coefficients, NS assembly/solve                                 |
 | `fluid_point_inflow.cpp`   | Empty-mesh and filled-mesh inflow particle generation                                                       |
-| `fluid_material_point.cpp` | `InitializePointData`, `MoveParticle` (migration + inflow), `MigrateParticleData`, `ApplyDLB`, `RebuildBoundaryConditions` |
-| `fluid_mpm_data_io.cpp`    | Input/output of BC/point data and plain-text restart; captures global BC IDs when `do_dlb` is on                     |
+| `fluid_material_point.cpp` | `InitializePointData`, `MoveParticle` (migration + inflow), `MigrateParticleData`, `ApplyDLB`, `RebuildBC`  |
+| `fluid_mpm_data_io.cpp`    | Input/output of BC/point data and plain-text restart; captures global BC IDs when `do_dlb` is on            |
 
 Shared helpers live outside this directory:
 
@@ -35,14 +35,14 @@ MaterialPoint (base)
 
 `StabilizedMPM` differs from the FEM fluid path in a few key defaults:
 
-| Setting                | MPM fluid default                        | FEM fluid default    |
-| ---------------------- | ---------------------------------------- | -------------------- |
-| `ode_order`            | `2` (displacement/velocity/acceleration) | `1` (velocity only)  |
-| `NS_.FEM_flag`         | `false`                                  | `true`               |
-| `NS_.use_petsc`        | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
-| `NS_.use_schur_fieldsplit` | `true`                              | `true`               |
-| Pressure Pmat          | PETSc `SELFP + epsilon I`                | PETSc `SELFP`        |
-| `NS_.amg_rebuild_freq` | `1`                                      | `20`                 |
+| Setting                    | MPM fluid default                        | FEM fluid default                |
+| -------------------------- | ---------------------------------------- | -------------------------------- |
+| `ode_order`                | `2` (displacement/velocity/acceleration) | `1` (velocity only)              |
+| `NS_.FEM_flag`             | `false`                                  | `true`                           |
+| `NS_.use_petsc`            | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
+| `NS_.use_schur_fieldsplit` | `true`                                   | `true`                           |
+| Pressure Pmat              | PETSc `SELFP + epsilon I`                | PETSc `SELFP`                    |
+| `NS_.amg_rebuild_freq`     | `1`                                      | `20`                             |
 
 ## Driver Flow
 

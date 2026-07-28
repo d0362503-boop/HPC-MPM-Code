@@ -23,12 +23,12 @@ the change incremental.
 
 ## 2. Files and Entry Points
 
-| File | Role |
-|------|------|
-| `module/DLB/mpm_dlb.h` | `Region` struct + the six public functions |
-| `module/DLB/mpm_dlb.cpp` | implementation; owns the single `g_current_regions` instance |
-| `module/mpi_data.cpp` | `MaterialPoint::{DetermineParticleRank, DetermineDLBParticleRank, RebalanceDLBParticles, ApplyDLB}` |
-| `module/bc.cpp` | `BoundaryCondition::{CaptureGlobal*, RebuildLocal*}` — BC persistence across repartitions |
+| File                     | Role                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `module/DLB/mpm_dlb.h`   | `Region` struct + the six public functions                                                          |
+| `module/DLB/mpm_dlb.cpp` | implementation; owns the single `g_current_regions` instance                                        |
+| `module/mpi_data.cpp`    | `MaterialPoint::{DetermineParticleRank, DetermineDLBParticleRank, RebalanceDLBParticles, ApplyDLB}` |
+| `module/bc.cpp`          | `BoundaryCondition::{CaptureGlobal*, RebuildLocal*}` — BC persistence across repartitions           |
 
 Public API (all collective unless noted):
 
@@ -72,7 +72,7 @@ ComputeDLBRegions(local_samples)     // 4. root cuts new regions, MPI_Bcast
 RebalanceDLBParticles(regions)       // 5. global particle migration to new owners
 UpdateDLBRegions(regions)            // 6. new mesh sizes + overlap tables + weights
 BuildMesh(); BuildControlPoint();
-MakNodalVol(); RebuildBoundaryConditions();   // 7. partition-dependent data
+MakNodalVol(); RebuildBC();   // 7. partition-dependent data
 ```
 
 The physics class then rebuilds its solver system (stage 8, in the overrides).
@@ -148,12 +148,12 @@ Result is broadcast (`MPI_Bcast`) so all ranks hold the identical region table.
 
 Two different migration builders exist; DLB requires the global one:
 
-| | `DetermineParticleRank` | `DetermineDLBParticleRank` |
-|---|---|---|
-| use | per-step drift (`MoveParticle`) | repartition (`RebalanceDLBParticles`) |
-| search | neighbor regions `naid` only | **all** ranks |
-| aborts if | particle crossed a non-neighbor | regions overlap / don't cover the mesh |
-| count exchange | pair-wise Isend/Irecv | `MPI_Alltoall` |
+|                | `DetermineParticleRank`         | `DetermineDLBParticleRank`             |
+| -------------- | ------------------------------- | -------------------------------------- |
+| use            | per-step drift (`MoveParticle`) | repartition (`RebalanceDLBParticles`)  |
+| search         | neighbor regions `naid` only    | **all** ranks                          |
+| aborts if      | particle crossed a non-neighbor | regions overlap / don't cover the mesh |
+| count exchange | pair-wise Isend/Irecv           | `MPI_Alltoall`                         |
 
 Because a repartition can move a particle across several old regions at once, the
 neighbor restriction would lose particles — hence the global O(num × nprocs) owner
@@ -185,7 +185,7 @@ it, in this order:
 
 The caller then rebuilds derived data: `BuildMesh()` (also re-collects
 `g_current_regions`), `BuildControlPoint()` (`ncc`, `xyc`), `MakNodalVol()` (`nvol`,
-with the new overlap tables), `RebuildBoundaryConditions()` (§10), and the physics
+with the new overlap tables), `RebuildBC()` (§10), and the physics
 class rebuilds its `CrsMat` — with `use_petsc`, `BuildCrsMat` first calls
 `ResetPetscSolver()` to destroy the old `Mat/Vec/KSP/lgmap/scatter` (all handles are
 `nullptr`-initialized, so the first call is a safe no-op).
@@ -210,7 +210,7 @@ at input time (`InputBCData`, when `do_dlb = 1`):
   filter the (rank-identical) global cache against the new region — no communication
   needed at rebuild time.
 
-`StabilizedMPM::RebuildBoundaryConditions()` additionally resets the inflow counters
+`StabilizedMPM::RebuildBC()` additionally resets the inflow counters
 (`InitializeInflowBC`, `infbc_isfilled = false`), so the next inflow check
 re-evaluates boundary-cell fill under the new partition.
 
@@ -230,15 +230,15 @@ re-evaluates boundary-cell fill under the new partition.
 
 ## 12. Failure Checks (all `MPI_Abort`)
 
-| site | condition |
-|------|-----------|
-| `CutsFromSamples` | invalid dir/range/cell size, or fewer elements than splits |
-| `ComputeDLBRegions` | `nxyr` product ≠ `nprocs`; mesh smaller than rank grid |
-| `UpdateDLBRegions` | region count ≠ `nprocs`; region outside global mesh |
-| `DetermineParticleRank` | bad region count/peer rank; overlapping peers; particle crossed a non-neighbor region |
-| `DetermineDLBParticleRank` | region overlap; regions don't cover the mesh |
-| `CacheGlobalEntries` | conflicting prescribed values on one global BC node |
-| `FilterSamples` | sample outside the global mesh |
+| site                       | condition                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `CutsFromSamples`          | invalid dir/range/cell size, or fewer elements than splits                            |
+| `ComputeDLBRegions`        | `nxyr` product ≠ `nprocs`; mesh smaller than rank grid                                |
+| `UpdateDLBRegions`         | region count ≠ `nprocs`; region outside global mesh                                   |
+| `DetermineParticleRank`    | bad region count/peer rank; overlapping peers; particle crossed a non-neighbor region |
+| `DetermineDLBParticleRank` | region overlap; regions don't cover the mesh                                          |
+| `CacheGlobalEntries`       | conflicting prescribed values on one global BC node                                   |
+| `FilterSamples`            | sample outside the global mesh                                                        |
 
 ## 13. Known Limitations
 

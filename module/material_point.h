@@ -149,7 +149,7 @@ class MaterialPoint {
      * The default is empty because FEM objects do not participate in particle
      * DLB.  MPM solid and fluid objects rebuild their physics-specific BCs.
      */
-    virtual void RebuildBoundaryConditions() {}
+    virtual void RebuildBC() {}
     // ---------------
 
     // --- For Implicit MPM ---

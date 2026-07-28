@@ -47,7 +47,7 @@ void SolidMaterialPointBase::InitializePointData() {
     return;
 }
 
-void SolidMaterialPointBase::RebuildBoundaryConditions() {
+void SolidMaterialPointBase::RebuildBC() {
 
     this->ubc.RebuildLocalControlPointBC();
     this->vbc.RebuildLocalControlPointBC();
