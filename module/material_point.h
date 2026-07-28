@@ -147,7 +147,7 @@ class MaterialPoint {
      * @brief Rebuild local boundary-condition IDs after a DLB region change.
      *
      * The default is empty because FEM objects do not participate in particle
-     * DLB.  MPM solid and fluid objects rebuild their physics-specific BCs.
+     * DLB. MPM solid and fluid objects rebuild their physics-specific BCs.
      */
     virtual void RebuildBC() {}
     // ---------------

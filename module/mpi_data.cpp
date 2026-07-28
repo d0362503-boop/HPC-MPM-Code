@@ -243,6 +243,8 @@ void MaterialPoint::ApplyDLB() {
 
     this->RebalanceDLBParticles(regions);
 
+    mpm_dlb::OuputDLBParticleRation(this->num);
+
     mpm_dlb::UpdateDLBRegions(regions);
 
     BuildMesh();

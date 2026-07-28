@@ -17,6 +17,19 @@ constexpr double kMinSampleRate = 1.0e-4;
 constexpr double kSamplesPerRank = 128.0;
 std::vector<Region> g_current_regions;
 
+void OuputDLBParticleRation(int num) {
+
+    int max_particle, min_particle;
+    MPI_Allreduce(&max_particle, &num, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&min_particle, &num, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+
+    double ratio = max_particle / min_particle;
+
+    std::cout << "Max / Min ratio = " << ratio << "\n";
+
+    return;
+}
+
 void AbortDLB(const char *message) {
     if (myrank == kRootRank) { std::cerr << "DLB error: " << message << "\n"; }
     MPI_Abort(MPI_COMM_WORLD, 1);

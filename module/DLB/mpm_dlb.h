@@ -14,6 +14,8 @@ struct Region {
     std::array<int, 3> elem_max;
 };
 
+void OuputDLBParticleRation(int num);
+
 /**
  * @brief Collect and store the current MPI element regions from every rank.
  */
@@ -78,4 +80,4 @@ std::vector<Region> ComputeDLBRegions(const std::vector<std::array<double, 3>> &
  */
 void UpdateDLBRegions(const std::vector<Region> &regions);
 
-}  // namespace mpm_dlb
+} // namespace mpm_dlb
