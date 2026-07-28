@@ -147,9 +147,9 @@ class MaterialPoint {
      * @brief Rebuild local boundary-condition IDs after a DLB region change.
      *
      * The default is empty because FEM objects do not participate in particle
-     * DLB.  MPM solid and fluid objects rebuild their physics-specific BCs.
+     * DLB. MPM solid and fluid objects rebuild their physics-specific BCs.
      */
-    virtual void RebuildBoundaryConditions() {}
+    virtual void RebuildBC() {}
     // ---------------
 
     // --- For Implicit MPM ---
@@ -306,7 +306,7 @@ class MaterialPoint {
      */
     int GetInflowSign(int dir, int mesh_id) {
 
-        int sign;
+        int sign = 0;
         int mid = mesh_id + aelemmin[dir];
         if (mid == 0) {
             sign = 1;

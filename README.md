@@ -11,6 +11,7 @@ Supported solver modes:
 ## Features
 
 - C++17 with MPI parallelism
+- Dynamic load balancing (DLB) for fluid MPM via particle-coordinate sampling (`module/DLB/`)
 - PETSc-backed sparse linear algebra
 - Fluid: FEM or MPM
 - Solid: explicit or implicit MPM
@@ -104,17 +105,17 @@ StabilizedMixedMPM();
 Generators are selected in `data/generate/CMakeLists.txt`:
 
 ```cmake
-# add_subdirectory(fluid)
+add_subdirectory(fluid)
 # add_subdirectory(solid)
-add_subdirectory(fsi)
+# add_subdirectory(fsi)
 ```
 
 Partitioners are selected in `data/divide/CMakeLists.txt`:
 
 ```cmake
-# add_subdirectory(divide_fluid fluid)
+add_subdirectory(divide_fluid fluid)
 # add_subdirectory(divide_solid solid)
-add_subdirectory(divide_fsi fsi)
+# add_subdirectory(divide_fsi fsi)
 ```
 
 ## Build Examples
@@ -188,17 +189,17 @@ It launches `./MPM` with `mpirun` under `nohup` in the background (hyper-threadi
 Build and run a generator:
 
 ```bash
-cmake --build build --target makinput_fsi -j8
-cd build/data/generate/fsi
-./makinput_fsi
+cmake --build build --target makinput_fluid -j8
+cd build/data/generate/fluid
+./makinput_fluid
 ```
 
 Build and run a partitioner:
 
 ```bash
-cmake --build build --target makdivide_fsi -j8
-cd build/data/divide/fsi
-./makdivide_fsi
+cmake --build build --target makdivide_fluid -j8
+cd build/data/divide/fluid
+./makdivide_fluid
 ```
 
 The partitioner writes rank-split data under `myrank_data/`.
@@ -221,13 +222,7 @@ records now store each particle as:
 
 ## Important Notes
 
-- A lot of shared state lives in inline global variables in `module/dataset.h`, `module/mesh.h`, and `module/mpi_data.h`. Refactoring them into classes risks ODR issues and behavior changes.
-- Use `nodec` (control points) for computation and PETSc; `node` is for visualization only.
-- `NodeVarComm` ghost exchange is not equivalent to a naive `MPI_Allreduce`.
-- `dbc` stores overlap weights (`1/shared-rank-count`), not a boolean mask.
-- Shared control-point ownership tie-break: smallest `aelemmin`.
-
-See `AGENTS.md` for the full list of engineering rules and pitfalls.
+Before modifying the solver core, read `AGENTS.md` — in particular §5 (Critical Parallel Rules) and §6 (Common Pitfalls). It is the single source of truth for the project's engineering rules.
 
 ## License
 

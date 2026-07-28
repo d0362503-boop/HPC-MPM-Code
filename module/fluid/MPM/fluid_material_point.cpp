@@ -35,7 +35,7 @@ void StabilizedMPM::InitializePointData() {
     return;
 }
 
-void StabilizedMPM::RebuildBoundaryConditions() {
+void StabilizedMPM::RebuildBC() {
 
     this->ubc.RebuildLocalControlPointBC();
     this->vbc.RebuildLocalControlPointBC();

@@ -12,9 +12,8 @@ class MaterialPoint; // forward declaration
 
 class CrsMat {
   public:
-    // Pointer to the owning physics object (fluid or solid). Used for BC
-    // setup and residual callbacks. Inactive-node detection is now performed
-    // by BuildActiveRowMask() based on assembled matrix content.
+    // Pointer to the owning physics object. Used for BC setup, residual
+    // callbacks, and MPM mass-based inactive-node detection.
     MaterialPoint *owner_ = nullptr;
 
     // true  → FEM path (all nodes active, no identity fill needed).
@@ -149,9 +148,7 @@ class CrsMat {
      */
     double ComputeAbsResidual();
 
-    /**
-     * @brief Mark rows with negligible assembled entries as inactive for MPM solves.
-     */
+    /** @brief Mark low-mass MPM rows inactive. */
     void BuildActiveRowMask();
 
     /**
@@ -187,7 +184,6 @@ class CrsMat {
 
     bool use_petsc = true;
     bool use_schur_fieldsplit = false;
-    int petsc_fallback_step_ = -1; // step that fell back to native
 
     std::vector<char> active_row_mask;
 
@@ -260,6 +256,12 @@ class CrsMat {
     void ConfigurePreconditioner(PC pc);
 
     /**
+     * @brief Apply a diagonal shift to PETSc's SELFP pressure preconditioner.
+     * @param pc Configured velocity-pressure field-split preconditioner.
+     */
+    void UpdateShiftedSchurPreconditioner(PC pc);
+
+    /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
      * @param ndof Degrees of freedom per node.
      */
@@ -290,8 +292,7 @@ class CrsMat {
      * @param NR_it Current Newton–Raphson iteration index.
      * @return Number of linear solver iterations used.
      *
-     * When the PETSc solve diverges, native diagonal-scaled GPBiCGAR retries
-     * the same assembled matrix.
+     * `use_petsc` selects the PETSc or native path for the current solve.
      */
     int SolveSystem(int NR_it = -1);
 

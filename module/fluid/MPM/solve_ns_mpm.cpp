@@ -127,14 +127,14 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
 void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                                      const std::vector<double> &naccel_k) {
 
-    // double A = 5.0e0 / 180.0e0 * M_PI;
-    // double theta = A * sin(5.47e0*real_time);
-    // double fx = bb[2] * sin(theta);
-    // double fy = bb[1] * facl;
-    // double fz = bb[2] * cos(theta);
-    double fx = bb[0] * facl;
+    double A = 5.0e0 / 180.0e0 * M_PI;
+    double theta = A * std::sin(5.47e0 * real_time);
+    double fx = bb[2] * std::sin(theta);
     double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+    double fz = bb[2] * std::cos(theta);
+    // double fx = bb[0] * facl;
+    // double fy = bb[1] * facl;
+    // double fz = bb[2] * facl;
 
     const double af = this->alpha_f;
     const double af0 = 1.0e0 - this->alpha_f;

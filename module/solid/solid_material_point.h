@@ -23,7 +23,7 @@ class SolidMaterialPointBase : public MaterialPoint {
     void InputBCData(std::ifstream &infile) override;
 
     /** @brief Rebuild solid control-point BCs for the current DLB region. */
-    void RebuildBoundaryConditions() override;
+    void RebuildBC() override;
 
     /**
      * @brief Read solid point data (coordinates, material IDs, velocities, etc.) from input stream.

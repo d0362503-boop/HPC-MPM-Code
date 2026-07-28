@@ -169,7 +169,8 @@ void MaterialPoint::DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> 
     }
 
     std::vector<int> receive_counts(nprocs, 0);
-    MPI_Alltoall(send_counts.data(), 1, MPI_INT, receive_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, //
+                 receive_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     this->par_comm_.comm_ranks.clear();
     this->par_comm_.nsp.clear();
@@ -234,13 +235,13 @@ void MaterialPoint::ApplyDLB() {
 
     this->MoveParticle();
 
-    const int sample_skip = mpm_dlb::ComputeSampleSkip(this->coord.size());
-
-    const auto local_samples = mpm_dlb::SelectSamples(this->coord, sample_skip);
+    const auto local_samples = mpm_dlb::SelectSamples(this->coord);
 
     const auto regions = mpm_dlb::ComputeDLBRegions(local_samples);
 
     this->RebalanceDLBParticles(regions);
+
+    mpm_dlb::OuputDLBParticleRatio(this->num);
 
     mpm_dlb::UpdateDLBRegions(regions);
 
@@ -250,7 +251,7 @@ void MaterialPoint::ApplyDLB() {
 
     MakNodalVol();
 
-    this->RebuildBoundaryConditions();
+    this->RebuildBC();
 
     return;
 }

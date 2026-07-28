@@ -4,8 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
 #include "../bc.h"
@@ -121,23 +119,30 @@ void CrsMat::BuildActiveRowMask() {
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
 
-    std::vector<int> local_row_active(nodec, 0);
+    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-5;
 
-    for (int nid = 0; nid < nodec; ++nid) {
-        double row_abs_sum = 0.0e0;
-        for (int row_var = 0; row_var < this->ndof; ++row_var) {
-            for (int j = this->matrow[nid]; j < this->matrow[nid + 1]; ++j) {
-                for (int col_var = 0; col_var < this->ndof; ++col_var) {
-                    int bid = this->block_id[row_var * this->ndof + col_var];
-                    row_abs_sum += std::abs(this->amat[j + bid]);
-                }
-            }
+    PetscReal local_mass_sum = 0.0e0;
+    PetscInt local_positive_mass_count = 0;
+    for (int i = 0; i < this->local_node; ++i) {
+        const PetscReal mass = this->owner_->nmass[this->owned_natural_ids[i]];
+        if (mass > mtol) {
+            local_mass_sum += mass;
+            ++local_positive_mass_count;
         }
-        if (row_abs_sum >= mtol) local_row_active[nid] = 1;
     }
+    PetscReal global_mass_sum = 0.0e0;
+    PetscInt global_positive_mass_count = 0;
+    MPI_Allreduce(&local_mass_sum, &global_mass_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_positive_mass_count, &global_positive_mass_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    const PetscReal mass_mean = global_mass_sum / static_cast<PetscReal>(global_positive_mass_count);
+    const PetscReal mass_cutoff = active_mass_cutoff_ratio * mass_mean;
+
+    std::vector<int> local_row_active(nodec, 0);
+    for (int nid = 0; nid < nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > mass_cutoff ? 1 : 0; }
 
     // Synchronize the active indicator across overlap control points so that a
-    // shared row is active if any overlapping rank assembled nonzero content.
+    // shared row is active if any overlapping rank marks it active.
     // This prevents owner-rank false negatives that can pin partition seams.
     NodeVarComm(local_row_active, 0);
 
@@ -462,7 +467,6 @@ void CrsMat::ConfigurePreconditioner(PC pc) {
         PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
         PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
 
-        // PetscOptionsSetValue(nullptr, "-fieldsplit_1_mat_schur_complement_ainv_type", "lump");
         PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
         PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
         PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
@@ -473,6 +477,47 @@ void CrsMat::ConfigurePreconditioner(PC pc) {
         PCSetType(pc, PCHYPRE);
         PCHYPRESetType(pc, "boomeramg");
     }
+
+    return;
+}
+
+void CrsMat::UpdateShiftedSchurPreconditioner(PC pc) {
+
+    constexpr PetscReal kMpmSchurRegularization = 1.0e-4;
+
+    PCSetUp(pc);
+
+    PetscInt split_count = 0;
+    KSP *sub_ksp = nullptr;
+    PCFieldSplitGetSubKSP(pc, &split_count, &sub_ksp);
+
+    Mat pressure_operator = nullptr;
+    Mat pressure_pmat = nullptr;
+    KSPGetOperators(sub_ksp[1], &pressure_operator, &pressure_pmat);
+
+    PetscScalar trace = 0.0e0;
+    PetscInt pressure_rows = 0;
+    MatGetTrace(pressure_pmat, &trace);
+    MatGetSize(pressure_pmat, &pressure_rows, nullptr);
+
+    int local_active = 0;
+    for (int i = 0; i < this->local_node; ++i) { local_active += this->active_row_mask[this->owned_natural_ids[i]]; }
+    int global_active = 0;
+    MPI_Allreduce(&local_active, &global_active, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    const PetscScalar active_trace = trace - static_cast<PetscScalar>(pressure_rows - global_active);
+    const PetscReal diagonal_shift =
+        global_active > 0
+            ? kMpmSchurRegularization * std::abs(PetscRealPart(active_trace)) / static_cast<PetscReal>(global_active)
+            : 0.0e0;
+    if (diagonal_shift > 0.0e0) { MatShift(pressure_pmat, diagonal_shift); }
+
+    PC pressure_pc;
+    KSPGetPC(sub_ksp[1], &pressure_pc);
+    PCSetReusePreconditioner(pressure_pc, PETSC_FALSE);
+    KSPSetOperators(sub_ksp[1], pressure_operator, pressure_pmat);
+    KSPSetUp(sub_ksp[1]);
+    PetscFree(sub_ksp);
 
     return;
 }
@@ -511,7 +556,7 @@ void CrsMat::InitPetscSolver(int ndof) {
 
 void CrsMat::AssemblePetscMat(int ndof) {
     MatZeroEntries(this->petsc_mat);
-    std::vector<PetscScalar> identity_block(static_cast<size_t>(ndof) * ndof, 0.0);
+    std::vector<PetscScalar> identity_block(static_cast<size_t>(ndof) * ndof, 0.0e0);
     for (int var = 0; var < ndof; ++var) { identity_block[var * ndof + var] = 1.0; }
     this->BuildActiveRowMask();
 
@@ -647,6 +692,11 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
         PCSetReusePreconditioner(pc, PETSC_FALSE);
     } else {
         PCSetReusePreconditioner(pc, PETSC_TRUE);
+    }
+
+    if (this->use_schur_fieldsplit && !this->FEM_flag && need_rebuild) {
+        PCSetReusePreconditioner(pc, PETSC_FALSE);
+        this->UpdateShiftedSchurPreconditioner(pc);
     }
 
     KSPSolve(this->ksp, this->petsc_b, this->petsc_x);

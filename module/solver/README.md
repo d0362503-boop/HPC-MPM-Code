@@ -83,19 +83,25 @@ where `num_block = ndof * ndof`. For fluid (`ndof=4`) this means 16 scalar block
 
 ### 2.5 Active vs inactive nodes (MPM)
 
-In MPM, a control point is called *inactive* when its assembled matrix row carries negligible physical content. This is detected at solve time by `BuildActiveRowMask()`, which computes the absolute sum of all entries in the node's CSR row. If the sum is below `mtol`, the node is marked inactive.
+In MPM, a control point is called *inactive* when it carries negligible nodal mass. This is detected at solve time by `BuildActiveRowMask()`: it computes the global mean of the positive nodal masses (`nmass > mtol`, owned nodes only, `MPI_Allreduce` of sum and count) and marks a node active only when
 
-**Critical invariant for parallel PETSc solves:** the active/inactive decision must be synchronized across overlap control points before assembly skips rows or inserts owned-row identity blocks. A shared control point is considered active if *any* overlapping rank assembled nontrivial row content for that node. `BuildActiveRowMask()` implements this by computing a local integer indicator, calling `NodeVarComm(..., 0)` to accumulate indicators on shared nodes, and rebuilding `active_row_mask` from the synchronized result.
+```cpp
+nmass[nid] > 1.0e-5 * mass_mean
+```
 
-This prevents owner-rank false negatives: a rank that happens to own a shared node but has no local element contribution would otherwise mark the row inactive and identity-fill it, producing an artificial Dirichlet-like wall along partition boundaries.
+The relative threshold is scale-invariant across cases, unlike an absolute cutoff such as `mtol`.
+
+**Critical invariant for parallel PETSc solves:** the active/inactive decision must be synchronized across overlap control points before assembly skips rows or inserts owned-row identity blocks. A shared control point is considered active if *any* overlapping rank marks it active. `BuildActiveRowMask()` implements this by computing a local integer indicator, calling `NodeVarComm(..., 0)` to accumulate indicators on shared nodes, and rebuilding `active_row_mask` from the synchronized result. Since `nmass` itself is already `NodeVarComm`-synchronized during `Particle2Node()`, shared nodes carry identical values on all ranks, so the indicator exchange is a safeguard rather than the primary consistency mechanism.
+
+This prevents owner-rank false negatives: a rank that happens to own a shared node but holds only a small mass share would otherwise mark the row inactive and identity-fill it, producing an artificial Dirichlet-like wall along partition boundaries.
 
 During assembly:
 - inactive nodes are skipped in the first pass
 - locally-owned inactive nodes receive an identity block in a second pass to keep the matrix well-conditioned
 
-This replaces the older `nmass < mtol` heuristic with a matrix-content-based check that is consistent with the actual assembled system. See Section 3.5 for details.
+The current criterion is the third revision: it replaces the intermediate matrix-row-content check (absolute CSR row sum below `mtol`) and the original absolute `nmass < mtol` heuristic, both of which required absolute-threshold tuning. See Section 3.4 for details.
 
-> **Do not** classify active rows from purely rank-local `amat` content and immediately apply identity fill on owned rows. In overlapping decompositions this misclassifies shared rows whose physical contributions are split across ranks.
+> **Do not** classify active rows from purely rank-local data (mass or `amat` content) and immediately apply identity fill on owned rows. In overlapping decompositions this misclassifies shared rows whose physical contributions are split across ranks.
 
 ---
 
@@ -142,7 +148,7 @@ MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
 `MatSetBlockSize(ndof)` is mandatory. Without it, BoomerAMG quality drops sharply.
 
-`MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE` is **required for MPM**. See Section 3.5.
+`MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE` is **required for MPM**. See Section 3.4.
 
 ### 3.3 Blocked assembly path
 
@@ -156,13 +162,7 @@ MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
 All reusable buffers (`petsc_cols_buf`, `petsc_block_vals_buf`) are pre-allocated in `BuildPetscMat()` to their maximum size (`max_row_nnz * ndof`). This avoids repeated heap allocation in the hot loop.
 
-### 3.4 Fake structure assembly
-
-The code still performs one zero-value fake assembly during setup to lock the exact sparsity pattern.
-
-This is not the most elegant approach, but it is stable with the current mixed local/global indexing.
-
-### 3.5 MPM-specific matrix behavior
+### 3.4 MPM-specific matrix behavior
 
 #### Dynamic nonzeros from moving particles
 
@@ -188,10 +188,10 @@ This tells PETSc to dynamically `malloc` storage for unexpected nonzeros instead
 
 #### Inactive-node identity fill
 
-At the start of each assembly, `BuildActiveRowMask()` scans every control point's CSR row and computes a local active indicator. The indicator is then synchronized across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank has nonzero row content. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
+At the start of each assembly, `BuildActiveRowMask()` computes the mass-based active indicator (Section 2.5) and synchronizes it across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank marks it active. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
 
 ```cpp
-MatSetValuesBlocked(..., 1, &block_row, 1, &block_row, identity_block.data(), ADD_VALUES);
+MatSetValuesBlockedLocal(..., 1, &block_row, 1, &block_row, identity_block.data(), ADD_VALUES);
 ```
 
 This keeps the matrix non-singular and prevents the linear solver from diverging on empty-space degrees of freedom, while ensuring that partition-boundary nodes with real physical contributions are not pinned by mistake.
@@ -265,7 +265,7 @@ The code explicitly sets the following PETSc choices:
 ```cpp
 KSPFGMRES
 PCHYPRE + BoomerAMG
-rtol = 1.0e-12, atol = 1.0e-15, max_it = 1000
+rtol = 1.0e-10, atol = 1.0e-15, max_it = 1000
 ```
 
 The Schur field split sets its child-PC defaults with `PetscOptionsSetValue(...)` before
@@ -280,7 +280,7 @@ constructors. `ConfigurePreconditioner()` then configures:
 PCFIELDSPLIT with block size ndof (= 4)
 velocity field: block components {0, 1, 2}; pressure field: {3}
 PC_COMPOSITE_SCHUR + PC_FIELDSPLIT_SCHUR_FACT_LOWER
-Schur preconditioner: PC_FIELDSPLIT_SCHUR_PRE_SELFP
+Schur preconditioner: SELFP with a 3x3 velocity block-diagonal inverse, optionally shifted as SELFP + epsilon I
 both sub-solves: preonly + HYPRE BoomerAMG
 ```
 
@@ -305,6 +305,14 @@ approximation for the stabilized `K_pp` term. The field split owns its child PCs
 AMG rebuild path does not call `PCReset`: `KSPSetOperators()` supplies the updated matrix and
 `PCSetReusePreconditioner(pc, PETSC_FALSE)` makes PETSc rebuild the child preconditioners during
 the next setup while retaining the split configuration.
+
+For MPM (`FEM_flag == false`), PETSc first forms the sparse SELFP matrix
+`S_p = A_11 - A_10 blockdiag_3(A_00)^{-1} A_01`, where each block is the `(u,v,w)`
+velocity block of one node, and gives only the pressure sub-solver the Pmat
+`S_p + epsilon I`, where `epsilon = 1.0e-4 * abs(trace_active(S_p)) / n_active`. The inactive
+identity rows are excluded from the trace and count. The shift is applied directly to PETSc's internally
+built SELFP Pmat, while the outer FGMRES operator remains the original Jacobian. FEM fluid bypasses this
+shift through `FEM_flag == true`; implicit solid does not enable the Schur split.
 
 ### 5.2 Solver independence
 
