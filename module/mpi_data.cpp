@@ -235,15 +235,13 @@ void MaterialPoint::ApplyDLB() {
 
     this->MoveParticle();
 
-    const int sample_skip = mpm_dlb::ComputeSampleSkip(this->coord.size());
-
-    const auto local_samples = mpm_dlb::SelectSamples(this->coord, sample_skip);
+    const auto local_samples = mpm_dlb::SelectSamples(this->coord);
 
     const auto regions = mpm_dlb::ComputeDLBRegions(local_samples);
 
     this->RebalanceDLBParticles(regions);
 
-    mpm_dlb::OuputDLBParticleRation(this->num);
+    mpm_dlb::OuputDLBParticleRatio(this->num);
 
     mpm_dlb::UpdateDLBRegions(regions);
 

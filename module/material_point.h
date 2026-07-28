@@ -306,7 +306,7 @@ class MaterialPoint {
      */
     int GetInflowSign(int dir, int mesh_id) {
 
-        int sign;
+        int sign = 0;
         int mid = mesh_id + aelemmin[dir];
         if (mid == 0) {
             sign = 1;

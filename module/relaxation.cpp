@@ -2,11 +2,6 @@
 
 #include <mpi.h>
 
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <vector>
-
 #include "bc.h"
 #include "contact.h"
 #include "dataset.h"
@@ -14,6 +9,14 @@
 #include "mesh.h"
 #include "mpi_data.h"
 #include "shape_function.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+#include <numeric>
+#include <vector>
 
 void Anderson_relaxation_M2(int block_it, const std::vector<double> &nvel_k, std::vector<double> &u_s_old,
                             std::vector<double> &u_s_older, std::vector<double> &r_k_old,
@@ -172,7 +175,7 @@ void Aitken_relaxation(int block_it, double &omega, const std::vector<double> &n
     omega = 0.1e0;
     if (block_it >= 1) {
         omega *= -(nume / deno);
-        // omega = min(max(omega, omega_min), omega_max);   // --- under constrain ---
+        omega = std::clamp(omega, omega_min, omega_max); // --- under constrain ---
     }
 
     for (int i = 0; i < num * 3; i++) {

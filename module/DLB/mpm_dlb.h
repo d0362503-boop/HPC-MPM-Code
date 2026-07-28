@@ -14,7 +14,7 @@ struct Region {
     std::array<int, 3> elem_max;
 };
 
-void OuputDLBParticleRation(int num);
+void OuputDLBParticleRatio(int num);
 
 /**
  * @brief Collect and store the current MPI element regions from every rank.
@@ -35,12 +35,14 @@ const std::vector<Region> &CurrentRegions();
 int ComputeSampleSkip(std::size_t local_npts);
 
 /**
- * @brief Uniformly sample local material-point coordinates using a fixed interval.
+ * @brief Uniformly sample local material-point coordinates.
+ *
+ * The sampling interval is chosen internally by `ComputeSampleSkip` from the
+ * global particle count (collective: contains MPI_Allreduce).
  * @param coord Coordinates of material points stored on this MPI rank.
- * @param skip Positive particle-index interval between consecutive samples.
  * @return Local coordinate samples that represent the particle density on this rank.
  */
-std::vector<std::array<double, 3>> SelectSamples(const std::vector<std::array<double, 3>> &coord, int skip);
+std::vector<std::array<double, 3>> SelectSamples(const std::vector<std::array<double, 3>> &coord);
 
 /**
  * @brief Gather local DLB coordinate samples to MPI rank zero.

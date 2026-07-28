@@ -14,18 +14,22 @@ namespace mpm_dlb {
 
 constexpr int kRootRank = 0;
 constexpr double kMinSampleRate = 1.0e-4;
-constexpr double kSamplesPerRank = 128.0;
+constexpr double kSamplesPerRank = 256.0e0;
 std::vector<Region> g_current_regions;
 
-void OuputDLBParticleRation(int num) {
+void OuputDLBParticleRatio(int num) {
 
     int max_particle, min_particle;
-    MPI_Allreduce(&max_particle, &num, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Allreduce(&min_particle, &num, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num, &max_particle, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&num, &min_particle, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
 
-    double ratio = max_particle / min_particle;
+    double ratio = (min_particle > 0) ? double(max_particle) / double(min_particle) : 0.0e0;
 
-    std::cout << "Max / Min ratio = " << ratio << "\n";
+    if (myrank == kRootRank) {
+        std::cout << "Particle Max = " << std::setw(10) << max_particle    //
+                  << "   Particle Min = " << std::setw(10) << min_particle //
+                  << "   Particle Max / Min ratio = " << ratio << "\n";
+    }
 
     return;
 }
@@ -97,8 +101,9 @@ int ComputeSampleSkip(std::size_t local_npts) {
     return std::max(1, int(local_count) / target_samples);
 }
 
-std::vector<std::array<double, 3>> SelectSamples(const std::vector<std::array<double, 3>> &coord, int skip) {
+std::vector<std::array<double, 3>> SelectSamples(const std::vector<std::array<double, 3>> &coord) {
 
+    const int skip = ComputeSampleSkip(coord.size());
     if (skip <= 0) { AbortDLB("sample skip must be positive"); }
 
     std::vector<std::array<double, 3>> samples;

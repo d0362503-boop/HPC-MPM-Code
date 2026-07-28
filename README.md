@@ -11,6 +11,7 @@ Supported solver modes:
 ## Features
 
 - C++17 with MPI parallelism
+- Dynamic load balancing (DLB) for fluid MPM via particle-coordinate sampling (`module/DLB/`)
 - PETSc-backed sparse linear algebra
 - Fluid: FEM or MPM
 - Solid: explicit or implicit MPM
@@ -221,13 +222,7 @@ records now store each particle as:
 
 ## Important Notes
 
-- A lot of shared state lives in inline global variables in `module/dataset.h`, `module/mesh.h`, and `module/mpi_data.h`. Refactoring them into classes risks ODR issues and behavior changes.
-- Use `nodec` (control points) for computation and PETSc; `node` is for visualization only.
-- `NodeVarComm` ghost exchange is not equivalent to a naive `MPI_Allreduce`.
-- `dbc` stores overlap weights (`1/shared-rank-count`), not a boolean mask.
-- Shared control-point ownership tie-break: smallest `aelemmin`.
-
-See `AGENTS.md` for the full list of engineering rules and pitfalls.
+Before modifying the solver core, read `AGENTS.md` — in particular §5 (Critical Parallel Rules) and §6 (Common Pitfalls). It is the single source of truth for the project's engineering rules.
 
 ## License
 

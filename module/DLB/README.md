@@ -36,7 +36,7 @@ Public API (all collective unless noted):
 void CollectCurrentRegions();                       // Allgather current aelemmin/aelemmax
 const std::vector<Region> &CurrentRegions();        // read-only access (not collective)
 int ComputeSampleSkip(std::size_t local_npts);      // strided-sampling interval
-std::vector<std::array<double,3>> SelectSamples(coord, skip);
+std::vector<std::array<double,3>> SelectSamples(coord);  // picks skip internally (collective)
 std::vector<Region> ComputeDLBRegions(local_samples);  // gather → cut on root → Bcast
 void UpdateDLBRegions(const std::vector<Region> &);    // apply + rebuild overlap metadata
 ```
@@ -61,18 +61,18 @@ if (nprocs != 1) is_dlb_step ? wp.ApplyDLB() : wp.MoveParticle();
 
 ## 4. The `ApplyDLB()` Pipeline
 
-`MaterialPoint::ApplyDLB()` (`module/mpi_data.cpp`) runs seven stages in order:
+`MaterialPoint::ApplyDLB()` (`module/mpi_data.cpp`) runs six stages in order:
 
 ```text
 MoveParticle()                       // 1. ordinary neighbor migration + inflow,
                                      //    so sampling sees current positions
-ComputeSampleSkip(coord.size())      // 2. pick the sampling interval
-SelectSamples(coord, skip)           // 3. strided local coordinate samples
-ComputeDLBRegions(local_samples)     // 4. root cuts new regions, MPI_Bcast
-RebalanceDLBParticles(regions)       // 5. global particle migration to new owners
-UpdateDLBRegions(regions)            // 6. new mesh sizes + overlap tables + weights
+SelectSamples(coord)                 // 2. strided local samples; the interval
+                                     //    is chosen internally by ComputeSampleSkip
+ComputeDLBRegions(local_samples)     // 3. root cuts new regions, MPI_Bcast
+RebalanceDLBParticles(regions)       // 4. global particle migration to new owners
+UpdateDLBRegions(regions)            // 5. new mesh sizes + overlap tables + weights
 BuildMesh(); BuildControlPoint();
-MakNodalVol(); RebuildBC();   // 7. partition-dependent data
+MakNodalVol(); RebuildBC();   // 6. partition-dependent data
 ```
 
 The physics class then rebuilds its solver system (stage 8, in the overrides).
