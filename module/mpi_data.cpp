@@ -233,6 +233,8 @@ void MaterialPoint::RebalanceDLBParticles(const std::vector<mpm_dlb::Region> &re
 
 void MaterialPoint::ApplyDLB() {
 
+    mpm_dlb::OuputDLBParticleRatio(this->num);
+
     this->MoveParticle();
 
     const auto local_samples = mpm_dlb::SelectSamples(this->coord);
@@ -240,8 +242,6 @@ void MaterialPoint::ApplyDLB() {
     const auto regions = mpm_dlb::ComputeDLBRegions(local_samples);
 
     this->RebalanceDLBParticles(regions);
-
-    mpm_dlb::OuputDLBParticleRatio(this->num);
 
     mpm_dlb::UpdateDLBRegions(regions);
 
