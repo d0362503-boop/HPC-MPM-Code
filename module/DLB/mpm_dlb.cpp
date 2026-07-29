@@ -26,9 +26,9 @@ void OuputDLBParticleRatio(int num) {
     double ratio = (min_particle > 0) ? double(max_particle) / double(min_particle) : 0.0e0;
 
     if (myrank == kRootRank) {
-        std::cout << "Particle Max = " << std::setw(10) << max_particle    //
-                  << "   Particle Min = " << std::setw(10) << min_particle //
-                  << "   Particle Max / Min ratio = " << ratio << "\n";
+        std::cout << "Particle Max = " << std::setw(10) << max_particle     //
+                  << "    Particle Min = " << std::setw(10) << min_particle //
+                  << "    Particle Max / Min ratio = " << ratio << "\n";
     }
 
     return;

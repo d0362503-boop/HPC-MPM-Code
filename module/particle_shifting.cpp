@@ -10,10 +10,8 @@
 #include <vector>
 
 std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionParticleShifting() const {
-    std::vector<double> nei(nodec, 0.0e0);
-    std::vector<std::array<double, 3>> disp_corr;
-    VectorAssign(this->num, disp_corr);
 
+    std::vector<double> nei(nodec, 0.0e0);
     double eu_norm = 0.0e0;
     for (int i = 0; i < nodec; i++) {
         nei[i] = std::max(0.0e0, -nvol[i] + this->nvof[i]);
@@ -56,6 +54,8 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionParticleShiftin
 
     double b_0 = (geup_dot > 1.0e-30) ? (eu_norm / geup_dot) : 0.0e0;
 
+    std::vector<std::array<double, 3>> disp_corr;
+    VectorAssign(this->num, disp_corr);
     for (int n = 0; n < this->num; n++) {
         disp_corr[n][0] = -b_0 * geup[n][0];
         disp_corr[n][1] = -b_0 * geup[n][1];
