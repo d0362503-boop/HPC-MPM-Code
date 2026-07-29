@@ -19,6 +19,6 @@ target_link_libraries(mpm_generate_common
 
 # Keep all candidate subdirectories visible here.
 # Uncomment exactly the cases you want to build.
-add_subdirectory(fluid)
+# add_subdirectory(fluid)
 # add_subdirectory(solid)
-# add_subdirectory(fsi)
+add_subdirectory(fsi)

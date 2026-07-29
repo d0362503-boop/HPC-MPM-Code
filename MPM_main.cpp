@@ -20,13 +20,13 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(PETSC_COMM_WORLD, &myrank);
     double start_time = MPI_Wtime();
 
-    StabilizedMixedMPM();
+    // StabilizedMixedMPM();
 
     // Solid_Explicit_ULMPM();
 
     // Solid_implicit_ULMPM();  // ---- currently only for linear elasticity ----
 
-    // MPMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
+    MPMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
 
     double end_time = MPI_Wtime();
     double calc_time = end_time - start_time;
