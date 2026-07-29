@@ -55,7 +55,7 @@ void StabilizedMixedMPM() {
 
         const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
 
-        if (nprocs != 1) is_dlb_step ? wp.ApplyDLB() : wp.MoveParticle();
+        (nprocs != 1 && is_dlb_step) ? wp.ApplyDLB() : wp.MoveParticle();
 
         if (istep % iout == 0) {
             iview++;

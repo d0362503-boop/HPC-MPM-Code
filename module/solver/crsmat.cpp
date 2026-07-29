@@ -116,6 +116,7 @@ void CrsMat::ExtractDiagonal(int ndof) {
 }
 
 void CrsMat::BuildActiveRowMask() {
+
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
 
@@ -694,10 +695,10 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
         PCSetReusePreconditioner(pc, PETSC_TRUE);
     }
 
-    if (this->use_schur_fieldsplit && !this->FEM_flag && need_rebuild) {
-        PCSetReusePreconditioner(pc, PETSC_FALSE);
-        this->UpdateShiftedSchurPreconditioner(pc);
-    }
+    // if (this->use_schur_fieldsplit && !this->FEM_flag && need_rebuild) {
+    //     PCSetReusePreconditioner(pc, PETSC_FALSE);
+    //     this->UpdateShiftedSchurPreconditioner(pc);
+    // }
 
     KSPSolve(this->ksp, this->petsc_b, this->petsc_x);
 

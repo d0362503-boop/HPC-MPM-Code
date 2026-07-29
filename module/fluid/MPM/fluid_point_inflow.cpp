@@ -22,29 +22,34 @@ void StabilizedMPM::InflowParticles() {
     int target_per_cell = npxye[0] * npxye[1] * npxye[2];
     int target_num = (this->uinfbc.ibc + this->vinfbc.ibc + this->winfbc.ibc) * target_per_cell;
 
-    if (target_num == 0) return;
+    int local_has_inflow = (target_num != 0) ? 1 : 0;
+    int global_has_inflow = 0;
+    MPI_Allreduce(&local_has_inflow, &global_has_inflow, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    if (global_has_inflow == 0) return;
 
-    VectorAssign(target_num, this->ifp.id);
-    VectorAssign(target_num, this->ifp.matid);
-    VectorAssign(target_num, this->ifp.mass);
-    VectorAssign(target_num, this->ifp.vol);
-    VectorAssign(target_num, this->ifp.pres);
-    VectorAssign(target_num, this->ifp.coord);
-    VectorAssign(target_num, this->ifp.vel);
-    VectorAssign(target_num, this->ifp.accel);
+    if (target_num != 0) {
+        VectorAssign(target_num, this->ifp.id);
+        VectorAssign(target_num, this->ifp.matid);
+        VectorAssign(target_num, this->ifp.mass);
+        VectorAssign(target_num, this->ifp.vol);
+        VectorAssign(target_num, this->ifp.pres);
+        VectorAssign(target_num, this->ifp.coord);
+        VectorAssign(target_num, this->ifp.vel);
+        VectorAssign(target_num, this->ifp.accel);
 
-    if (this->solswitch == MapScheme::TPIC) {
-        VectorAssign(target_num, this->ifp.tpic.vel_grad);
-        VectorAssign(target_num, this->ifp.tpic.accel_grad);
-    } else if (this->solswitch == MapScheme::APIC) {
-        VectorAssign(target_num, this->ifp.apic.vel_Bmat);
-        VectorAssign(target_num, this->ifp.apic.accel_Bmat);
-        VectorAssign(target_num, this->ifp.apic.inv_Dmat);
+        if (this->solswitch == MapScheme::TPIC) {
+            VectorAssign(target_num, this->ifp.tpic.vel_grad);
+            VectorAssign(target_num, this->ifp.tpic.accel_grad);
+        } else if (this->solswitch == MapScheme::APIC) {
+            VectorAssign(target_num, this->ifp.apic.vel_Bmat);
+            VectorAssign(target_num, this->ifp.apic.accel_Bmat);
+            VectorAssign(target_num, this->ifp.apic.inv_Dmat);
+        }
+
+        if (this->uinfbc.ibc != 0) { this->GenerateInflowParticles(0, this->ifp, this->uinfbc); }
+        if (this->vinfbc.ibc != 0) { this->GenerateInflowParticles(1, this->ifp, this->vinfbc); }
+        if (this->winfbc.ibc != 0) { this->GenerateInflowParticles(2, this->ifp, this->winfbc); }
     }
-
-    if (this->uinfbc.ibc != 0) { this->GenerateInflowParticles(0, this->ifp, this->uinfbc); }
-    if (this->vinfbc.ibc != 0) { this->GenerateInflowParticles(1, this->ifp, this->vinfbc); }
-    if (this->winfbc.ibc != 0) { this->GenerateInflowParticles(2, this->ifp, this->winfbc); }
 
     this->AssignUniqueInflowIds(this->ifp);
 
