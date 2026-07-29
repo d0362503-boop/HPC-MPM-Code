@@ -60,8 +60,9 @@ void ImplicitSolidMPM::Particle2Node() {
 }
 
 void ImplicitSolidMPM::Node2Particle() {
-    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
+
     // ---- Newmark beta velocity & acceleration ----
+    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
 
     this->CommitNodalKinematics(nvel_k, naccel_k);

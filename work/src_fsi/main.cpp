@@ -63,16 +63,16 @@ void MPMBlockFSI() {
     for (istep = ista; istep <= iend; istep++) {
         // -----------------------------------------------
         real_time = dt * double(istep);
-        // if (real_time < 2.0e0) {
-        //     facl = (1.0e0 - cos(M_PI * real_time / 2.0e0)) / 2.0e0;
-        // } else {
-        //     facl = 1.0e0;
-        // }
-        if (istep <= nlstep) {
-            facl = dlstep * double(istep);
+        if (real_time < 2.0e0) {
+            facl = (1.0e0 - std::cos(M_PI * real_time / 2.0e0)) / 2.0e0;
         } else {
             facl = 1.0e0;
         }
+        // if (istep <= nlstep) {
+        //     facl = dlstep * double(istep);
+        // } else {
+        //     facl = 1.0e0;
+        // }
         // -----------------------------------------------
 
         fsi.fluid_.SetPFDomain();

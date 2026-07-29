@@ -242,6 +242,7 @@ void BlockFSI::CalDragLiftCoeffForTurekCFD() {
 }
 
 void BlockFSI::CalFSIForce() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -271,13 +272,11 @@ void BlockFSI::CalFSIForce() {
     const double af0 = 1.0e0 - af;
 
     std::vector<double> nvel_af(nodec * 3), npres_af(nodec);
-    for (int n = 0; n < nodec * 3; n++) {
-        nvel_af[n] = af0 * this->fluid_.nvel_old[n] //
-                     + af * this->fluid_.nvel[n];
+    for (int n = 0; n < nodec * 3; n++) { //
+        nvel_af[n] = af0 * this->fluid_.nvel_old[n] + af * this->fluid_.nvel[n];
     }
-    for (int n = 0; n < nodec; n++) {
-        npres_af[n] = af0 * this->fluid_.npres_old[n] //
-                      + af * this->fluid_.npres[n];
+    for (int n = 0; n < nodec; n++) { //
+        npres_af[n] = af0 * this->fluid_.npres_old[n] + af * this->fluid_.npres[n];
     }
     // -----------------------------------------------------
 
