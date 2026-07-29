@@ -85,7 +85,7 @@ void MPMBlockFSI() {
 
         fsi.solid_.Node2Particle();
 
-        if (nprocs != 1) fsi.solid_.MoveParticle();
+        fsi.solid_.MoveParticle();
 
         if (istep % iout == 0) {
             iview++;

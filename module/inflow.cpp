@@ -38,8 +38,6 @@ void MaterialPoint::GenerateInflowParticles(int dir, MaterialPoint &ifp, const B
 
 void MaterialPoint::AssignUniqueInflowIds(MaterialPoint &ifp) const {
 
-    if (ifp.num == 0) return;
-
     int local_max_id = -1;
     if (!this->id.empty()) { local_max_id = *std::max_element(this->id.begin(), this->id.end()); }
 

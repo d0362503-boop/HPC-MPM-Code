@@ -52,7 +52,7 @@ void Solid_Explicit_ULMPM() {
 
         sp.Node2Particle();
 
-        if (nprocs != 1) sp.MoveParticle();
+        sp.MoveParticle();
 
         if (istep / iout * iout == istep) {
             iview++;
