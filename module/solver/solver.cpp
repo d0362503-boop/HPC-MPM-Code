@@ -11,6 +11,20 @@
 #include <string>
 #include <vector>
 
+int CrsMat::SolveSystem(int NR_it) {
+
+    int iter;
+    if (this->use_petsc) {
+        this->AssemblePetscMat(this->ndof);
+        iter = this->SolveWithPetsc(this->ndof, NR_it);
+    } else {
+        this->BuildDiagonalPreconditioner(this->ndof);
+        iter = GPBiCGAR(*this);
+    }
+
+    return iter;
+}
+
 int GPBiCGSafe(CrsMat &mat) {
 
     const int var_size = mat.x_lhs.size();
@@ -508,6 +522,7 @@ double CrsMat::ComputeAbsResidual() {
 }
 
 bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
+
     double rkr;
     if (NR_it == 0) {
         r0r = this->ComputeRefResidual();

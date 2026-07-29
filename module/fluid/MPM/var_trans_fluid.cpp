@@ -108,11 +108,11 @@ void StabilizedMPM::Node2Particle() {
         }
     }
 
-    std::vector<std::array<double, 3>> delta_corr;
-    delta_corr = this->DeltaCorrectionParticleShifting();
-    // delta_corr = this->SPHLikeParticleShifting();
+    std::vector<std::array<double, 3>> disp_corr;
+    disp_corr = this->DeltaCorrectionParticleShifting();
+    // disp_corr = this->PairwiseRepulsiveParticleShifting();
 
-    this->CommitParticleKinematics(accel_old, displ, delta_corr);
+    this->CommitParticleKinematics(accel_old, displ, disp_corr);
 
     return;
 }

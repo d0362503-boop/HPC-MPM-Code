@@ -17,7 +17,6 @@
 #include "../../mpi_data.h"
 #include "../../shape_function.h"
 #include "../../solver/crsmat.h"
-#include "../../solver/solver.h"
 #include "../solid_material_point.h"
 #include "implicit_mpm_solid.h"
 
@@ -78,7 +77,7 @@ void ImplicitSolidMPM::SolveSolid() {
 
         this->AssembleSystem(naccel_k, nvel_k, stress_k);
 
-        int iter = this->SolveSystem(this->SM_, NR_it);
+        int iter = this->SM_.SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
 
@@ -196,9 +195,6 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
     // --------------------------------------
 
     this->AddInertialForceToRHS(this->SM_, naccel_am);
-
-    // ---- Diagional Scalling Prec ----
-    if (!this->SM_.use_petsc) { this->SM_.BuildDiagonalPreconditioner(this->SM_.ndof); }
 
     return;
 }

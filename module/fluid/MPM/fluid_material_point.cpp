@@ -1,3 +1,4 @@
+#include "../../DLB/mpm_dlb.h"
 #include "../../dataset.h"
 #include "../../material_point.h"
 #include "../../mesh.h"
@@ -34,15 +35,40 @@ void StabilizedMPM::InitializePointData() {
     return;
 }
 
-void StabilizedMPM::Moveparticle() {
+void StabilizedMPM::RebuildBC() {
 
-    this->DetermineParticleRank();
+    this->ubc.RebuildLocalControlPointBC();
+    this->vbc.RebuildLocalControlPointBC();
+    this->wbc.RebuildLocalControlPointBC();
+    this->pbc.RebuildLocalControlPointBC();
+    this->uinfbc.RebuildLocalElementBC();
+    this->vinfbc.RebuildLocalElementBC();
+    this->winfbc.RebuildLocalElementBC();
+
+    this->InitializeInflowBC();
+    this->infbc_isfilled = false;
+
+    return;
+}
+
+void StabilizedMPM::MoveParticle() {
+
+    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
 
     this->InflowParticles();
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp + this->ifp.num == 0) return;
 
     this->num += this->par_comm_.nrps + this->ifp.num - this->par_comm_.nrmp - this->par_comm_.nmps;
+
+    this->MigrateParticleData();
+
+    this->ifp.num = 0;
+
+    return;
+}
+
+void StabilizedMPM::MigrateParticleData() {
 
     // ---- Scalar part ----
     this->par_comm_.PointVarComm(this->num, this->ifp.num, this->id, this->ifp.id);       // ---- Point Global ID ----

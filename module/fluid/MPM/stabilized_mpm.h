@@ -26,10 +26,14 @@ class StabilizedMPM : public MaterialPoint {
     CrsMat NS_;
 
     StabilizedMPM() {
+        this->do_dlb = false;
+        this->gamma_nb = 1.0e0;
+        this->beta_nb = 0.5e0;
         this->ode_order = 2;
         this->NS_.ndof = 4;
         this->NS_.FEM_flag = false;
-        this->NS_.use_petsc = false;
+        this->NS_.use_petsc = true;
+        this->NS_.use_schur_fieldsplit = true;
         this->NS_.amg_rebuild_freq = 1; // rebuild AMG every step
         this->NS_.owner_ = this;
     }
@@ -42,6 +46,9 @@ class StabilizedMPM : public MaterialPoint {
      * @param infile Input stream.
      */
     void InputBCData(std::ifstream &infile) override;
+
+    /** @brief Rebuild fluid control-point and inflow BCs for the current DLB region. */
+    void RebuildBC() override;
 
     /** @brief Initialize fluid particle state. */
     void InitializePointData() override;
@@ -75,7 +82,20 @@ class StabilizedMPM : public MaterialPoint {
     void RestartOutput() override;
 
     /** @brief Move particles across MPI rank boundaries. */
-    void Moveparticle() override;
+    void MoveParticle() override;
+
+    /** @brief Apply DLB and rebuild the fluid Navier-Stokes matrix structure. */
+    void ApplyDLB() override {
+
+        MaterialPoint::ApplyDLB();
+
+        this->NS_.BuildCrsMat(16);
+
+        return;
+    };
+
+    /** @brief Migrate all fluid particle state using the prepared MPI communication plan. */
+    void MigrateParticleData() override;
 
   private:
     /**

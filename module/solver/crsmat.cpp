@@ -4,8 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
 #include "../bc.h"
@@ -15,6 +13,9 @@
 #include "../mpi_data.h"
 
 void CrsMat::BuildCrsMat(int num_block) {
+
+    if (this->use_petsc) { this->ResetPetscSolver(); }
+
     this->nmat = 0;
 
     int nxp = xynodec[0];
@@ -76,6 +77,23 @@ void CrsMat::BuildCrsMat(int num_block) {
     return;
 }
 
+void CrsMat::ResetPetscSolver() {
+
+    if (this->scatter_to_all) { VecScatterDestroy(&this->scatter_to_all); }
+    if (this->seq_x) { VecDestroy(&this->seq_x); }
+    if (this->ksp) { KSPDestroy(&this->ksp); }
+    if (this->petsc_mat) { MatDestroy(&this->petsc_mat); }
+    if (this->petsc_b) { VecDestroy(&this->petsc_b); }
+    if (this->petsc_x) { VecDestroy(&this->petsc_x); }
+    if (this->petsc_var_lgmap_) { ISLocalToGlobalMappingDestroy(&this->petsc_var_lgmap_); }
+    if (this->petsc_block_lgmap_) { ISLocalToGlobalMappingDestroy(&this->petsc_block_lgmap_); }
+
+    this->prev_ksp_its_ = -1;
+    this->force_rebuild_next_ = false;
+
+    return;
+}
+
 void CrsMat::ExtractDiagonal(int ndof) {
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
@@ -98,26 +116,34 @@ void CrsMat::ExtractDiagonal(int ndof) {
 }
 
 void CrsMat::BuildActiveRowMask() {
+
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
 
-    std::vector<int> local_row_active(nodec, 0);
+    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-5;
 
-    for (int nid = 0; nid < nodec; ++nid) {
-        double row_abs_sum = 0.0e0;
-        for (int row_var = 0; row_var < this->ndof; ++row_var) {
-            for (int j = this->matrow[nid]; j < this->matrow[nid + 1]; ++j) {
-                for (int col_var = 0; col_var < this->ndof; ++col_var) {
-                    int bid = this->block_id[row_var * this->ndof + col_var];
-                    row_abs_sum += std::abs(this->amat[j + bid]);
-                }
-            }
+    PetscReal local_mass_sum = 0.0e0;
+    PetscInt local_positive_mass_count = 0;
+    for (int i = 0; i < this->local_node; ++i) {
+        const PetscReal mass = this->owner_->nmass[this->owned_natural_ids[i]];
+        if (mass > mtol) {
+            local_mass_sum += mass;
+            ++local_positive_mass_count;
         }
-        if (row_abs_sum >= mtol) local_row_active[nid] = 1;
     }
+    PetscReal global_mass_sum = 0.0e0;
+    PetscInt global_positive_mass_count = 0;
+    MPI_Allreduce(&local_mass_sum, &global_mass_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_positive_mass_count, &global_positive_mass_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    const PetscReal mass_mean = global_mass_sum / static_cast<PetscReal>(global_positive_mass_count);
+    const PetscReal mass_cutoff = active_mass_cutoff_ratio * mass_mean;
+
+    std::vector<int> local_row_active(nodec, 0);
+    for (int nid = 0; nid < nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > mass_cutoff ? 1 : 0; }
 
     // Synchronize the active indicator across overlap control points so that a
-    // shared row is active if any overlapping rank assembled nonzero content.
+    // shared row is active if any overlapping rank marks it active.
     // This prevents owner-rank false negatives that can pin partition seams.
     NodeVarComm(local_row_active, 0);
 
@@ -415,23 +441,84 @@ void CrsMat::BuildKSPSolver() {
     KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
 
     KSPSetType(this->ksp, KSPFGMRES);
-    // KSPSetType(this->ksp, KSPBCGS);
 
     PC pc;
     KSPGetPC(this->ksp, &pc);
-    PCSetType(pc, PCHYPRE);
-    PCHYPRESetType(pc, "boomeramg");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_coarsen_type", "HMIS");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_interp_type", "ext+i");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_agg_nl", "2");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_P_max", "2");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_strong_threshold", "0.5");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_max_levels", "8");
-    // PetscOptionsSetValue(NULL, "-pc_hypre_boomeramg_nodal_coarsen", "6");
+    this->ConfigurePreconditioner(pc);
 
-    KSPSetTolerances(this->ksp, 1.0e-12, 1.0e-15, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-10, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
+
+    return;
+}
+
+void CrsMat::ConfigurePreconditioner(PC pc) {
+
+    // The Schur split is only defined for the 4-DOF (u,v,w,p) block layout.
+    if (this->ndof == 4 && this->use_schur_fieldsplit) {
+        const PetscInt velocity_fields[] = {0, 1, 2};
+        const PetscInt pressure_field = 3;
+
+        PCSetType(pc, PCFIELDSPLIT);
+        PCFieldSplitSetBlockSize(pc, this->ndof);
+        PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
+        PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
+        PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+        PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+        PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+    } else {
+        PCSetType(pc, PCHYPRE);
+        PCHYPRESetType(pc, "boomeramg");
+    }
+
+    return;
+}
+
+void CrsMat::UpdateShiftedSchurPreconditioner(PC pc) {
+
+    constexpr PetscReal kMpmSchurRegularization = 1.0e-4;
+
+    PCSetUp(pc);
+
+    PetscInt split_count = 0;
+    KSP *sub_ksp = nullptr;
+    PCFieldSplitGetSubKSP(pc, &split_count, &sub_ksp);
+
+    Mat pressure_operator = nullptr;
+    Mat pressure_pmat = nullptr;
+    KSPGetOperators(sub_ksp[1], &pressure_operator, &pressure_pmat);
+
+    PetscScalar trace = 0.0e0;
+    PetscInt pressure_rows = 0;
+    MatGetTrace(pressure_pmat, &trace);
+    MatGetSize(pressure_pmat, &pressure_rows, nullptr);
+
+    int local_active = 0;
+    for (int i = 0; i < this->local_node; ++i) { local_active += this->active_row_mask[this->owned_natural_ids[i]]; }
+    int global_active = 0;
+    MPI_Allreduce(&local_active, &global_active, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    const PetscScalar active_trace = trace - static_cast<PetscScalar>(pressure_rows - global_active);
+    const PetscReal diagonal_shift =
+        global_active > 0
+            ? kMpmSchurRegularization * std::abs(PetscRealPart(active_trace)) / static_cast<PetscReal>(global_active)
+            : 0.0e0;
+    if (diagonal_shift > 0.0e0) { MatShift(pressure_pmat, diagonal_shift); }
+
+    PC pressure_pc;
+    KSPGetPC(sub_ksp[1], &pressure_pc);
+    PCSetReusePreconditioner(pressure_pc, PETSC_FALSE);
+    KSPSetOperators(sub_ksp[1], pressure_operator, pressure_pmat);
+    KSPSetUp(sub_ksp[1]);
+    PetscFree(sub_ksp);
 
     return;
 }
@@ -449,6 +536,7 @@ void CrsMat::BuildPetscBCList() {
 }
 
 void CrsMat::InitPetscSolver(int ndof) {
+
     BuildLGMAP(ndof);
 
     BuildPetscMat(ndof);
@@ -469,7 +557,7 @@ void CrsMat::InitPetscSolver(int ndof) {
 
 void CrsMat::AssemblePetscMat(int ndof) {
     MatZeroEntries(this->petsc_mat);
-    std::vector<PetscScalar> identity_block(static_cast<size_t>(ndof) * ndof, 0.0);
+    std::vector<PetscScalar> identity_block(static_cast<size_t>(ndof) * ndof, 0.0e0);
     for (int var = 0; var < ndof; ++var) { identity_block[var * ndof + var] = 1.0; }
     this->BuildActiveRowMask();
 
@@ -545,9 +633,7 @@ void CrsMat::UpdatePetscRhs(int ndof) {
     return;
 }
 
-int CrsMat::SolveWithPetsc(int ndof, int nr_it) {
-    constexpr int kSolidRebuildIterTrigger = 5;
-
+int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     this->UpdatePetscRhs(ndof);
 
     // Initialise the PETSc guess vector from the current Newton iterate.
@@ -589,30 +675,30 @@ int CrsMat::SolveWithPetsc(int ndof, int nr_it) {
 
     const bool force_rebuild = this->force_rebuild_next_;
 
-    // Solid passes nr_it >= 0. In that case we only rebuild on the first
-    // Newton iteration unless a previous solve explicitly requested a
-    // rebuild. Fluid keeps nr_it == -1 and uses only the step-based / forced
-    // policy below.
-    if (nr_it > 0 && !force_rebuild) {
-        need_rebuild = false;
-        if (!this->FEM_flag && this->prev_ksp_its_ >= kSolidRebuildIterTrigger) { need_rebuild = true; }
-    }
+    // NR_it > 0 reuses the current preconditioner within the time step, so the
+    // AMG hierarchy is rebuilt at most once per step (unless a previous solve
+    // explicitly requested one via the 2x iteration-growth rule below).
+    if (NR_it > 0 && !force_rebuild) { need_rebuild = false; }
 
     need_rebuild = need_rebuild || force_rebuild;
     this->force_rebuild_next_ = false;
 
-    // Keep fluid / solid preconditioners independent. When this solver needs
-    // a rebuild, explicitly reset only its own PC first so the old AMG
-    // hierarchy is released before PETSc constructs the new one. This avoids
-    // the larger peak-memory spike of "old AMG + new AMG" inside one solver
-    // while still allowing fluid and solid AMGs to coexist.
+    // Keep fluid / solid preconditioners independent. A field split owns its
+    // child PCs, so PETSc must rebuild them from the updated operator without
+    // externally resetting the split itself.
     if (need_rebuild) {
-        PCReset(pc);
+        if (!this->use_schur_fieldsplit) { PCReset(pc); }
         KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
+        if (!this->use_schur_fieldsplit) { this->ConfigurePreconditioner(pc); }
         PCSetReusePreconditioner(pc, PETSC_FALSE);
     } else {
         PCSetReusePreconditioner(pc, PETSC_TRUE);
     }
+
+    // if (this->use_schur_fieldsplit && !this->FEM_flag && need_rebuild) {
+    //     PCSetReusePreconditioner(pc, PETSC_FALSE);
+    //     this->UpdateShiftedSchurPreconditioner(pc);
+    // }
 
     KSPSolve(this->ksp, this->petsc_b, this->petsc_x);
 

@@ -26,7 +26,7 @@ void StabilizedMPM::DataInput() {
     infile = OpenInputFile(parafile);
     infile.ignore(1000, '\n');
     std::string solswitch_str;
-    infile >> solswitch_str >> rstflag >> nlstep;
+    infile >> solswitch_str >> this->do_dlb >> rstflag >> nlstep;
     this->solswitch = ParseMapScheme(solswitch_str);
     infile.ignore(1000, '\n');
 
@@ -65,6 +65,7 @@ void StabilizedMPM::DataInput() {
     infile.ignore(1000, '\n');
     for (int i = 0; i < 3; i++) infile >> bb[i];
     infile.ignore(1000, '\n');
+
     infile.close();
 
     InitializeMeshAndTimeParameters();

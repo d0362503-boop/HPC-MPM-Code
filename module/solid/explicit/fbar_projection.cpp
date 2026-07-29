@@ -25,7 +25,7 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
         int pid = this->idepf[m];
         while (pid != -1) {
             const double J_new = this->det_def_grad_bar[pid] * det_delta_def_grad[pid];
-            const double J_new_vol = J_new * this->vol[pid];
+            const double J_new_vol = J_new * this->mass[pid];
 
             std::array<double, 3> xyp = this->coord[pid];
             MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
@@ -40,7 +40,7 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
 
     NodeVarComm(nJbar, 0);
 
-    this->CutOffSmallNodalVar(nJbar, this->nvof, {0});
+    this->CutOffSmallNodalVar(nJbar, this->nmass, {0});
 
     // --- Step 2: interpolate corrected Jacobian and update F-bar deformation gradient ---
     for (int m = 0; m < nelem; m++) {
@@ -72,6 +72,7 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
             }
             this->def_grad_bar[pid] = F_bar;
             this->det_def_grad_bar[pid] = Jbar;
+            this->delta_def_grad_bar[pid] = dF;
 
             pid = this->idp2p[pid];
         }

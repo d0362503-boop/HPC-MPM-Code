@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "../DLB/mpm_dlb.h"
 #include "../bc.h"
 #include "../dataset.h"
 #include "../material_point.h"
@@ -30,6 +31,7 @@ void SolidMaterialPointBase::InitializePointData() {
     VectorAssign(this->num, this->def_grad);
 
     if (this->Fbar_flag) {
+        VectorAssign(this->num, this->delta_def_grad_bar);
         VectorAssign(this->num, this->det_def_grad_bar, 1.0e0);
         VectorAssign(this->num, this->def_grad_bar);
     }
@@ -45,12 +47,29 @@ void SolidMaterialPointBase::InitializePointData() {
     return;
 }
 
-void SolidMaterialPointBase::Moveparticle() {
-    this->DetermineParticleRank();
+void SolidMaterialPointBase::RebuildBC() {
+
+    this->ubc.RebuildLocalControlPointBC();
+    this->vbc.RebuildLocalControlPointBC();
+    this->wbc.RebuildLocalControlPointBC();
+
+    return;
+}
+
+void SolidMaterialPointBase::MoveParticle() {
+
+    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp == 0) return;
 
     this->num += this->par_comm_.nrps - this->par_comm_.nmps - this->par_comm_.nrmp;
+
+    this->MigrateParticleData();
+
+    return;
+}
+
+void SolidMaterialPointBase::MigrateParticleData() {
 
     // ---- Scalar part ----
     this->par_comm_.PointVarComm(this->num, this->id);           // ---- Point Global ID ----
@@ -72,8 +91,10 @@ void SolidMaterialPointBase::Moveparticle() {
     this->par_comm_.PointVarComm(this->num, this->def_grad); // --- Point deformation gradient ---
 
     if (Fbar_flag) {
-        // ---- Point determinant of deformation gradient bar ----
+        // --- Point determinant of deformation gradient bar ---
         this->par_comm_.PointVarComm(this->num, this->det_def_grad_bar);
+        // --- Point delta deformation gradient bar ---
+        this->par_comm_.PointVarComm(this->num, this->delta_def_grad_bar);
         // --- Point deformation gradient bar ---
         this->par_comm_.PointVarComm(this->num, this->def_grad_bar);
     }

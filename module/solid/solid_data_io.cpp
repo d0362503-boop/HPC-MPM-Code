@@ -17,6 +17,12 @@ void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
     this->vbc.BCInput(infile);
     this->wbc.BCInput(infile);
 
+    if (this->do_dlb) {
+        this->ubc.CaptureGlobalControlPointBC();
+        this->vbc.CaptureGlobalControlPointBC();
+        this->wbc.CaptureGlobalControlPointBC();
+    }
+
     return;
 }
 
@@ -34,7 +40,10 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
     }
     for (int ip = 0; ip < this->num; ip++) {
         this->def_grad[ip] = eye_mat;
-        if (this->Fbar_flag) this->def_grad_bar[ip] = eye_mat;
+        if (this->Fbar_flag) {
+            this->def_grad_bar[ip] = eye_mat;
+            this->delta_def_grad_bar[ip] = eye_mat;
+        }
         this->vol[ip] = this->vol0[ip];
     }
 

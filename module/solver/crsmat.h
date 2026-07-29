@@ -12,9 +12,8 @@ class MaterialPoint; // forward declaration
 
 class CrsMat {
   public:
-    // Pointer to the owning physics object (fluid or solid). Used for BC
-    // setup and residual callbacks. Inactive-node detection is now performed
-    // by BuildActiveRowMask() based on assembled matrix content.
+    // Pointer to the owning physics object. Used for BC setup, residual
+    // callbacks, and MPM mass-based inactive-node detection.
     MaterialPoint *owner_ = nullptr;
 
     // true  → FEM path (all nodes active, no identity fill needed).
@@ -62,6 +61,14 @@ class CrsMat {
      * @param num_block Number of scalar blocks per CSR entry (typically `ndof * ndof`).
      */
     void BuildCrsMat(int num_block);
+
+    /**
+     * @brief Release PETSc objects associated with the current matrix layout.
+     *
+     * This is called before rebuilding a matrix after DLB changes the local
+     * mesh and ownership layout.
+     */
+    void ResetPetscSolver();
 
     inline int FindIndex(int nid, int njd, int &ncol) const {
         int cole = this->matrow[nid + 1] - 1;
@@ -141,9 +148,7 @@ class CrsMat {
      */
     double ComputeAbsResidual();
 
-    /**
-     * @brief Mark rows with negligible assembled entries as inactive for MPM solves.
-     */
+    /** @brief Mark low-mass MPM rows inactive. */
     void BuildActiveRowMask();
 
     /**
@@ -167,8 +172,8 @@ class CrsMat {
     Vec seq_x = nullptr;                 // sequential copy of solution on this rank
 
     // AMG lifecycle state (local to this solver, independent of other solvers)
-    int amg_rebuild_freq;   // rebuild preconditioner every N steps
-    int prev_ksp_its_ = -1; // KSP iterations of the previous solve
+    int amg_rebuild_freq = 1; // rebuild preconditioner every N steps
+    int prev_ksp_its_ = -1;   // KSP iterations of the previous solve
     bool force_rebuild_next_ = false;
     // Reusable buffers for RHS / initial-guess insertion (size = local_node*ndof)
     std::vector<PetscInt> petsc_indices_buf;
@@ -178,6 +183,7 @@ class CrsMat {
     std::vector<PetscInt> petsc_cols_buf;
 
     bool use_petsc = true;
+    bool use_schur_fieldsplit = false;
 
     std::vector<char> active_row_mask;
 
@@ -238,6 +244,24 @@ class CrsMat {
     void BuildKSPSolver();
 
     /**
+     * @brief Configure the PETSc preconditioner for this system.
+     *
+     * Default is `PCHYPRE`/BoomerAMG. Stabilized fluid systems that set
+     * `use_schur_fieldsplit` instead get a velocity-pressure lower Schur
+     * field split, where velocity is components 0--2 and pressure is 3.
+     * The split requires the 4-DOF block layout; any other `ndof` falls
+     * back to BoomerAMG.
+     * @param pc PETSc preconditioner associated with `ksp`.
+     */
+    void ConfigurePreconditioner(PC pc);
+
+    /**
+     * @brief Apply a diagonal shift to PETSc's SELFP pressure preconditioner.
+     * @param pc Configured velocity-pressure field-split preconditioner.
+     */
+    void UpdateShiftedSchurPreconditioner(PC pc);
+
+    /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
      * @param ndof Degrees of freedom per node.
      */
@@ -258,10 +282,19 @@ class CrsMat {
     /**
      * @brief Solve the linear system with PETSc and scatter the solution back to `x_lhs`.
      * @param ndof Degrees of freedom per node.
-     * @param nr_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
+     * @param NR_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
      * @return Number of KSP iterations, or -1 on failure.
      */
-    int SolveWithPetsc(int ndof, int nr_it = -1);
+    int SolveWithPetsc(int ndof, int NR_it = -1);
+
+    /**
+     * @brief Solve this assembled linear system with PETSc or native GPBiCGAR.
+     * @param NR_it Current Newton–Raphson iteration index.
+     * @return Number of linear solver iterations used.
+     *
+     * `use_petsc` selects the PETSc or native path for the current solve.
+     */
+    int SolveSystem(int NR_it = -1);
 
     /**
      * @brief Collect global IDs of Dirichlet boundary rows/columns into `petsc_bc_gids`.

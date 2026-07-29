@@ -79,8 +79,8 @@ void MaterialPoint::CommitNodalKinematics(const std::vector<double> &nvel_k, con
 
 void MaterialPoint::CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                              const std::vector<std::array<double, 3>> &disp,
-                                             const std::vector<std::array<double, 3>> &delta_corr) {
-    const bool has_shift = !delta_corr.empty();
+                                             const std::vector<std::array<double, 3>> &disp_corr) {
+    const bool has_shift = !disp_corr.empty();
     for (int n = 0; n < this->num; n++) {
         std::array<double, 3> advected_coord;
         bool advected_outside = false;
@@ -97,7 +97,7 @@ void MaterialPoint::CommitParticleKinematics(const std::vector<std::array<double
         // Reject shifting-induced boundary crossings.
         if (has_shift && !advected_outside) {
             for (int i = 0; i < 3; i++) {
-                double shifted_coord = advected_coord[i] + delta_corr[n][i];
+                double shifted_coord = advected_coord[i] + disp_corr[n][i];
                 if (shifted_coord > xyminw[i] && shifted_coord < xymaxw[i]) { this->coord[n][i] = shifted_coord; }
             }
         }

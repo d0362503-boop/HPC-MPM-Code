@@ -31,8 +31,9 @@ Do not point `file.dat` back at source-tree paths under `../data/...`.
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
 - **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
-- **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h`, selected by `solswitch` string.
+- **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h` / `map_and_interpolate.cpp`, selected by `solswitch` (`MapScheme` enum parsed from the input string).
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Parallel ownership and inactive-row handling are now explicit; see `module/solver/README.md`.
+- **Dynamic load balancing:** `module/DLB/` repartitions background elements across ranks from particle samples (fluid MPM only, `do_dlb` flag in `input.txt`). Regions are broadcast state — read them via `mpm_dlb::CurrentRegions()`; see `module/DLB/README.md`.
 
 ## 4. Code Style
 
@@ -59,6 +60,10 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
   - If the function takes parameters, explain the **physical meaning** of each parameter, not just its type.
   - If the function returns a value, explain the **physical meaning** of the returned value.
 
+### Commit messages
+
+- **English only.** No Chinese or other non-English text in commit messages.
+
 ## 5. Critical Parallel Rules
 
 **`node` vs `nodec`:** Computations and PETSc must use `nodec` (control points), never `node` (visualization nodes). Mixing them causes `MatAssemblyEnd` crashes.
@@ -66,6 +71,8 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 **`NodeVarComm`:** Ghost sync uses `+=` on received values, then multiply by `dbc` (pre-computed `1.0/dbn`) to average. Do not replace with naive `MPI_Allreduce`.
 
 **Overlap ownership:** `dbc` encodes overlap weight (1/shared-rank-count), not boolean mask. Tie-break: rank with smallest `aelemmin` owns shared control points.
+
+**Partition consistency:** `nprocs` must equal the partition topology stored in `griddata` (`nxyr` product), and the global mesh parameters in `input.txt` (`xyelem`, `xymax`) must match what the partitioned data was generated with. Mismatches do not fail cleanly: wrong `nprocs` leads to MPI invalid-rank aborts or segfaults, and a stale mesh size silently produces wrong physics.
 
 ## 6. Common Pitfalls
 
