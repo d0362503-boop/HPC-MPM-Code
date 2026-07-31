@@ -446,7 +446,7 @@ void CrsMat::BuildKSPSolver() {
     KSPGetPC(this->ksp, &pc);
     this->ConfigurePreconditioner(pc);
 
-    KSPSetTolerances(this->ksp, 1.0e-10, 1.0e-15, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-8, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
 

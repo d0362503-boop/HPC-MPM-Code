@@ -33,6 +33,7 @@ std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
 }
 
 void StabilizedFEM::SolveNS() {
+
     this->BCSet(); // --- user's responsibility (need to create in each src)---
 
     std::vector<double> adv_vel = this->ComputeAdvectionVel();

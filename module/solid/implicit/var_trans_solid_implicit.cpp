@@ -84,6 +84,7 @@ void ImplicitSolidMPM::Node2Particle() {
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
     std::vector<std::array<std::array<double, 3>, 3>> delta_def_grad;
+
     VectorAssign(this->num, delta_def_grad);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
