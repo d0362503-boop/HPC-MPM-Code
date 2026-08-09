@@ -64,7 +64,7 @@ void MPMBlockFSI() {
         // -----------------------------------------------
         real_time = dt * double(istep);
         // if (real_time < 2.0e0) {
-        //     facl = (1.0e0 - cos(M_PI * real_time / 2.0e0)) / 2.0e0;
+        //     facl = (1.0e0 - std::cos(M_PI * real_time / 2.0e0)) / 2.0e0;
         // } else {
         //     facl = 1.0e0;
         // }

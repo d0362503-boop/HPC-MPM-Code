@@ -250,7 +250,7 @@ class MaterialPoint {
     // ------------------------
 
     // --- Particle part ---
-    int num;                              // --- Particle number ---
+    int num = 0;                          // --- Particle number ---
     MapScheme solswitch = MapScheme::PIC; // --- Particle P2G method ---
     double rho, rmu;
     std::vector<int> idepf, idp2p, numep; // --- Particle mesh linklist ---

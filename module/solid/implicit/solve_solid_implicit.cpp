@@ -189,7 +189,7 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
     NodeVarComm(this->SM_.b_rhs, {nuc, nvc, nwc});
 
-    // --- Transfer acceleration to (n+α_m) time interlevel ---
+    // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
     std::vector<double> naccel_am(nodec * 3);
     for (int n = 0; n < nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
     // --------------------------------------
