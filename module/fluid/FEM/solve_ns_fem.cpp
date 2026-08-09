@@ -65,10 +65,6 @@ void StabilizedFEM::SolveNS() {
 }
 
 void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
-
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -79,14 +75,12 @@ void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
     for (int m = 0; m < nelem; m++) {
         double rnue = this->rmue[m] / this->rhoe[m];
 
-        int ize = m / (nex * ney);
-        int iye = (m - ize * (nex * ney)) / nex;
-        int ixe = m - ize * (nex * ney) - iye * nex;
+        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
 
         std::array<double, 3> xye;
-        xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
+        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
+        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
+        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
 
         MakSf(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
 

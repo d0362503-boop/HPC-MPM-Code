@@ -73,26 +73,18 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
-
     for (int m = 0; m < infbc.ibc; m++) {
         int mid = infbc.nbc[m];
         int row = this->inflow_row[m];
         if (row >= npxye[dir]) continue;
 
-        int ize = mid / (nex * ney);
-        int iye = (mid - ize * (nex * ney)) / nex;
-        int ixe = mid - ize * (nex * ney) - iye * nex;
-
-        std::array<int, 3> ie_indices = {ixe, iye, ize};
+        const std::array<int, 3> ie_indices = ElementIndexToIJK(mid, xyelem);
         int sign = this->GetInflowSign(dir, ie_indices[dir]);
 
         std::array<double, 3> xye;
-        xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
+        xye[0] = xymin[0] + dxy[0] * (double(ie_indices[0]) + 0.5e0);
+        xye[1] = xymin[1] + dxy[1] * (double(ie_indices[1]) + 0.5e0);
+        xye[2] = xymin[2] + dxy[2] * (double(ie_indices[2]) + 0.5e0);
 
         const int dir_local = (sign > 0) ? (npxye[dir] - 1 - row) : row;
 
@@ -161,12 +153,10 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
 
         if (pid == -1) continue;
 
-        int ize = ie / (nex * ney);
-        int iye = (ie - ize * (nex * ney)) / nex;
-        int ixe = ie - ize * (nex * ney) - iye * nex;
+        const std::array<int, 3> ie_indices = ElementIndexToIJK(ie, xyelem);
 
         std::array<double, 3> xyr;
-        std::array<int, 3> iexp{}, ie_indices = {ixe, iye, ize};
+        std::array<int, 3> iexp{};
 
         int sign = this->GetInflowSign(dir, ie_indices[dir]);
 
