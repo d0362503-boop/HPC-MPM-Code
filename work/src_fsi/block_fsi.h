@@ -33,7 +33,7 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
 
     double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
+    // std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
 
     void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
 };

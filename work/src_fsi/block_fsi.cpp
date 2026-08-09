@@ -52,6 +52,7 @@ void BlockFSI::UpdateFSIInterfaceBC() {
 }
 
 void BlockFSI::SolveFSISystem() {
+
     this->DetectFSIInterface();
 
     int num = this->fsi_intf.ibc;
@@ -115,6 +116,7 @@ void BlockFSI::SolveFSISystem() {
 }
 
 void BlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k) {
+
     double norm = 0.0e0, intf_num = 0.0e0;
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
         int nid = this->fsi_intf.nbc[n];
@@ -123,9 +125,9 @@ void BlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vecto
         double us2 = nvel_k[nid + nvc];
         double us3 = nvel_k[nid + nwc];
 
-        double uf1 = fluid_.nvel[nid + nuc];
-        double uf2 = fluid_.nvel[nid + nvc];
-        double uf3 = fluid_.nvel[nid + nwc];
+        double uf1 = this->fluid_.nvel[nid + nuc];
+        double uf2 = this->fluid_.nvel[nid + nvc];
+        double uf3 = this->fluid_.nvel[nid + nwc];
 
         double dr1 = us1 - uf1;
         double dr2 = us2 - uf2;
@@ -242,6 +244,7 @@ void BlockFSI::CalDragLiftCoeffForTurekCFD() {
 }
 
 void BlockFSI::CalFSIForce() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -271,13 +274,11 @@ void BlockFSI::CalFSIForce() {
     const double af0 = 1.0e0 - af;
 
     std::vector<double> nvel_af(nodec * 3), npres_af(nodec);
-    for (int n = 0; n < nodec * 3; n++) {
-        nvel_af[n] = af0 * this->fluid_.nvel_old[n] //
-                     + af * this->fluid_.nvel[n];
+    for (int n = 0; n < nodec * 3; n++) { //
+        nvel_af[n] = af0 * this->fluid_.nvel_old[n] + af * this->fluid_.nvel[n];
     }
-    for (int n = 0; n < nodec; n++) {
-        npres_af[n] = af0 * this->fluid_.npres_old[n] //
-                      + af * this->fluid_.npres[n];
+    for (int n = 0; n < nodec; n++) { //
+        npres_af[n] = af0 * this->fluid_.npres_old[n] + af * this->fluid_.npres[n];
     }
     // -----------------------------------------------------
 
@@ -356,28 +357,30 @@ void BlockFSI::CalFSIForce() {
 }
 
 double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
+
     double emd = MaterialPoint::ComputeNRLumpedMassMat(pid, sfi);
     emd += this->nb_para[3] * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
 
     return emd;
 }
 
-std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
-    double fx = bb[0] * facl;
-    double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+// std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
 
-    std::array<double, 3> nfext;
-    nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);
-    nfext[1] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fy + this->trac_force[pid][1]);
-    nfext[2] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fz + this->trac_force[pid][2]);
+//     double fx = bb[0] * facl;
+//     double fy = bb[1] * facl;
+//     double fz = bb[2] * facl;
 
-    return nfext;
-}
+//     std::array<double, 3> nfext;
+//     nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);
+//     nfext[1] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fy + this->trac_force[pid][1]);
+//     nfext[2] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fz + this->trac_force[pid][2]);
+
+//     return nfext;
+// }
 
 void FSISolid::AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) {
+
     for (int n = 0; n < nodec; n++) {
-        // --- For Generalized-α (if α_m = 1, back to Newmark-β) ---
         mat.b_rhs[n + nuc] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nuc];
         mat.b_rhs[n + nvc] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nvc];
         mat.b_rhs[n + nwc] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nwc];

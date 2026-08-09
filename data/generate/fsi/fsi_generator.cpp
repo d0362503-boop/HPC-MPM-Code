@@ -172,32 +172,21 @@ void FsiGenerator::BuildData() {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
                 int id = i + xnodec * j + xnodec * ynodec * k;
-                if (i == 0) {
+                if (i == 0 || i == xnodec - 1) {
                     // double vel = 1.0e-2;
                     // --- Beam 3D ---
-                    double vel = 4.5e0 * (xyc[id][2] * (zmax - xyc[id][2])) *
-                                 (std::pow(ymax, 2) - std::pow(xyc[id][1], 2)) / std::pow(zmax, 4);
-                    // --- Turek FSI2 / CFD ---
-                    // double vel = 1.5e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
+                    // double vel = 4.5e0 * (xyc[id][2] * (zmax - xyc[id][2])) *
+                    //  (std::pow(ymax, 2) - std::pow(xyc[id][1], 2)) / std::pow(zmax, 4);
+                    // --- Turek FSI / CFD ---
+                    // double vel = 3.0e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
                     g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
-                    g_wfem.ubc.fbc[g_wfem.ubc.ibc] = vel;
+                    g_wfem.ubc.fbc[g_wfem.ubc.ibc] = 0.0e0; // vel;
                     g_wfem.ubc.ibc++;
                     g_wfem.wbc.nbc[g_wfem.wbc.ibc] = id;
                     g_wfem.wbc.fbc[g_wfem.wbc.ibc] = 0.0e0;
                     g_wfem.wbc.ibc++;
                 }
-                if (k == 0) {
-                    g_sp.ubc.nbc[g_sp.ubc.ibc] = id;
-                    g_sp.ubc.fbc[g_sp.ubc.ibc] = 0.0e0;
-                    g_sp.ubc.ibc++;
-                    g_sp.vbc.nbc[g_sp.vbc.ibc] = id;
-                    g_sp.vbc.fbc[g_sp.vbc.ibc] = 0.0e0;
-                    g_sp.vbc.ibc++;
-                    g_sp.wbc.nbc[g_sp.wbc.ibc] = id;
-                    g_sp.wbc.fbc[g_sp.wbc.ibc] = 0.0e0;
-                    g_sp.wbc.ibc++;
-                }
-                if (j == 0) {
+                if (j == 0 || j == ynodec - 1) {
                     g_sp.vbc.nbc[g_sp.vbc.ibc] = id;
                     g_sp.vbc.fbc[g_sp.vbc.ibc] = 0.0e0;
                     g_sp.vbc.ibc++;
@@ -205,18 +194,15 @@ void FsiGenerator::BuildData() {
                     g_wfem.vbc.fbc[g_wfem.vbc.ibc] = 0.0e0;
                     g_wfem.vbc.ibc++;
                 }
-                if (j == ynodec - 1 || k == 0 || k == znodec - 1) {
+                if (k == 0 || k == znodec - 1) {
                     g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
                     g_wfem.ubc.fbc[g_wfem.ubc.ibc] = 0.0e0;
                     g_wfem.ubc.ibc++;
-                    g_wfem.vbc.nbc[g_wfem.vbc.ibc] = id;
-                    g_wfem.vbc.fbc[g_wfem.vbc.ibc] = 0.0e0;
-                    g_wfem.vbc.ibc++;
                     g_wfem.wbc.nbc[g_wfem.wbc.ibc] = id;
                     g_wfem.wbc.fbc[g_wfem.wbc.ibc] = 0.0e0;
                     g_wfem.wbc.ibc++;
                 }
-                if (i == xnodec - 1) {
+                if (i == 0 && k == znodec - 1) {
                     g_wfem.pbc.nbc[g_wfem.pbc.ibc] = id;
                     g_wfem.pbc.fbc[g_wfem.pbc.ibc] = 0.0e0;
                     g_wfem.pbc.ibc++;
@@ -246,9 +232,9 @@ void FsiGenerator::BuildData() {
                             // if (zp >= 0.21e0 || zp <= 0.19e0) {
                             // if (std::pow((xp - 0.2e0), 2) + std::pow((zp - 0.2e0), 2) < std::pow(0.05e0, 2)) {
                             // --- Disk ---
-                            // if (std::pow((xp - 6.0e-3), 2) + std::pow((zp - 5.0e-3), 2) < std::pow(2.0e-3, 2)) {
-                            // --- Beam 3D ---
-                            if (xp >= 0.45e0 && xp <= 0.55e0 && yp <= 0.2e0 && zp <= 0.2e0) {
+                            if (std::pow((xp - 1.0e-2), 2) + std::pow((zp - 4.0e-2), 2) < std::pow(1.25e-3, 2)) {
+                                // --- Beam 3D ---
+                                // if (xp >= 0.45e0 && xp <= 0.55e0 && yp <= 0.2e0 && zp <= 0.2e0) {
                                 g_sp.coord[g_sp.num][0] = xp;
                                 g_sp.coord[g_sp.num][1] = yp;
                                 g_sp.coord[g_sp.num][2] = zp;

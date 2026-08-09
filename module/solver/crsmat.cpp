@@ -446,7 +446,7 @@ void CrsMat::BuildKSPSolver() {
     KSPGetPC(this->ksp, &pc);
     this->ConfigurePreconditioner(pc);
 
-    KSPSetTolerances(this->ksp, 1.0e-10, 1.0e-15, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-8, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
 
@@ -557,8 +557,6 @@ void CrsMat::InitPetscSolver(int ndof) {
 
 void CrsMat::AssemblePetscMat(int ndof) {
     MatZeroEntries(this->petsc_mat);
-    std::vector<PetscScalar> identity_block(static_cast<size_t>(ndof) * ndof, 0.0e0);
-    for (int var = 0; var < ndof; ++var) { identity_block[var * ndof + var] = 1.0; }
     this->BuildActiveRowMask();
 
     for (int i = 0; i < nodec; ++i) {
@@ -590,16 +588,6 @@ void CrsMat::AssemblePetscMat(int ndof) {
 
         MatSetValuesBlockedLocal(this->petsc_mat, 1, &block_row, ncols, this->petsc_block_cols_buf.data(),
                                  this->petsc_block_vals_buf.data(), ADD_VALUES);
-    }
-
-    if (!this->FEM_flag) {
-        for (int ii = 0; ii < this->local_node; ++ii) {
-            const int natural_id = this->owned_natural_ids[ii];
-            if (this->active_row_mask[natural_id] != 0) continue;
-
-            const PetscInt block_row = this->NaturalNodeToPetscLocalBlock(natural_id);
-            MatSetValuesBlockedLocal(this->petsc_mat, 1, &block_row, 1, &block_row, identity_block.data(), ADD_VALUES);
-        }
     }
 
     MatAssemblyBegin(this->petsc_mat, MAT_FINAL_ASSEMBLY);
@@ -634,6 +622,7 @@ void CrsMat::UpdatePetscRhs(int ndof) {
 }
 
 int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
+    this->BuildPetscBCList();
     this->UpdatePetscRhs(ndof);
 
     // Initialise the PETSc guess vector from the current Newton iterate.
@@ -646,9 +635,14 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     size_t idx = 0;
     for (int i = 0; i < this->local_node; ++i) {
         const int natural_id = this->owned_natural_ids[i];
+        const bool inactive = !this->FEM_flag && this->active_row_mask[natural_id] == 0;
         for (int var = 0; var < ndof; ++var) {
             this->petsc_indices_buf[idx] = this->NaturalNodeVarToPetscLocalScalar(natural_id, var);
-            this->petsc_values_buf[idx] = this->x_lhs[natural_id + var * nodec];
+            const PetscInt gid = this->natural_var_gids[natural_id + var * nodec];
+            const bool is_physical_bc =
+                std::binary_search(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end(), gid);
+            this->petsc_values_buf[idx] =
+                inactive && !is_physical_bc ? 0.0 : this->x_lhs[natural_id + var * nodec];
             ++idx;
         }
     }
@@ -658,7 +652,24 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     VecAssemblyBegin(this->petsc_x);
     VecAssemblyEnd(this->petsc_x);
 
-    this->BuildPetscBCList();
+    if (!this->FEM_flag) {
+        std::vector<PetscInt> inactive_gids;
+        inactive_gids.reserve(static_cast<size_t>(this->local_node) * ndof);
+        for (int i = 0; i < this->local_node; ++i) {
+            const int natural_id = this->owned_natural_ids[i];
+            if (this->active_row_mask[natural_id] != 0) continue;
+            for (int var = 0; var < ndof; ++var) {
+                const PetscInt gid = this->natural_var_gids[natural_id + var * nodec];
+                if (!std::binary_search(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end(), gid)) {
+                    inactive_gids.push_back(gid);
+                }
+            }
+        }
+        MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(inactive_gids.size()),
+                           inactive_gids.empty() ? nullptr : inactive_gids.data(), 1.0e0, this->petsc_x,
+                           this->petsc_b);
+    }
+
     if (!this->petsc_bc_gids.empty()) {
         MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()),
                            this->petsc_bc_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);

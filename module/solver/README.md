@@ -186,15 +186,17 @@ This tells PETSc to dynamically `malloc` storage for unexpected nonzeros instead
 
 > **Tradeoff:** A more aggressive fix would be to enlarge the initial stencil in `BuildCrsMat()` to cover the maximum possible particle influence radius, but this would waste memory for the majority of rows that never see distant particles. The current dynamic-allow approach is simpler and memory-efficient.
 
-#### Inactive-node identity fill
+#### Inactive-node elimination
 
-At the start of each assembly, `BuildActiveRowMask()` computes the mass-based active indicator (Section 2.5) and synchronizes it across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank marks it active. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass to avoid adding zero rows. For locally-owned inactive nodes, a second pass inserts an identity block:
+At the start of each assembly, `BuildActiveRowMask()` computes the mass-based active indicator (Section 2.5) and synchronizes it across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank marks it active. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass.
+
+After the RHS and initial guess are assembled, PETSc applies
 
 ```cpp
-MatSetValuesBlockedLocal(..., 1, &block_row, 1, &block_row, identity_block.data(), ADD_VALUES);
+MatZeroRowsColumns(..., inactive_gids, 1.0, petsc_x, petsc_b);
 ```
 
-This keeps the matrix non-singular and prevents the linear solver from diverging on empty-space degrees of freedom, while ensuring that partition-boundary nodes with real physical contributions are not pinned by mistake.
+to every inactive non-Dirichlet DOF. Their initial guess is zero, so PETSc sets their RHS to zero and removes their row and column from every active equation. Physical Dirichlet DOFs are excluded from this list and are handled by the normal BC pass afterwards. This avoids weak empty-space DOFs feeding back into active MPM equations.
 
 #### Residual consistency for inactive MPM nodes
 
@@ -205,7 +207,7 @@ Current implementation (`ComputePetscResidualStats`):
 
 - `AssemblePetscMat()` calls `BuildActiveRowMask()` at the start of each assembly,
   then skips node block rows where `!FEM_flag && active_row_mask[i] == 0`
-- locally-owned skipped rows receive an identity block in the second pass
+- inactive non-Dirichlet rows and columns are eliminated after RHS/initial-guess assembly
 - `ComputeRefResidual()` and `ComputeAbsResidual()` now use `ComputePetscResidualStats()` for
   the PETSc path, which:
   1. Computes the residual vector via `MatMult(petsc_mat, petsc_x, residual)` and
