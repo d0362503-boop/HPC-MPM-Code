@@ -364,19 +364,19 @@ double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
     return emd;
 }
 
-std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
+// std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
 
-    double fx = bb[0] * facl;
-    double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+//     double fx = bb[0] * facl;
+//     double fy = bb[1] * facl;
+//     double fz = bb[2] * facl;
 
-    std::array<double, 3> nfext;
-    nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);
-    nfext[1] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fy + this->trac_force[pid][1]);
-    nfext[2] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fz + this->trac_force[pid][2]);
+//     std::array<double, 3> nfext;
+//     nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);
+//     nfext[1] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fy + this->trac_force[pid][1]);
+//     nfext[2] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fz + this->trac_force[pid][2]);
 
-    return nfext;
-}
+//     return nfext;
+// }
 
 void FSISolid::AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) {
 
