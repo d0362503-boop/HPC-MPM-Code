@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bc.h"
+#include "module/bc.h"
 #include <vector>
 
 using namespace std;

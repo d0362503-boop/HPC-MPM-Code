@@ -9,14 +9,14 @@
 #include <string>
 #include <vector>
 
-#include "../../bc.h"
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "../../solver/crsmat.h"
-#include "stabilized_fem.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solver/crsmat.h"
+#include "module/fluid/FEM/stabilized_fem.h"
 
 using namespace stabilizedfem;
 

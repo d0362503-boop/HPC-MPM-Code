@@ -1,4 +1,4 @@
-#include "solid_divider.h"
+#include "data/divide/divide_solid/solid_divider.h"
 
 int main() {
     SolidDivider divider;

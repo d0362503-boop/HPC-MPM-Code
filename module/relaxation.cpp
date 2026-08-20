@@ -1,14 +1,14 @@
-#include "relaxation.h"
+#include "module/relaxation.h"
 
 #include <mpi.h>
 
-#include "bc.h"
-#include "contact.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "mesh.h"
-#include "mpi_data.h"
-#include "shape_function.h"
+#include "module/bc.h"
+#include "module/contact.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
 
 #include <algorithm>
 #include <array>

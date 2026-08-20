@@ -4,9 +4,9 @@
 
 #include <vector>
 
-#include "../bc.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
+#include "module/bc.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 
 class MaterialPoint; // forward declaration
 

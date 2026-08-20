@@ -3,12 +3,12 @@
 #include <string>
 #include <vector>
 
-#include "../dataset.h"
-#include "../material_point.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
-#include "../vtk_hdf5.h"
-#include "solid_material_point.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/vtk_hdf5.h"
+#include "module/solid/solid_material_point.h"
 
 void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
 

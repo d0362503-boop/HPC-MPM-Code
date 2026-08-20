@@ -6,11 +6,11 @@
 #include <string>
 #include <mpi.h>
 #include <cmath>
-#include "../../dataset.h"
-#include "../../shape_function.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "stabilized_fem.h"
+#include "module/dataset.h"
+#include "module/shape_function.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/fluid/FEM/stabilized_fem.h"
 
 using namespace stabilizedfem;
 

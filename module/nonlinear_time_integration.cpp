@@ -3,9 +3,9 @@
 #include <iostream>
 #include <vector>
 
-#include "dataset.h"
-#include "material_point.h"
-#include "mesh.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
 
 void MaterialPoint::GeneralizedAlphaParaSet() {
     double temp = 1.0e0 + this->spec_rad;

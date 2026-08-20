@@ -5,12 +5,12 @@
 #include <string>
 #include <vector>
 
-#include "bc.h"
-#include "dataset.h"
-#include "map_and_interpolate.h"
-#include "mesh.h"
-#include "mpi_data.h"
-#include "solver/crsmat.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solver/crsmat.h"
 
 namespace mpm_dlb {
 struct Region;

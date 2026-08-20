@@ -2,10 +2,10 @@
 
 #include <array>
 #include <vector>
-#include "mesh.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "cal_mat.h"
+#include "module/mesh.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/cal_mat.h"
 
 /**
  * @brief Evaluate shape functions and gradients at point `xyg` for element `m`.

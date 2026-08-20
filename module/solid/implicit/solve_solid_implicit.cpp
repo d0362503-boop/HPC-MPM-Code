@@ -8,17 +8,17 @@
 #include <string>
 #include <vector>
 
-#include "../../bc.h"
-#include "../../cal_mat.h"
-#include "../../dataset.h"
-#include "../../map_and_interpolate.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "../../solver/crsmat.h"
-#include "../solid_material_point.h"
-#include "implicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solver/crsmat.h"
+#include "module/solid/solid_material_point.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 
 using namespace implicitmpm;
 

@@ -1,10 +1,10 @@
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/mesh.h"
-#include "../../module/mpi_data.h"
-#include "../../module/solid/implicit/implicit_mpm_solid.h"
-#include "../../module/solid/solid_material_point.h"
-#include "../../module/solver/crsmat.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
+#include "module/solid/solid_material_point.h"
+#include "module/solver/crsmat.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>

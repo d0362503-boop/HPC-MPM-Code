@@ -1,10 +1,10 @@
 #ifndef DATA_DIVIDE_FLUID_FLUID_DIVIDER_H_
 #define DATA_DIVIDE_FLUID_FLUID_DIVIDER_H_
 
-#include "../data_partitioner.h"
+#include "data/divide/data_partitioner.h"
 
-#include "../../../module/bc.h"
-#include "../../../module/material_point.h"
+#include "module/bc.h"
+#include "module/material_point.h"
 
 #include <string>
 

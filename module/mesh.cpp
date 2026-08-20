@@ -1,8 +1,8 @@
-#include "mesh.h"
-#include "DLB/mpm_dlb.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "shape_function.h"
+#include "module/mesh.h"
+#include "module/DLB/mpm_dlb.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/shape_function.h"
 #include <algorithm>
 #include <fstream>
 #include <iomanip>

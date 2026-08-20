@@ -1,9 +1,9 @@
-#include "fsi_divider.h"
+#include "data/divide/divide_fsi/fsi_divider.h"
 
 #include <iomanip>
 
-#include "../../../module/data_io.h"
-#include "../../../module/dataset.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
 
 std::string FsiDivider::CaseName() const { return "fsi"; }
 
