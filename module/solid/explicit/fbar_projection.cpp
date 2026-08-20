@@ -2,13 +2,13 @@
 #include <cmath>
 #include <vector>
 
-#include "../../cal_mat.h"
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "explicit_mpm_solid.h"
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solid/explicit/explicit_mpm_solid.h"
 
 using namespace explicitmpm;
 

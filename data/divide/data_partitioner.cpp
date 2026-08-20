@@ -1,4 +1,4 @@
-#include "data_partitioner.h"
+#include "data/divide/data_partitioner.h"
 
 #include <cmath>
 #include <filesystem>
@@ -6,10 +6,10 @@
 #include <iostream>
 #include <vector>
 
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/mesh.h"
-#include "../../module/mpi_data.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 
 int DataPartitioner::Run() {
     std::cout << " ---- Start dividing " << this->CaseName() << " data ----"

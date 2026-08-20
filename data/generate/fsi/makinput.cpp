@@ -1,4 +1,4 @@
-#include "fsi_generator.h"
+#include "data/generate/fsi/fsi_generator.h"
 
 int main() {
   FsiGenerator generator;

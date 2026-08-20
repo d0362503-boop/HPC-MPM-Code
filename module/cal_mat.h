@@ -4,8 +4,8 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include "mesh.h"
-#include "dataset.h"
+#include "module/mesh.h"
+#include "module/dataset.h"
 
 /**
  * @brief Return the sign of a scalar value.

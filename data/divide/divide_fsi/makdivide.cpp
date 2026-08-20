@@ -1,4 +1,4 @@
-#include "fsi_divider.h"
+#include "data/divide/divide_fsi/fsi_divider.h"
 
 int main() {
     FsiDivider divider;

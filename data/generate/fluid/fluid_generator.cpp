@@ -1,6 +1,6 @@
-#include "fluid_generator.h"
+#include "data/generate/fluid/fluid_generator.h"
 
-#include "../output_util.h"
+#include "data/generate/output_util.h"
 
 #include <array>
 #include <fstream>
@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "../../../module/data_io.h"
-#include "../../../module/dataset.h"
-#include "../../../module/material_point.h"
-#include "../../../module/mesh.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
 
 namespace {
 

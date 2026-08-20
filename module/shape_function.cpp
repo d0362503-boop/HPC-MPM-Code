@@ -1,9 +1,9 @@
 #include <vector>
 #include <array>
-#include "mesh.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "cal_mat.h"
+#include "module/mesh.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/cal_mat.h"
 
 void MakSf(const int m, const std::array<double, 3>& xyg, const std::vector<int>& idimc, const std::vector<int>& xynodec,
            std::vector<int>& nc, int& nenode, std::vector<double>& sf, std::vector<std::array<double, 3>>& dsf) {
@@ -12,13 +12,8 @@ void MakSf(const int m, const std::array<double, 3>& xyg, const std::vector<int>
     int nxc = xynodec[0];
     int nyc = xynodec[1];
     int nzc = xynodec[2];
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
 
-    int ize = m / (nex * ney);
-    int iye = (m - ize * (nex * ney)) / nex;
-    int ixe = m - ize * (nex * ney) - iye * nex;
+    const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
 
     nc.resize(max_nenode); sf.resize(max_nenode);
     dsf.resize(max_nenode);
@@ -26,11 +21,11 @@ void MakSf(const int m, const std::array<double, 3>& xyg, const std::vector<int>
     int ixyn[3];
     int id = 0;
     for (int k = 0; k <= idimc[2]; k++) {
-        ixyn[2] = ize + k;
+        ixyn[2] = ijk[2] + k;
         for (int j = 0; j <= idimc[1]; j++) {
-            ixyn[1] = iye + j;
+            ixyn[1] = ijk[1] + j;
             for (int i = 0; i <= idimc[0]; i++) {
-                ixyn[0] = ixe + i;
+                ixyn[0] = ijk[0] + i;
                 nc[id] = ixyn[0] + nxc * ixyn[1] + nxc * nyc * ixyn[2];
 
                 std::array<double, 3> sfxy, dsfxy;

@@ -4,11 +4,11 @@
 #include <iostream>
 #include <vector>
 
-#include "../../dataset.h"
-#include "../../mesh.h"
-#include "../../shape_function.h"
-#include "../../vtk_hdf5.h"
-#include "stabilized_fem.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+#include "module/shape_function.h"
+#include "module/vtk_hdf5.h"
+#include "module/fluid/FEM/stabilized_fem.h"
 
 using namespace stabilizedfem;
 

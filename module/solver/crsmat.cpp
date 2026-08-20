@@ -1,4 +1,4 @@
-#include "crsmat.h"
+#include "module/solver/crsmat.h"
 
 #include <petsc.h>
 
@@ -6,11 +6,11 @@
 #include <cmath>
 #include <vector>
 
-#include "../bc.h"
-#include "../dataset.h"
-#include "../material_point.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 
 void CrsMat::BuildCrsMat(int num_block) {
 

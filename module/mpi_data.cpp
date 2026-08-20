@@ -1,8 +1,8 @@
-#include "mpi_data.h"
-#include "DLB/mpm_dlb.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "mesh.h"
+#include "module/mpi_data.h"
+#include "module/DLB/mpm_dlb.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
 #include <fstream>
 #include <iomanip>
 #include <mpi.h>

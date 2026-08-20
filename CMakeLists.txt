@@ -19,6 +19,9 @@ project(
     DESCRIPTION "MPM/FEM/FSI solver with VTK HDF5 output support"
     LANGUAGES C CXX)
 
+# Project headers use paths relative to the source root.
+include_directories(${CMAKE_SOURCE_DIR})
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

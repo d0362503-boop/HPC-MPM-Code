@@ -2,12 +2,12 @@
 #include <vector>
 #include <optional>
 #include <string>
-#include "../module/bc.h"
-#include "../module/mesh.h"
-#include "../module/solid/solid_material_point.h"
-#include "../module/solid/implicit/implicit_mpm_solid.h"
-#include "../module/fluid/FEM/stabilized_fem.h"
-#include "block_fsi.h"
+#include "module/bc.h"
+#include "module/mesh.h"
+#include "module/solid/solid_material_point.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
+#include "module/fluid/FEM/stabilized_fem.h"
+#include "work/src_fsi/MPMFEM/block_fsi.h"
 
 using namespace implicitmpm;
 using namespace stabilizedfem;

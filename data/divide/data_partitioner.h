@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "../../module/bc.h"
-#include "../../module/material_point.h"
+#include "module/bc.h"
+#include "module/material_point.h"
 
 class DataPartitioner {
   public:

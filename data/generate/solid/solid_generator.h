@@ -1,7 +1,7 @@
 #ifndef DATA_SOLID_SOLID_GENERATOR_H_
 #define DATA_SOLID_SOLID_GENERATOR_H_
 
-#include "../data_generator.h"
+#include "data/generate/data_generator.h"
 
 #include <string>
 

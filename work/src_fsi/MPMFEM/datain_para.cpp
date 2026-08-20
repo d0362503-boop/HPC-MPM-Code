@@ -5,16 +5,16 @@
 #include <string>
 #include <vector>
 
-#include "../module/bc.h"
-#include "../module/data_io.h"
-#include "../module/dataset.h"
-#include "../module/fluid/FEM/stabilized_fem.h"
-#include "../module/material_point.h"
-#include "../module/mesh.h"
-#include "../module/mpi_data.h"
-#include "../module/solid/implicit/implicit_mpm_solid.h"
-#include "../module/solid/solid_material_point.h"
-#include "block_fsi.h"
+#include "module/bc.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
+#include "module/solid/solid_material_point.h"
+#include "work/src_fsi/MPMFEM/block_fsi.h"
 
 using namespace implicitmpm;
 using namespace stabilizedfem;

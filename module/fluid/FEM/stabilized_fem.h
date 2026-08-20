@@ -3,11 +3,11 @@
 #include <cmath>
 #include <vector>
 
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../solver/crsmat.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solver/crsmat.h"
 
 namespace stabilizedfem {
 

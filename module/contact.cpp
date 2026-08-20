@@ -2,13 +2,13 @@
 #include <mpi.h>
 #include <iostream>
 #include <iomanip>
-#include "material_point.h"
-#include "./solid/solid_material_point.h"
-#include "mesh.h"
-#include "dataset.h"
-#include "mpi_data.h"
-#include "shape_function.h"
-#include "contact.h"
+#include "module/material_point.h"
+#include "module/solid/solid_material_point.h"
+#include "module/mesh.h"
+#include "module/dataset.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/contact.h"
 
 using namespace std;
 

@@ -1,4 +1,4 @@
-#include "material_point.h"
+#include "module/material_point.h"
 
 #include <mpi.h>
 
@@ -7,11 +7,11 @@
 #include <iomanip>
 #include <vector>
 
-#include "dataset.h"
-#include "map_and_interpolate.h"
-#include "mesh.h"
-#include "mpi_data.h"
-#include "shape_function.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
 
 void MaterialPoint::BuildGaussianPoint() {
     std::array<std::array<double, 3>, 6> dec2p;
@@ -20,17 +20,13 @@ void MaterialPoint::BuildGaussianPoint() {
     int npe = npxye[0] * npxye[1] * npxye[2];
     VectorAssign(nelem * npe, this->coord);
 
-    int nex = xyelem[0], ney = xyelem[1], nez = xyelem[2];
-
     for (int m = 0; m < nelem; m++) {
-        int ize = m / (nex * ney);
-        int iye = (m - ize * (nex * ney)) / nex;
-        int ixe = m - ize * (nex * ney) - iye * nex;
+        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
 
         std::array<double, 3> xye, xyp;
-        xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
+        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
+        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
+        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
             for (int iy = 0; iy < npxye[1]; iy++) {

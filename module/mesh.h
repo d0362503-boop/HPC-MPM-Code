@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dataset.h"
+#include "module/dataset.h"
 #include <array>
 #include <vector>
 
@@ -39,6 +39,21 @@ inline void InitializeMeshAndTimeParameters() {
     dlstep = 1.0e0 / double(nlstep);
 
     return;
+}
+
+/**
+ * @brief Decompose a linear background element index into per-direction element indices.
+ * @param m  Linear element index (x varies fastest, then y, then z).
+ * @param ne Number of background elements along x/y/z (typically the global `xyelem`).
+ * @return Element indices along x/y/z.
+ */
+inline std::array<int, 3> ElementIndexToIJK(int m, const std::vector<int> &ne) {
+
+    const int ize = m / (ne[0] * ne[1]);
+    const int iye = (m - ize * (ne[0] * ne[1])) / ne[0];
+    const int ixe = m - ize * (ne[0] * ne[1]) - iye * ne[0];
+
+    return {ixe, iye, ize};
 }
 
 /**

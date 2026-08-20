@@ -3,9 +3,9 @@
 #include <array>
 #include <vector>
 
-#include "../module/bc.h"
-#include "../module/fluid/FEM/stabilized_fem.h"
-#include "../module/solid/implicit/implicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 
 class BlockFSI;
 
@@ -33,7 +33,7 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
 
     double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    // std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
+    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
 
     void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
 };

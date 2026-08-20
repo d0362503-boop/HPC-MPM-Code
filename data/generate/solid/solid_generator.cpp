@@ -1,6 +1,6 @@
-#include "solid_generator.h"
+#include "data/generate/solid/solid_generator.h"
 
-#include "../output_util.h"
+#include "data/generate/output_util.h"
 
 #include <array>
 #include <cmath>
@@ -10,11 +10,11 @@
 #include <string>
 #include <vector>
 
-#include "../../../module/data_io.h"
-#include "../../../module/dataset.h"
-#include "../../../module/material_point.h"
-#include "../../../module/mesh.h"
-#include "../../../module/solid/implicit/implicit_mpm_solid.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 
 using namespace implicitmpm;
 

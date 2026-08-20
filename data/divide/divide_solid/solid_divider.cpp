@@ -1,9 +1,9 @@
-#include "solid_divider.h"
+#include "data/divide/divide_solid/solid_divider.h"
 
 #include <iomanip>
 
-#include "../../../module/data_io.h"
-#include "../../../module/dataset.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
 
 std::string SolidDivider::CaseName() const { return "solid"; }
 
