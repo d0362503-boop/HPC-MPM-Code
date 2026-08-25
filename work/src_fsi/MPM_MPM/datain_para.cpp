@@ -14,12 +14,12 @@
 #include "module/mpi_data.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "module/solid/solid_material_point.h"
-#include "work/src_fsi/MPMFEM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/block_fsi.h"
 
 using namespace implicitmpm;
 using namespace stabilizedfem;
 
-void BlockFSI::DataInput() {
+void MPMMPMBlockFSI::DataInput() {
 
     std::ifstream infile = OpenInputFile("file.dat");
     getline(infile, parafile);
@@ -33,6 +33,7 @@ void BlockFSI::DataInput() {
     std::string solswitch_str;
     infile >> solswitch_str >> rstflag >> nlstep;
     this->solid_.solswitch = ParseMapScheme(solswitch_str);
+    this->fluid_.solswitch = ParseMapScheme(solswitch_str);
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -64,8 +65,7 @@ void BlockFSI::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> this->solid_.rho >> this->fluid_.rhol >> this->fluid_.rmul //
-        >> this->fluid_.rhog >> this->fluid_.rmug >> this->fluid_.fs_height;
+    infile >> this->solid_.rho >> this->fluid_.rho >> this->fluid_.rmu;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -96,6 +96,7 @@ void BlockFSI::DataInput() {
     this->solid_.GeneralizedAlphaParaSet();
     this->solid_.NewmarkBetaParaSet();
     this->fluid_.GeneralizedAlphaParaSet();
+    this->fluid_.NewmarkBetaParaSet();
     // --------------------------------
 
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
@@ -115,9 +116,9 @@ void BlockFSI::DataInput() {
 
         this->solid_.InputPointData(infile);
 
-        infile.close();
+        this->fluid_.InputPointData(infile);
 
-        this->fluid_.InitializeMeshData();
+        infile.close();
     }
 
     return;

@@ -97,7 +97,7 @@ class StabilizedMPM : public MaterialPoint {
     /** @brief Migrate all fluid particle state using the prepared MPI communication plan. */
     void MigrateParticleData() override;
 
-  private:
+  protected:
     /**
      * @brief Register constrained DOFs with PETSc matrix.
      * @param mat PETSc matrix.
@@ -134,6 +134,7 @@ class StabilizedMPM : public MaterialPoint {
         return;
     };
 
+  private:
     /** @brief Compute VMS/PSPG stabilization coefficients.
      * @param nvel_k   Nodal velocity vector.
      */

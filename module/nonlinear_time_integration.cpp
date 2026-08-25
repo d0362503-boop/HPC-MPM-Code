@@ -26,7 +26,7 @@ void MaterialPoint::GeneralizedAlphaParaSet() {
     return;
 }
 
-std::vector<double> MaterialPoint::GeneralizedAlphaNodeAccelUpdate() const noexcept {
+std::vector<double> MaterialPoint::ComputeNodeAccelFromVel() const noexcept {
     double para1 = 1.0e0 / (this->gamma_nb * dt);
     double para2 = (1.0e0 - this->gamma_nb) / this->gamma_nb;
 
@@ -56,8 +56,8 @@ void MaterialPoint::NewmarkBetaParaSet() {
     return;
 }
 
-void MaterialPoint::PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k,
-                                                  std::vector<double> &naccel_k) const noexcept {
+void MaterialPoint::ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k,
+                                                 std::vector<double> &naccel_k) const noexcept {
     for (int n = 0; n < nodec * 3; n++) {
         nvel_k[n] = this->nb_para[0] * this->ndispl[n] //
                     - this->nb_para[1] * this->nvel[n] //
@@ -77,9 +77,9 @@ void MaterialPoint::CommitNodalKinematics(const std::vector<double> &nvel_k, con
     return;
 }
 
-void MaterialPoint::CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
-                                             const std::vector<std::array<double, 3>> &disp,
-                                             const std::vector<std::array<double, 3>> &disp_corr) {
+void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
+                                                     const std::vector<std::array<double, 3>> &disp,
+                                                     const std::vector<std::array<double, 3>> &disp_corr) {
     const bool has_shift = !disp_corr.empty();
     for (int n = 0; n < this->num; n++) {
         std::array<double, 3> advected_coord;

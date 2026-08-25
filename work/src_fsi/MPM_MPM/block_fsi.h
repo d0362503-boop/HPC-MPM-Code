@@ -4,41 +4,37 @@
 #include <vector>
 
 #include "module/bc.h"
-#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 
-class BlockFSI;
+class MPMMPMBlockFSI;
 
-class FSIFluid : public stabilizedfem::StabilizedFEM {
+class FSIFluid : public stabilizedmpm::StabilizedMPM {
   public:
-    BlockFSI &fsi_; // Reference back to the FSI coordinator
+    MPMMPMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSIFluid(BlockFSI &fsi) : fsi_(fsi) {}
+    FSIFluid(MPMMPMBlockFSI &fsi) : fsi_(fsi) {}
 
     // ---- Boundary Condition Overrides ----
+    void BCNRSet() override;
+
     // --- For PETSc ---
     void BuildPetscBCList(CrsMat &mat) override;
 
     // --- For self-defined ---
     void BCResidualSet(std::vector<double> &rr) override;
-
-    void BCSet() override;
 };
 
 class FSISolid : public implicitmpm::ImplicitSolidMPM {
   public:
-    BlockFSI &fsi_; // Reference back to the FSI coordinator
+    MPMMPMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSISolid(BlockFSI &fsi) : fsi_(fsi) {}
-
-    double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
-
-    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
+    FSISolid(MPMMPMBlockFSI &fsi) : fsi_(fsi) {}
 
     void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
 };
 
-class BlockFSI {
+class MPMMPMBlockFSI {
   public:
     BoundaryCondition fsi_intf;
 
@@ -56,9 +52,8 @@ class BlockFSI {
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
     // -----------------------------------------------------------------
-    BlockFSI() : fluid_(*this), solid_(*this) {}
+    MPMMPMBlockFSI() : fluid_(*this), solid_(*this) {}
 
-    std::vector<double> added_mass;
     std::vector<double> nfsi_force;
 
     /**
@@ -71,16 +66,9 @@ class BlockFSI {
 
     void DetectFSIInterface();
 
-    void UpdateFSIInterfaceBC();
-
     void SolveFSISystem();
 
-    void CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k);
+    void CalFSIResidual(double &rtr_ref, double &rtr_dof);
 
     void CalFSIForce();
-
-    /**
-     * @brief Specifically for Turek CFD problem (Cylinder flow)
-     */
-    void CalDragLiftCoeffForTurekCFD();
 };

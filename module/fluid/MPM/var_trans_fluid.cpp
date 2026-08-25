@@ -65,7 +65,7 @@ void StabilizedMPM::Node2Particle() {
 
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     // ---- Newmark beta velocity & acceleration ----
-    this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
+    this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
 
     this->CommitNodalKinematics(nvel_k, naccel_k);
 
@@ -112,7 +112,7 @@ void StabilizedMPM::Node2Particle() {
     disp_corr = this->DeltaCorrectionParticleShifting();
     // disp_corr = this->PairwiseRepulsiveParticleShifting();
 
-    this->CommitParticleKinematics(accel_old, displ, disp_corr);
+    this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
 
     return;
 }

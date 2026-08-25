@@ -1,4 +1,4 @@
-#include "work/src_fsi/MPMFEM/block_fsi.h"
+#include "work/src_fsi/MPM_FEM/block_fsi.h"
 
 #include <mpi.h>
 
@@ -24,7 +24,7 @@
 #include "module/solid/solid_material_point.h"
 #include "module/solver/crsmat.h"
 
-void BlockFSI::DetectFSIInterface() {
+void MPMFEMBlockFSI::DetectFSIInterface() {
     VectorAssign(nodec, this->fsi_intf.nbc);
     VectorAssign(nodec, this->solid_.nphi);
     this->fsi_intf.ibc = 0;
@@ -37,7 +37,7 @@ void BlockFSI::DetectFSIInterface() {
     return;
 }
 
-void BlockFSI::UpdateFSIInterfaceBC() {
+void MPMFEMBlockFSI::UpdateFSIInterfaceBC() {
     int num = this->fsi_intf.ibc;
     if (num == 0) return;
     VectorAssign(num * 3, this->fsi_intf.fbc);
@@ -51,7 +51,7 @@ void BlockFSI::UpdateFSIInterfaceBC() {
     return;
 }
 
-void BlockFSI::SolveFSISystem() {
+void MPMFEMBlockFSI::SolveFSISystem() {
 
     this->DetectFSIInterface();
 
@@ -73,7 +73,7 @@ void BlockFSI::SolveFSISystem() {
 
         this->solid_.SolveSolid();
 
-        this->solid_.PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
+        this->solid_.ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
 
         Anderson_relaxation_M1(block_it, u_s_old, nvel_k, r_k_old, this->fsi_intf);
         // Aitken_relaxation(block_it, this->relax_omega, nvel_k, r_k_old, this->fsi_intf);
@@ -108,14 +108,14 @@ void BlockFSI::SolveFSISystem() {
 
     // this->CalDragLiftCoeffForTurekCFD();
 
-    this->fluid_.naccel = this->fluid_.GeneralizedAlphaNodeAccelUpdate();
+    this->fluid_.naccel = this->fluid_.ComputeNodeAccelFromVel();
 
     this->fluid_.UpdateNodalVar();
 
     return;
 }
 
-void BlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k) {
+void MPMFEMBlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k) {
 
     double norm = 0.0e0, intf_num = 0.0e0;
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
@@ -149,7 +149,7 @@ void BlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vecto
     return;
 }
 
-void BlockFSI::CalDragLiftCoeffForTurekCFD() {
+void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
 
     const double cylinder_center_x = 0.2e0;
     const double cylinder_center_z = 0.2e0;
@@ -243,7 +243,7 @@ void BlockFSI::CalDragLiftCoeffForTurekCFD() {
     return;
 }
 
-void BlockFSI::CalFSIForce() {
+void MPMFEMBlockFSI::CalFSIForce() {
 
     int nenode;
     std::vector<int> ncm;

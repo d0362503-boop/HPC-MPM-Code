@@ -13,7 +13,7 @@ void MakSf(const int m, const std::array<double, 3>& xyg, const std::vector<int>
     int nyc = xynodec[1];
     int nzc = xynodec[2];
 
-    const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+    const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
     nc.resize(max_nenode); sf.resize(max_nenode);
     dsf.resize(max_nenode);

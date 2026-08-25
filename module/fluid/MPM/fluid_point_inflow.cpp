@@ -78,7 +78,7 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
         int row = this->inflow_row[m];
         if (row >= npxye[dir]) continue;
 
-        const std::array<int, 3> ie_indices = ElementIndexToIJK(mid, xyelem);
+        const std::array<int, 3> ie_indices = IndexToIJK(mid, xyelem);
         int sign = this->GetInflowSign(dir, ie_indices[dir]);
 
         std::array<double, 3> xye;
@@ -153,7 +153,7 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
 
         if (pid == -1) continue;
 
-        const std::array<int, 3> ie_indices = ElementIndexToIJK(ie, xyelem);
+        const std::array<int, 3> ie_indices = IndexToIJK(ie, xyelem);
 
         std::array<double, 3> xyr;
         std::array<int, 3> iexp{};

@@ -73,7 +73,7 @@ void ImplicitSolidMPM::SolveSolid() {
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
         this->BCNRSet();
 
-        this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
         this->AssembleSystem(naccel_k, nvel_k, stress_k);
 

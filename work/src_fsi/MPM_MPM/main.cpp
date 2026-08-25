@@ -7,19 +7,19 @@
 #include "module/contact.h"
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "module/solver/crsmat.h"
-#include "work/src_fsi/MPMFEM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/block_fsi.h"
 
 using namespace implicitmpm;
-using namespace stabilizedfem;
+using namespace stabilizedmpm;
 
 void MPMBlockFSI() {
-    BlockFSI fsi;
+    MPMMPMBlockFSI fsi;
 
     fsi.DataInput();
 
@@ -36,14 +36,6 @@ void MPMBlockFSI() {
 
     BuildControlPoint();
 
-    fsi.fluid_.BuildGaussianPoint();
-
-    fsi.fluid_.MeshPointLinklist();
-
-    fsi.fluid_.Particle2NodePhi();
-
-    double vol_l0 = fsi.fluid_.CalLiquidVol();
-
     fsi.solid_.SM_.BuildCrsMat(9);
 
     fsi.fluid_.NS_.BuildCrsMat(16);
@@ -54,11 +46,9 @@ void MPMBlockFSI() {
 
     fsi.solid_.DetermineRigidBC();
 
-    fsi.fluid_.Cp2NodeVTK();
-
     fsi.solid_.OutputPointDataVTKHDF(iview, istep);
 
-    fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+    fsi.fluid_.OutputPointDataVTKHDF(iview, istep);
 
     for (istep = ista; istep <= iend; istep++) {
         // -----------------------------------------------
@@ -75,23 +65,28 @@ void MPMBlockFSI() {
         }
         // -----------------------------------------------
 
-        fsi.fluid_.SetPFDomain();
-
         fsi.solid_.MeshPointLinklist();
 
+        fsi.fluid_.MeshPointLinklist();
+
         fsi.solid_.Particle2Node();
+        
+        fsi.fluid_.Particle2Node();
 
         fsi.SolveFSISystem(); // --- Strong coupling: block iteration ---
 
         fsi.solid_.Node2Particle();
 
+        fsi.fluid_.Node2Particle();
+
         fsi.solid_.MoveParticle();
+
+        fsi.fluid_.MoveParticle();
 
         if (istep % iout == 0) {
             iview++;
             fsi.solid_.OutputPointDataVTKHDF(iview, istep);
-            fsi.fluid_.Cp2NodeVTK();
-            fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+            fsi.fluid_.OutputPointDataVTKHDF(iview, istep);
 
             if (rstflag == 2 || rstflag == 3) {
                 fsi.solid_.RestartOutput();

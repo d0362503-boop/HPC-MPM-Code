@@ -75,7 +75,7 @@ void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
     for (int m = 0; m < nelem; m++) {
         double rnue = this->rmue[m] / this->rhoe[m];
 
-        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         std::array<double, 3> xye;
         xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);

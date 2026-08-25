@@ -1,11 +1,11 @@
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 #include "module/solver/crsmat.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include <array>
 #include <cmath>
 #include <iomanip>
@@ -38,7 +38,7 @@ void StabilizedMPM::SolveNS() {
 
         this->BCNRSet();
 
-        this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
         this->AssembleNSSystem(nvel_k, naccel_k);
 

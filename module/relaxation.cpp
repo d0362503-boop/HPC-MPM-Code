@@ -18,34 +18,34 @@
 #include <numeric>
 #include <vector>
 
-void Anderson_relaxation_M2(int block_it, const std::vector<double> &nvel_k, std::vector<double> &u_s_old,
-                            std::vector<double> &u_s_older, std::vector<double> &r_k_old,
-                            std::vector<double> &r_k_older, BoundaryCondition &fsi_intf) {
-    int num = fsi_intf.ibc;
-    std::vector<double> u_s_new(num * 3, 0.0e0), r_k_new(num * 3, 0.0e0);
+void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
+                            std::vector<double> &var_older, std::vector<double> &res_old,
+                            std::vector<double> &res_older, BoundaryCondition &intf_bc) {
+    int num = intf_bc.ibc;
+    std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
-        int nid = fsi_intf.nbc[i];
-        u_s_new[i + 0 * num] = nvel_k[nid + nuc];
-        u_s_new[i + 1 * num] = nvel_k[nid + nvc];
-        u_s_new[i + 2 * num] = nvel_k[nid + nwc];
+        int nid = intf_bc.nbc[i];
+        var_new[i + 0 * num] = nodal_var[nid + nuc];
+        var_new[i + 1 * num] = nodal_var[nid + nvc];
+        var_new[i + 2 * num] = nodal_var[nid + nwc];
 
-        r_k_new[i + 0 * num] = u_s_new[i + 0 * num] - fsi_intf.fbc[i + 0 * num];
-        r_k_new[i + 1 * num] = u_s_new[i + 1 * num] - fsi_intf.fbc[i + 1 * num];
-        r_k_new[i + 2 * num] = u_s_new[i + 2 * num] - fsi_intf.fbc[i + 2 * num];
+        res_new[i + 0 * num] = var_new[i + 0 * num] - intf_bc.fbc[i + 0 * num];
+        res_new[i + 1 * num] = var_new[i + 1 * num] - intf_bc.fbc[i + 1 * num];
+        res_new[i + 2 * num] = var_new[i + 2 * num] - intf_bc.fbc[i + 2 * num];
     }
 
     // F0 = R_n - R_{n-1}, F1 = R_{n-1} - R_{n-2}
     std::vector<double> F0(num * 3), F1(num * 3);
     for (int i = 0; i < num * 3; i++) {
-        F0[i] = r_k_new[i] - r_k_old[i];
-        F1[i] = r_k_old[i] - r_k_older[i];
+        F0[i] = res_new[i] - res_old[i];
+        F1[i] = res_old[i] - res_older[i];
     }
 
     std::vector<double> M(4, 0.0e0); // M[0]=M00, M[1]=M01, M[2]=M10, M[3]=M11
     std::vector<double> rhs(2, 0.0e0);
 
     for (int i = 0; i < num; i++) {
-        int nid = fsi_intf.nbc[i];
+        int nid = intf_bc.nbc[i];
         for (int d = 0; d < 3; ++d) {
             int idx = i + d * num;
             double w = 0.0e0;
@@ -57,8 +57,8 @@ void Anderson_relaxation_M2(int block_it, const std::vector<double> &nvel_k, std
             M[1] += F0[idx] * F1[idx] * w; // M[0][1]
             M[2] += F1[idx] * F0[idx] * w; // M[1][0]
             M[3] += F1[idx] * F1[idx] * w; // M[1][1]
-            rhs[0] += F0[idx] * r_k_new[idx] * w;
-            rhs[1] += F1[idx] * r_k_new[idx] * w;
+            rhs[0] += F0[idx] * res_new[idx] * w;
+            rhs[1] += F1[idx] * res_new[idx] * w;
         }
     }
 
@@ -68,48 +68,48 @@ void Anderson_relaxation_M2(int block_it, const std::vector<double> &nvel_k, std
 
     double det = M_all[0] * M_all[3] - M_all[1] * M_all[2];
     double lambda1 = 0.5e0, lambda2 = 0.5e0;
-    if (block_it >= 2) {
+    if (iteration >= 2) {
         lambda1 = (M_all[3] * rhs_all[0] - M_all[1] * rhs_all[1]) / det;
         lambda2 = (M_all[0] * rhs_all[1] - M_all[2] * rhs_all[0]) / det;
     }
 
     for (int i = 0; i < num * 3; i++) {
-        fsi_intf.fbc[i] = u_s_new[i] - lambda1 * (u_s_new[i] - u_s_old[i]) //
-                          - lambda2 * (u_s_old[i] - u_s_older[i]);
+        intf_bc.fbc[i] = var_new[i] - lambda1 * (var_new[i] - var_old[i]) //
+                         - lambda2 * (var_old[i] - var_older[i]);
     }
 
     for (int i = 0; i < num * 3; i++) {
-        u_s_older[i] = u_s_old[i];
-        u_s_old[i] = u_s_new[i];
-        r_k_older[i] = r_k_old[i];
-        r_k_old[i] = r_k_new[i];
+        var_older[i] = var_old[i];
+        var_old[i] = var_new[i];
+        res_older[i] = res_old[i];
+        res_old[i] = res_new[i];
     }
 
     return;
 }
 
-void Anderson_relaxation_M1(int block_it, std::vector<double> &u_s_old, const std::vector<double> &nvel_k,
-                            std::vector<double> &r_k_old, BoundaryCondition &fsi_intf) {
-    int num = fsi_intf.ibc;
-    std::vector<double> u_s_new(num * 3, 0.0e0), r_k_new(num * 3, 0.0e0);
+void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const std::vector<double> &nodal_var,
+                            std::vector<double> &res_old, BoundaryCondition &intf_bc) {
+    int num = intf_bc.ibc;
+    std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
-        int nid = fsi_intf.nbc[i];
-        u_s_new[i + 0 * num] = nvel_k[nid + nuc];
-        u_s_new[i + 1 * num] = nvel_k[nid + nvc];
-        u_s_new[i + 2 * num] = nvel_k[nid + nwc];
+        int nid = intf_bc.nbc[i];
+        var_new[i + 0 * num] = nodal_var[nid + nuc];
+        var_new[i + 1 * num] = nodal_var[nid + nvc];
+        var_new[i + 2 * num] = nodal_var[nid + nwc];
 
-        r_k_new[i + 0 * num] = u_s_new[i + 0 * num] - fsi_intf.fbc[i + 0 * num];
-        r_k_new[i + 1 * num] = u_s_new[i + 1 * num] - fsi_intf.fbc[i + 1 * num];
-        r_k_new[i + 2 * num] = u_s_new[i + 2 * num] - fsi_intf.fbc[i + 2 * num];
+        res_new[i + 0 * num] = var_new[i + 0 * num] - intf_bc.fbc[i + 0 * num];
+        res_new[i + 1 * num] = var_new[i + 1 * num] - intf_bc.fbc[i + 1 * num];
+        res_new[i + 2 * num] = var_new[i + 2 * num] - intf_bc.fbc[i + 2 * num];
     }
 
     // F0 = R_n - R_{n-1}
     std::vector<double> F0(num * 3);
-    for (int i = 0; i < num * 3; i++) { F0[i] = r_k_new[i] - r_k_old[i]; }
+    for (int i = 0; i < num * 3; i++) { F0[i] = res_new[i] - res_old[i]; }
 
     double M = 0.0e0, rhs = 0.0e0;
     for (int i = 0; i < num; i++) {
-        int nid = fsi_intf.nbc[i];
+        int nid = intf_bc.nbc[i];
         for (int d = 0; d < 3; ++d) {
             int idx = i + d * num;
             double w = 0.0e0;
@@ -118,7 +118,7 @@ void Anderson_relaxation_M1(int block_it, std::vector<double> &u_s_old, const st
             if (d == 2) w = dbc[nid + nwc];
 
             M += F0[idx] * F0[idx] * w;
-            rhs += F0[idx] * r_k_new[idx] * w;
+            rhs += F0[idx] * res_new[idx] * w;
         }
     }
 
@@ -126,43 +126,43 @@ void Anderson_relaxation_M1(int block_it, std::vector<double> &u_s_old, const st
     MPI_Allreduce(MPI_IN_PLACE, &rhs, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     double lambda = 0.5e0;
-    if (block_it >= 1) { lambda = rhs / M; }
+    if (iteration >= 1) { lambda = rhs / M; }
 
     for (int i = 0; i < num * 3; i++) {
-        fsi_intf.fbc[i] = u_s_new[i] - lambda * (u_s_new[i] - u_s_old[i]);
-        u_s_old[i] = u_s_new[i];
-        r_k_old[i] = r_k_new[i];
+        intf_bc.fbc[i] = var_new[i] - lambda * (var_new[i] - var_old[i]);
+        var_old[i] = var_new[i];
+        res_old[i] = res_new[i];
     }
 
     return;
 }
 
-void Aitken_relaxation(int block_it, double &omega, const std::vector<double> &nvel_k, std::vector<double> &r_k_old,
-                       BoundaryCondition &fsi_intf) {
-    const double omega_min = 0.05e0;
-    const double omega_max = 0.8e0;
+void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var,
+                       std::vector<double> &res_old, BoundaryCondition &intf_bc) {
+    const double relax_coef_min = 0.05e0;
+    const double relax_coef_max = 0.8e0;
 
-    int num = fsi_intf.ibc;
-    std::vector<double> r_k_new(num * 3, 0.0e0);
+    int num = intf_bc.ibc;
+    std::vector<double> res_new(num * 3, 0.0e0);
 
     for (int i = 0; i < num; i++) {
-        int nid = fsi_intf.nbc[i];
-        r_k_new[i + 0 * num] = nvel_k[nid + nuc] - fsi_intf.fbc[i + 0 * num];
-        r_k_new[i + 1 * num] = nvel_k[nid + nvc] - fsi_intf.fbc[i + 1 * num];
-        r_k_new[i + 2 * num] = nvel_k[nid + nwc] - fsi_intf.fbc[i + 2 * num];
+        int nid = intf_bc.nbc[i];
+        res_new[i + 0 * num] = nodal_var[nid + nuc] - intf_bc.fbc[i + 0 * num];
+        res_new[i + 1 * num] = nodal_var[nid + nvc] - intf_bc.fbc[i + 1 * num];
+        res_new[i + 2 * num] = nodal_var[nid + nwc] - intf_bc.fbc[i + 2 * num];
     }
 
     double nume = 0.0e0, deno = 0.0e0;
     for (int i = 0; i < num; i++) {
-        int nid = fsi_intf.nbc[i];
+        int nid = intf_bc.nbc[i];
         // --- Δr_i = r^{k+1}_i - r^k_i ---
-        double dr1 = r_k_new[i + 0 * num] - r_k_old[i + 0 * num];
-        double dr2 = r_k_new[i + 1 * num] - r_k_old[i + 1 * num];
-        double dr3 = r_k_new[i + 2 * num] - r_k_old[i + 2 * num];
+        double dr1 = res_new[i + 0 * num] - res_old[i + 0 * num];
+        double dr2 = res_new[i + 1 * num] - res_old[i + 1 * num];
+        double dr3 = res_new[i + 2 * num] - res_old[i + 2 * num];
         // --- ∑ r^k_i · Δr_i ---
-        nume += (r_k_old[i + 0 * num] * dr1) * dbc[nid + nuc]   //
-                + (r_k_old[i + 1 * num] * dr2) * dbc[nid + nvc] //
-                + (r_k_old[i + 2 * num] * dr3) * dbc[nid + nwc];
+        nume += (res_old[i + 0 * num] * dr1) * dbc[nid + nuc]   //
+                + (res_old[i + 1 * num] * dr2) * dbc[nid + nvc] //
+                + (res_old[i + 2 * num] * dr3) * dbc[nid + nwc];
         // --- ∑ |Δr_i|^2 ---
         deno += pow(dr1, 2) * dbc[nid + nuc]   //
                 + pow(dr2, 2) * dbc[nid + nvc] //
@@ -172,15 +172,15 @@ void Aitken_relaxation(int block_it, double &omega, const std::vector<double> &n
     MPI_Allreduce(MPI_IN_PLACE, &nume, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &deno, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    omega = 0.1e0;
-    if (block_it >= 1) {
-        omega *= -(nume / deno);
-        omega = std::clamp(omega, omega_min, omega_max); // --- under constrain ---
+    relax_coef = 0.1e0;
+    if (iteration >= 1) {
+        relax_coef *= -(nume / deno);
+        relax_coef = std::clamp(relax_coef, relax_coef_min, relax_coef_max); // --- under constrain ---
     }
 
     for (int i = 0; i < num * 3; i++) {
-        fsi_intf.fbc[i] += omega * r_k_new[i];
-        r_k_old[i] = r_k_new[i];
+        intf_bc.fbc[i] += relax_coef * res_new[i];
+        res_old[i] = res_new[i];
     }
 
     return;

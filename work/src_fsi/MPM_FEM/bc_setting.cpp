@@ -7,7 +7,7 @@
 #include "module/solid/solid_material_point.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "module/fluid/FEM/stabilized_fem.h"
-#include "work/src_fsi/MPMFEM/block_fsi.h"
+#include "work/src_fsi/MPM_FEM/block_fsi.h"
 
 using namespace implicitmpm;
 using namespace stabilizedfem;

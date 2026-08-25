@@ -147,7 +147,7 @@ void BuildControlPoint() {
     ncc.assign(nelem, std::vector<int>(nenode));
     for (int m = 0; m < nelem; m++) {
 
-        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         int ixyn[3];
         int id = 0;
@@ -200,7 +200,7 @@ void MakNodalVol() {
 
     VectorAssign(nodec, nvol);
     for (int m = 0; m < nelem; m++) {
-        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         std::array<double, 3> xye, xyp;
         xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);

@@ -166,10 +166,11 @@ class MaterialPoint {
     void GeneralizedAlphaParaSet();
 
     /**
-     * @brief Compute the nodal acceleration at the Generalized-α intermediate time level.
-     * @return Vector of intermediate accelerations sized to `nodec * 3`.
+     * @brief Compute nodal acceleration from nodal velocity by inverting the
+     *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
+     * @return Vector of derived accelerations sized to `nodec * 3`.
      */
-    std::vector<double> GeneralizedAlphaNodeAccelUpdate() const noexcept;
+    std::vector<double> ComputeNodeAccelFromVel() const noexcept;
 
     // --- Newmark-β part ---
     double gamma_nb, beta_nb;
@@ -181,11 +182,12 @@ class MaterialPoint {
     void NewmarkBetaParaSet();
 
     /**
-     * @brief Predict velocity and acceleration at the beginning of an implicit time step.
-     * @param nvel_k   Nodal velocity vector to be predicted (size `nodec * 3`).
-     * @param naccel_k Nodal acceleration vector to be predicted (size `nodec * 3`).
+     * @brief Compute nodal velocity and acceleration from the nodal displacement
+     *        increment by inverting the Newmark-β relations (implicit path).
+     * @param nvel_k   Output nodal velocity vector (size `nodec * 3`).
+     * @param naccel_k Output nodal acceleration vector (size `nodec * 3`).
      */
-    void PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
+    void ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
     // ------------------------------
 
     // --- Newton-Raphson ---
@@ -228,15 +230,15 @@ class MaterialPoint {
     void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
 
     /**
-     * @brief Commit particle kinematics: update velocity via Newmark-β, update position, and apply optional
-     * particle-shifting correction.
-     * @param accel_old Nodal/particle acceleration from the previous step.
+     * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
+     *        Newmark-γ acceleration blend, update position, and apply optional particle-shifting correction.
+     * @param accel_old Particle acceleration from the previous step.
      * @param disp      Nodal displacement increment applied to particle coordinates.
      * @param disp_corr Optional particle-shifting correction displacement.
      */
-    void CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
-                                  const std::vector<std::array<double, 3>> &disp,
-                                  const std::vector<std::array<double, 3>> &disp_corr = {});
+    void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
+                                          const std::vector<std::array<double, 3>> &disp,
+                                          const std::vector<std::array<double, 3>> &disp_corr = {});
 
     /**
      * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
