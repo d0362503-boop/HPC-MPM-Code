@@ -1,4 +1,4 @@
-#include "data/generate/fsi/fsi_generator.h"
+#include "data/generate/fsi/MPM_MPM/fsi_generator.h"
 
 #include "data/generate/output_util.h"
 
@@ -14,17 +14,19 @@
 
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/FEM/stabilized_fem.h"
-#include "module/material_point.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/mesh.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 
-using namespace stabilizedfem;
+using namespace implicitmpm;
+using namespace stabilizedmpm;
 
 namespace {
 
-MaterialPoint g_sp;
-StabilizedFEM g_wfem;
+ImplicitSolidMPM g_sp;
+StabilizedMPM g_wp;
 double g_msp = 0.0;
+double g_mwp = 0.0;
 double g_volp = 0.0;
 
 void CheckSurfacePoint() {
@@ -58,7 +60,6 @@ void FsiGenerator::LoadInput() {
     infile.ignore(1000, '\n');
     std::string solswitch_str;
     infile >> solswitch_str >> rstflag >> nlstep;
-    g_sp.solswitch = ParseMapScheme(solswitch_str);
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -66,7 +67,7 @@ void FsiGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> g_wfem.spec_rad >> g_sp.spec_rad;
+    infile >> dt >> mtol >> g_wp.spec_rad >> g_sp.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -90,8 +91,7 @@ void FsiGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> g_sp.rho >> g_wfem.rhol >> g_wfem.rmul //
-        >> g_wfem.rhog >> g_wfem.rmug >> g_wfem.fs_height;
+    infile >> g_sp.rho >> g_wp.rho >> g_wp.rmu;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -139,6 +139,7 @@ void FsiGenerator::BuildData() {
 
     g_volp = dx * dy * dz / static_cast<double>(nspe);
     g_msp = g_sp.rho * g_volp;
+    g_mwp = g_wp.rho * g_volp;
 
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
@@ -146,28 +147,28 @@ void FsiGenerator::BuildData() {
     BuildMesh();
     BuildControlPoint();
 
-    g_wfem.ubc.nbc.resize(nodec);
-    g_wfem.vbc.nbc.resize(nodec);
-    g_wfem.wbc.nbc.resize(nodec);
+    g_wp.ubc.nbc.resize(nodec);
+    g_wp.vbc.nbc.resize(nodec);
+    g_wp.wbc.nbc.resize(nodec);
     g_sp.ubc.nbc.resize(nodec);
     g_sp.vbc.nbc.resize(nodec);
     g_sp.wbc.nbc.resize(nodec);
-    g_wfem.ubc.fbc.resize(nodec);
-    g_wfem.vbc.fbc.resize(nodec);
-    g_wfem.wbc.fbc.resize(nodec);
+    g_wp.ubc.fbc.resize(nodec);
+    g_wp.vbc.fbc.resize(nodec);
+    g_wp.wbc.fbc.resize(nodec);
     g_sp.ubc.fbc.resize(nodec);
     g_sp.vbc.fbc.resize(nodec);
     g_sp.wbc.fbc.resize(nodec);
-    g_wfem.pbc.nbc.resize(nodec);
-    g_wfem.pbc.fbc.resize(nodec);
+    g_wp.pbc.nbc.resize(nodec);
+    g_wp.pbc.fbc.resize(nodec);
 
     g_sp.ubc.ibc = 0;
     g_sp.vbc.ibc = 0;
     g_sp.wbc.ibc = 0;
-    g_wfem.ubc.ibc = 0;
-    g_wfem.vbc.ibc = 0;
-    g_wfem.wbc.ibc = 0;
-    g_wfem.pbc.ibc = 0;
+    g_wp.ubc.ibc = 0;
+    g_wp.vbc.ibc = 0;
+    g_wp.wbc.ibc = 0;
+    g_wp.pbc.ibc = 0;
     for (int k = 0; k < znodec; k++) {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
@@ -179,34 +180,40 @@ void FsiGenerator::BuildData() {
                     //  (std::pow(ymax, 2) - std::pow(xyc[id][1], 2)) / std::pow(zmax, 4);
                     // --- Turek FSI / CFD ---
                     // double vel = 3.0e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
-                    g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
-                    g_wfem.ubc.fbc[g_wfem.ubc.ibc] = 0.0e0; // vel;
-                    g_wfem.ubc.ibc++;
-                    g_wfem.wbc.nbc[g_wfem.wbc.ibc] = id;
-                    g_wfem.wbc.fbc[g_wfem.wbc.ibc] = 0.0e0;
-                    g_wfem.wbc.ibc++;
+                    g_wp.ubc.nbc[g_wp.ubc.ibc] = id;
+                    g_wp.ubc.fbc[g_wp.ubc.ibc] = 0.0e0;
+                    g_wp.ubc.ibc++;
+                    g_wp.wbc.nbc[g_wp.wbc.ibc] = id;
+                    g_wp.wbc.fbc[g_wp.wbc.ibc] = 0.0e0;
+                    g_wp.wbc.ibc++;
+                    g_sp.ubc.nbc[g_sp.ubc.ibc] = id;
+                    g_sp.ubc.fbc[g_sp.ubc.ibc] = 0.0e0;
+                    g_sp.ubc.ibc++;
+                    g_sp.wbc.nbc[g_sp.wbc.ibc] = id;
+                    g_sp.wbc.fbc[g_sp.wbc.ibc] = 0.0e0;
+                    g_sp.wbc.ibc++;
                 }
                 if (j == 0 || j == ynodec - 1) {
                     g_sp.vbc.nbc[g_sp.vbc.ibc] = id;
                     g_sp.vbc.fbc[g_sp.vbc.ibc] = 0.0e0;
                     g_sp.vbc.ibc++;
-                    g_wfem.vbc.nbc[g_wfem.vbc.ibc] = id;
-                    g_wfem.vbc.fbc[g_wfem.vbc.ibc] = 0.0e0;
-                    g_wfem.vbc.ibc++;
+                    g_wp.vbc.nbc[g_wp.vbc.ibc] = id;
+                    g_wp.vbc.fbc[g_wp.vbc.ibc] = 0.0e0;
+                    g_wp.vbc.ibc++;
                 }
-                if (k == 0 || k == znodec - 1) {
-                    g_wfem.ubc.nbc[g_wfem.ubc.ibc] = id;
-                    g_wfem.ubc.fbc[g_wfem.ubc.ibc] = 0.0e0;
-                    g_wfem.ubc.ibc++;
-                    g_wfem.wbc.nbc[g_wfem.wbc.ibc] = id;
-                    g_wfem.wbc.fbc[g_wfem.wbc.ibc] = 0.0e0;
-                    g_wfem.wbc.ibc++;
-                }
-                if (i == 0 && k == znodec - 1) {
-                    g_wfem.pbc.nbc[g_wfem.pbc.ibc] = id;
-                    g_wfem.pbc.fbc[g_wfem.pbc.ibc] = 0.0e0;
-                    g_wfem.pbc.ibc++;
-                }
+                // if (k == 0 || k == znodec - 1) {
+                //     g_wp.ubc.nbc[g_wp.ubc.ibc] = id;
+                //     g_wp.ubc.fbc[g_wp.ubc.ibc] = 0.0e0;
+                //     g_wp.ubc.ibc++;
+                //     g_wp.wbc.nbc[g_wp.wbc.ibc] = id;
+                //     g_wp.wbc.fbc[g_wp.wbc.ibc] = 0.0e0;
+                //     g_wp.wbc.ibc++;
+                // }
+                // if (i == 0 && k == znodec - 1) {
+                //     g_wp.pbc.nbc[g_wp.pbc.ibc] = id;
+                //     g_wp.pbc.fbc[g_wp.pbc.ibc] = 0.0e0;
+                //     g_wp.pbc.ibc++;
+                // }
             }
         }
     }
@@ -214,8 +221,12 @@ void FsiGenerator::BuildData() {
     g_sp.coord.resize(nelem * nspe);
     g_sp.matid.resize(nelem * nspe);
     g_sp.id.resize(nelem * nspe);
+    g_wp.coord.resize(nelem * nspe);
+    g_wp.matid.resize(nelem * nspe);
+    g_wp.id.resize(nelem * nspe);
 
     g_sp.num = 0;
+    g_wp.num = 0;
     for (int k = 0; k < zelem; k++) {
         for (int j = 0; j < yelem; j++) {
             for (int i = 0; i < xelem; i++) {
@@ -228,19 +239,21 @@ void FsiGenerator::BuildData() {
                         double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ip++) {
                             double xp = ecx + dec2p[ip][0];
-                            // --- Turek FSI2 ---
-                            // if (zp >= 0.21e0 || zp <= 0.19e0) {
-                            // if (std::pow((xp - 0.2e0), 2) + std::pow((zp - 0.2e0), 2) < std::pow(0.05e0, 2)) {
-                            // --- Disk ---
-                            if (std::pow((xp - 1.0e-2), 2) + std::pow((zp - 4.0e-2), 2) < std::pow(1.25e-3, 2)) {
-                                // --- Beam 3D ---
-                                // if (xp >= 0.45e0 && xp <= 0.55e0 && yp <= 0.2e0 && zp <= 0.2e0) {
+                            if (zp < 0.05e0) {
                                 g_sp.coord[g_sp.num][0] = xp;
                                 g_sp.coord[g_sp.num][1] = yp;
                                 g_sp.coord[g_sp.num][2] = zp;
                                 g_sp.matid[g_sp.num] = 0;
                                 g_sp.id[g_sp.num] = g_sp.num;
                                 g_sp.num++;
+                            }
+                            if (zp > 0.05e0 && zp < 2.05e0) {
+                                g_wp.coord[g_wp.num][0] = xp;
+                                g_wp.coord[g_wp.num][1] = yp;
+                                g_wp.coord[g_wp.num][2] = zp;
+                                g_wp.matid[g_wp.num] = 0;
+                                g_wp.id[g_wp.num] = g_wp.num;
+                                g_wp.num++;
                             }
                             // } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.15e0 && xp <= 0.25e0) {
                             //     g_sp.coord[g_sp.num][0] = xp;
@@ -267,6 +280,9 @@ void FsiGenerator::BuildData() {
     g_sp.coord.resize(g_sp.num);
     g_sp.matid.resize(g_sp.num);
     g_sp.id.resize(g_sp.num);
+    g_wp.coord.resize(g_wp.num);
+    g_wp.matid.resize(g_wp.num);
+    g_wp.id.resize(g_wp.num);
 
     VectorAssign(g_sp.num, g_sp.surf_point);
     CheckSurfacePoint();
@@ -277,23 +293,32 @@ void FsiGenerator::WriteBcData(std::ofstream &outfile) {
     g_sp.vbc.BCOutput(outfile, "vsbc");
     g_sp.wbc.BCOutput(outfile, "wsbc");
 
-    g_wfem.ubc.BCOutput(outfile, "uwbc");
-    g_wfem.vbc.BCOutput(outfile, "vwbc");
-    g_wfem.wbc.BCOutput(outfile, "wwbc");
-    g_wfem.pbc.BCOutput(outfile, "hpbc");
+    g_wp.ubc.BCOutput(outfile, "uwbc");
+    g_wp.vbc.BCOutput(outfile, "vwbc");
+    g_wp.wbc.BCOutput(outfile, "wwbc");
+    g_wp.pbc.BCOutput(outfile, "hpbc");
 }
 
 void FsiGenerator::WriteTextOutputs() {
     std::cout << "Making grid file" << "\n";
     this->WriteGridDataFile("griddata.txt");
 
-    std::cout << "Making solid point file" << "\n";
     std::ofstream pointfile = OpenOutputFile("pointdata.txt");
+
+    std::cout << "Making solid point file" << "\n";
     pointfile << std::setw(10) << g_sp.num << "\n";
     OutputVector(pointfile, g_sp.num, g_sp.coord);
     for (int i = 0; i < g_sp.num; i++) {
         pointfile << std::setw(15) << i << std::setw(15) << g_sp.matid[i] << std::setw(15) << g_sp.surf_point[i]
                   << std::setw(15) << g_msp << std::setw(15) << g_volp << "\n";
+    }
+
+    std::cout << "Making water point file" << "\n";
+    pointfile << std::setw(10) << g_wp.num << "\n";
+    OutputVector(pointfile, g_wp.num, g_wp.coord);
+    for (int i = 0; i < g_wp.num; i++) {
+        pointfile << std::setw(15) << i << std::setw(15) << g_wp.matid[i] //
+                  << std::setw(15) << g_mwp << std::setw(15) << g_volp << "\n";
     }
 }
 
@@ -302,5 +327,6 @@ void FsiGenerator::WriteVisualizationOutputs() {
     std::cout << "Making VTK HDF5 files" << "\n";
     WriteVTKHDFMesh("grid.vtkhdf");
     WriteVTKHDFPoints("sp.vtkhdf", g_sp);
+    WriteVTKHDFPoints("wp.vtkhdf", g_wp);
 #endif
 }

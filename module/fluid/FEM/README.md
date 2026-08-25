@@ -97,8 +97,9 @@ velocity `blockdiag` inverse approximation. The trace-scaled
 `epsilon I` shift is MPM-only (`FEM_flag == false`). `PF_` keeps the default monolithic
 AMG preconditioner.
 
-### 5. Time-Advance (`UpdateNodeVar`)
-Shifts the velocity / pressure history arrays for the next time step:
+### 5. Time-History Update (`UpdateNodalVar`)
+At the end of each time step, the velocity / pressure history levels are moved down
+one level to prepare for the next step:
 ```
 nvel_older ← nvel_old
 nvel_old   ← nvel

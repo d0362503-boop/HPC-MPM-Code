@@ -8,7 +8,7 @@
 #include "module/bc.h"
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -17,7 +17,7 @@
 #include "work/src_fsi/MPM_MPM/block_fsi.h"
 
 using namespace implicitmpm;
-using namespace stabilizedfem;
+using namespace stabilizedmpm;
 
 void MPMMPMBlockFSI::DataInput() {
 

@@ -65,7 +65,12 @@ class StabilizedFEM : public MaterialPoint {
     /** @brief Solve the stabilized Navier-Stokes system. */
     void SolveNS();
 
-    /** @brief Advance nodal velocity/pressure history arrays. */
+    /**
+     * @brief Move nodal velocity/pressure history down one time level at the end of a step.
+     *
+     * Copies `nvel_old` to `nvel_older`, `nvel` to `nvel_old`, and `npres` to `npres_old`,
+     * preparing the history buffers for the next time step.
+     */
     void UpdateNodalVar();
 
     /** @brief Project particle liquid/gas indicator to control points. */

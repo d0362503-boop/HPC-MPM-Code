@@ -60,9 +60,6 @@ void StabilizedMPM::SolveNS() {
 
 void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
 
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
     double rnu = this->rmu / this->rho;
 
     int nenode;

@@ -155,7 +155,7 @@ void MPMMPMBlockFSI::CalFSIForce() {
     }
     // -----------------------------------------------------
 
-    double g_weight = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
+    const double g_weight = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
 
     VectorAssign(nodec * 3, this->nfsi_force);
     for (int m = 0; m < nelem; m++) {

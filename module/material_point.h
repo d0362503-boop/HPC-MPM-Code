@@ -231,7 +231,7 @@ class MaterialPoint {
 
     /**
      * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
-     *        Newmark-γ acceleration blend, update position, and apply optional particle-shifting correction.
+     *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
      * @param accel_old Particle acceleration from the previous step.
      * @param disp      Nodal displacement increment applied to particle coordinates.
      * @param disp_corr Optional particle-shifting correction displacement.

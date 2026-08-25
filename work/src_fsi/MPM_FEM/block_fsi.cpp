@@ -25,19 +25,21 @@
 #include "module/solver/crsmat.h"
 
 void MPMFEMBlockFSI::DetectFSIInterface() {
+
     VectorAssign(nodec, this->fsi_intf.nbc);
     VectorAssign(nodec, this->solid_.nphi);
     this->fsi_intf.ibc = 0;
     for (int n = 0; n < nodec; n++) {
         this->solid_.nphi[n] = this->solid_.nvof[n] / nvol[n];
-        if (this->solid_.nphi[n] > this->phi_cut) { this->fsi_intf.nbc[this->fsi_intf.ibc++] = n; }
         this->solid_.nphi[n] = std::clamp(this->solid_.nphi[n], 0.0e0, 1.0e0);
+        if (this->solid_.nphi[n] > this->phi_cut) { this->fsi_intf.nbc[this->fsi_intf.ibc++] = n; }
     }
 
     return;
 }
 
 void MPMFEMBlockFSI::UpdateFSIInterfaceBC() {
+
     int num = this->fsi_intf.ibc;
     if (num == 0) return;
     VectorAssign(num * 3, this->fsi_intf.fbc);

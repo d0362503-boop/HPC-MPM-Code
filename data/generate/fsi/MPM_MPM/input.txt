@@ -1,0 +1,53 @@
+<sp.solswitch, rstflag, nlstep>  !Beam
+TPIC  2  1
+<ista, iend, iout>
+1  3000  5
+<dt, mtol, wfem.spec_rad, sp.spec_rad>
+1.0e-3  1.0e-12  0.5e0  0.5e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+1.0e0  1.0e-2  2.1e0
+<xyelem>
+100  1  210
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<sp.rho, wp.rho, wp.rmu>
+2.7e3  1.0e3  1.0e-3
+<nmat, npropmax>
+1  2
+<iprop1, nprop1>
+2  2    
+<mat_prop1>
+6.75e10  0.34e0
+<bb>
+0.0e0  0.0e0  -9.81e0
+
+<sp.solswitch, NR_flag, rstflag, nlstep>  !hyperelastic wall
+FLIP  1  2  1
+<ista, iend, iout>
+1  10000  20
+<dt, th, mtol, sp.gamma_nb, sp.beta_nb>
+1.0e-3  0.5e0  1.0e-11  0.5e0  0.25e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+2.0e-2  2.0e-4  2.0e-2
+<xyelem>
+100  1  100
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<sp.rho, rhol, rmul, rhog, rmug, fs_height>
+1.0e3  1.0e3  2.0e-2  1.205e0  1.81e-5  2.0e-2
+<nmat, npropmax>
+1  2
+<iprop1, nprop1>
+1  2    
+<mat_prop1>
+6.0e-2  0.49e0
+<bb>
+0.0e0  0.0e0  0.0e0
