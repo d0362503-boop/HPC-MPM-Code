@@ -1,12 +1,41 @@
 #pragma once
 
 #include "data/generate/solid/solid_generator.h"
-#include "module/bc.h"
 
 #include <fstream>
 #include <string>
 
-class MPMFEMFSIGenerator : public SolidGenerator {
+class MPMFEMFSISolidGenerator : public SolidGenerator {
+  public:
+    /** Create MPM-solid boundary conditions for the coupled domain. */
+    void CreateBCs() override;
+
+    /** Create MPM-solid particles in the solid portion of the coupled domain. */
+    void CreateParticles() override;
+
+    // BC and particle records are identical to the standalone solid generator's.
+    using SolidGenerator::WriteBCData;
+    using SolidGenerator::WritePointData;
+
+  private:
+    /** Mark the upper solid surface for FSI interface detection. */
+    void MarkSurfacePoints();
+};
+
+class MPMFEMFSIFluidGenerator : public MaterialPoint {
+  public:
+    /** Create FEM-fluid velocity and pressure boundary conditions on the mesh control points. */
+    void CreateBCs();
+
+    /**
+     * Write FEM-fluid boundary conditions.
+     *
+     * @param outfile Stream receiving the coupled boundary-condition records.
+     */
+    void WriteBCData(std::ofstream &outfile);
+};
+
+class MPMFEMFSIGenerator : public DataGenerator {
   protected:
     /** Return the MPM-FEM FSI case label. */
     std::string CaseName() const override;
@@ -17,7 +46,7 @@ class MPMFEMFSIGenerator : public SolidGenerator {
     /** Create solid and FEM-fluid boundary conditions. */
     void CreateBCs() override;
 
-    /** Create MPM-solid particles in the coupled domain. */
+    /** Create MPM-solid particles (the FEM fluid has no particles). */
     void CreateParticles() override;
 
     /**
@@ -38,14 +67,6 @@ class MPMFEMFSIGenerator : public SolidGenerator {
     void WriteVisualizationOutputs() override;
 
   private:
-    /** Create FEM-fluid velocity and pressure boundary conditions. */
-    void CreateFluidBCs();
-
-    /** Mark the upper solid surface for FSI interface detection. */
-    void MarkSurfacePoints();
-
-    BoundaryCondition fluid_ubc_; // FEM-fluid x-velocity BCs
-    BoundaryCondition fluid_vbc_; // FEM-fluid y-velocity BCs
-    BoundaryCondition fluid_wbc_; // FEM-fluid z-velocity BCs
-    BoundaryCondition fluid_pbc_; // FEM-fluid pressure BCs
+    MPMFEMFSISolidGenerator solid_; // coupled solid data
+    MPMFEMFSIFluidGenerator fluid_; // coupled fluid data
 };
