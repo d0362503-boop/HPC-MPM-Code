@@ -32,9 +32,9 @@ void MPMMPMBlockFSI::DataInput() {
     infile.ignore(1000, '\n');
     std::string solswitch_str;
     infile >> solswitch_str >> rstflag >> nlstep;
+    infile.ignore(1000, '\n');
     this->solid_.solswitch = ParseMapScheme(solswitch_str);
     this->fluid_.solswitch = ParseMapScheme(solswitch_str);
-    infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
     infile >> ista >> iend >> iout;

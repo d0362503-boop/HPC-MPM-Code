@@ -61,7 +61,7 @@ Each generator writes:
 - text inputs such as `griddata.txt`, `wpdata.txt`, `spdata.txt`, or `pointdata.txt`
 - VTK HDF5 files for visualization
 
-For solid cases, each `spdata.txt` particle record now includes the surface
+For solid cases, each generated `pointdata.txt` particle record now includes the surface
 flag:
 
 - coordinates

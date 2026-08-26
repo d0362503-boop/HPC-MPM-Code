@@ -1,5 +1,4 @@
 #include "module/mesh.h"
-#include "module/DLB/mpm_dlb.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
 #include "module/shape_function.h"
@@ -130,8 +129,6 @@ void BuildMesh() {
             }
         }
     }
-
-    mpm_dlb::CollectCurrentRegions();
 
     return;
 }

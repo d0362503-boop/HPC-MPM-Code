@@ -204,7 +204,7 @@ cd build/data/divide/fluid
 
 The partitioner writes rank-split data under `myrank_data/`.
 
-For solid cases, the generated `spdata.txt` / partitioned `spdata*.txt`
+For solid cases, the generated `pointdata.txt` / partitioned `spdata*.txt`
 records now store each particle as:
 
 1. coordinate triplet

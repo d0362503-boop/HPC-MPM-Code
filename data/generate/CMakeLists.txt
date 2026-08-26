@@ -17,8 +17,9 @@ target_link_libraries(mpm_generate_common
     PUBLIC mpm_modules mpm_cxx_compat
 )
 
-# Keep all candidate subdirectories visible here.
-# Uncomment exactly the cases you want to build.
-# add_subdirectory(fluid)
-# add_subdirectory(solid)
+# Build the standalone fluid and solid generator modules independently.
+add_subdirectory(fluid)
+add_subdirectory(solid)
+
+# The FSI generator remains independently selected by its own subdirectory.
 add_subdirectory(fsi)

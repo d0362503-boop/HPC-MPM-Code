@@ -1,5 +1,5 @@
-#ifndef DATA_DIVIDE_FSI_FSI_DIVIDER_H_
-#define DATA_DIVIDE_FSI_FSI_DIVIDER_H_
+#ifndef DATA_DIVIDE_FSI_MPM_MPM_FSI_DIVIDER_H_
+#define DATA_DIVIDE_FSI_MPM_MPM_FSI_DIVIDER_H_
 
 #include "data/divide/data_partitioner.h"
 
@@ -8,7 +8,7 @@
 
 #include <string>
 
-class FsiDivider : public DataPartitioner {
+class MPMMPMFSIDivider : public DataPartitioner {
   protected:
     std::string CaseName() const override;
 
@@ -23,8 +23,10 @@ class FsiDivider : public DataPartitioner {
     void WritePointData(std::ofstream &outfile) override;
 
   private:
-    MaterialPoint solid_points_;
-    MaterialPoint fluid_bc_points_;
+    MaterialPoint solid_points_;            // loaded solid particles
+    MaterialPoint fluid_points_;            // loaded fluid particles
+    MaterialPoint solid_partition_points_;  // partitioned solid particles
+    MaterialPoint fluid_partition_points_;  // partitioned fluid particles
 };
 
 #endif // DATA_DIVIDE_FSI_FSI_DIVIDER_H_

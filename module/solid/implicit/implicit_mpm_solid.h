@@ -8,8 +8,8 @@
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/solver/crsmat.h"
 #include "module/solid/solid_material_point.h"
+#include "module/solver/crsmat.h"
 
 namespace implicitmpm {
 
@@ -18,6 +18,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     CrsMat SM_;
 
     ImplicitSolidMPM() {
+        this->NR_flag = true;
         this->do_dlb = false;
         this->gamma_nb = 0.5e0;
         this->beta_nb = 0.25e0;

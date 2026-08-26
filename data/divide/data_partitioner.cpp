@@ -32,13 +32,11 @@ int DataPartitioner::Run() {
     for (int rank_id = 0; rank_id < rank_count; ++rank_id) {
         this->PartitionProcess(rank_id);
 
-        std::ofstream grid_outfile =
-            OpenOutputFile(this->grid_output_prefix_ + std::to_string(rank_id) + ".txt");
+        std::ofstream grid_outfile = OpenOutputFile(this->grid_output_prefix_ + std::to_string(rank_id) + ".txt");
         this->OutputMeshData(grid_outfile, rank_id);
         this->WriteBoundaryData(grid_outfile);
 
-        std::ofstream point_outfile =
-            OpenOutputFile(this->point_output_prefix_ + std::to_string(rank_id) + ".txt");
+        std::ofstream point_outfile = OpenOutputFile(this->point_output_prefix_ + std::to_string(rank_id) + ".txt");
         this->WritePointData(point_outfile);
     }
 
@@ -147,7 +145,8 @@ void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc, const Boundary
         inxy[1] = (n - inxy[2] * (nx * ny)) / nx;
         inxy[0] = n - inxy[2] * (nx * ny) - inxy[1] * nx;
 
-        if (inxy[0] >= local_min[0] && inxy[0] <= local_max[0] && inxy[1] >= local_min[1] && inxy[1] <= local_max[1] &&
+        if (inxy[0] >= local_min[0] && inxy[0] <= local_max[0] && //
+            inxy[1] >= local_min[1] && inxy[1] <= local_max[1] && //
             inxy[2] >= local_min[2] && inxy[2] <= local_max[2]) {
             for (int j = 0; j < 3; ++j) { local_index[j] = inxy[j] - local_min[j]; }
             int local_id =

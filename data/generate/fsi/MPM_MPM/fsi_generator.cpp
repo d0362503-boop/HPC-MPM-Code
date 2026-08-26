@@ -14,47 +14,234 @@
 
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/mesh.h"
-#include "module/solid/implicit/implicit_mpm_solid.h"
 
-using namespace implicitmpm;
-using namespace stabilizedmpm;
+void MPMMPMFSIFluidGenerator::CreateBCs() {
 
-namespace {
+    const int xnodec = xynodec[0];
+    const int ynodec = xynodec[1];
+    const int znodec = xynodec[2];
 
-ImplicitSolidMPM g_sp;
-StabilizedMPM g_wp;
-double g_msp = 0.0;
-double g_mwp = 0.0;
-double g_volp = 0.0;
+    this->ubc.nbc.resize(nodec);
+    this->vbc.nbc.resize(nodec);
+    this->wbc.nbc.resize(nodec);
+    this->pbc.nbc.resize(nodec);
+    this->ubc.fbc.resize(nodec);
+    this->vbc.fbc.resize(nodec);
+    this->wbc.fbc.resize(nodec);
+    this->pbc.fbc.resize(nodec);
 
-void CheckSurfacePoint() {
-    double leftside = std::numeric_limits<double>::infinity();
-    double rightside = -std::numeric_limits<double>::infinity();
-    double bottside = std::numeric_limits<double>::infinity();
-    double upside = -std::numeric_limits<double>::infinity();
+    this->uinfbc.nbc.resize(nelem);
+    this->vinfbc.nbc.resize(nelem);
+    this->winfbc.nbc.resize(nelem);
 
-    for (int i = 0; i < g_sp.num; ++i) {
-        const double x = g_sp.coord[i][0];
-        const double z = g_sp.coord[i][2];
-        if (x < leftside) leftside = x;
-        if (x > rightside) rightside = x;
-        if (z < bottside) bottside = z;
-        if (z > upside) upside = z;
+    this->ubc.ibc = 0;
+    this->vbc.ibc = 0;
+    this->wbc.ibc = 0;
+    this->pbc.ibc = 0;
+    this->uinfbc.ibc = 0;
+    this->vinfbc.ibc = 0;
+    this->winfbc.ibc = 0;
+    for (int k = 0; k < znodec; ++k) {
+        for (int j = 0; j < ynodec; ++j) {
+            for (int i = 0; i < xnodec; ++i) {
+                const int id = i + xnodec * j + xnodec * ynodec * k;
+                if (i == 0 || i == xnodec - 1) {
+                    this->ubc.nbc[this->ubc.ibc] = id;
+                    this->ubc.fbc[this->ubc.ibc] = 0.0e0;
+                    this->ubc.ibc++;
+                    this->wbc.nbc[this->wbc.ibc] = id;
+                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
+                    this->wbc.ibc++;
+                }
+                if (j == 0 || j == ynodec - 1) {
+                    this->vbc.nbc[this->vbc.ibc] = id;
+                    this->vbc.fbc[this->vbc.ibc] = 0.0e0;
+                    this->vbc.ibc++;
+                }
+            }
+        }
     }
 
-    for (int i = 0; i < g_sp.num; ++i) {
-        const double z = g_sp.coord[i][2];
-        if (std::abs(z - upside) <= mtol) { g_sp.surf_point[i] = 1; }
-    }
+    return;
 }
 
-} // namespace
+void MPMMPMFSIFluidGenerator::CreateParticles() {
 
-std::string FsiGenerator::CaseName() const { return "fsi"; }
+    const int xelem = xyelem[0];
+    const int yelem = xyelem[1];
+    const int zelem = xyelem[2];
+    const double dx = dxy[0];
+    const double dy = dxy[1];
+    const double dz = dxy[2];
+    const double xmin = xymin[0];
+    const double ymin = xymin[1];
+    const double zmin = xymin[2];
+    const int nspe = npxye[0] * npxye[1] * npxye[2];
 
-void FsiGenerator::LoadInput() {
+    this->fluid_point_volume_ = dx * dy * dz / static_cast<double>(nspe);
+    this->fluid_point_mass_ = this->rho * this->fluid_point_volume_;
+
+    std::array<std::array<double, 3>, 6> dec2p;
+    GaussianDistribution(dec2p);
+
+    this->coord.resize(nelem * nspe);
+    this->matid.resize(nelem * nspe);
+    this->id.resize(nelem * nspe);
+
+    this->num = 0;
+    for (int k = 0; k < zelem; ++k) {
+        for (int j = 0; j < yelem; ++j) {
+            for (int i = 0; i < xelem; ++i) {
+                const double ecx = dx * (static_cast<double>(i) + 0.5e0) + xmin;
+                const double ecy = dy * (static_cast<double>(j) + 0.5e0) + ymin;
+                const double ecz = dz * (static_cast<double>(k) + 0.5e0) + zmin;
+                for (int kp = 0; kp < npxye[2]; ++kp) {
+                    const double zp = ecz + dec2p[kp][2];
+                    for (int jp = 0; jp < npxye[1]; ++jp) {
+                        const double yp = ecy + dec2p[jp][1];
+                        for (int ip = 0; ip < npxye[0]; ++ip) {
+                            const double xp = ecx + dec2p[ip][0];
+                            if (zp > 0.05e0 && zp < 2.05e0) {
+                                this->coord[this->num][0] = xp;
+                                this->coord[this->num][1] = yp;
+                                this->coord[this->num][2] = zp;
+                                this->matid[this->num] = 0;
+                                this->id[this->num] = this->num;
+                                this->num++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    this->coord.resize(this->num);
+    this->matid.resize(this->num);
+    this->id.resize(this->num);
+
+    return;
+}
+
+void MPMMPMFSISolidGenerator::CreateBCs() {
+
+    const int xnodec = xynodec[0];
+    const int ynodec = xynodec[1];
+    const int znodec = xynodec[2];
+
+    this->ubc.nbc.resize(nodec);
+    this->vbc.nbc.resize(nodec);
+    this->wbc.nbc.resize(nodec);
+    this->ubc.fbc.resize(nodec);
+    this->vbc.fbc.resize(nodec);
+    this->wbc.fbc.resize(nodec);
+
+    this->ubc.ibc = 0;
+    this->vbc.ibc = 0;
+    this->wbc.ibc = 0;
+    for (int k = 0; k < znodec; ++k) {
+        for (int j = 0; j < ynodec; ++j) {
+            for (int i = 0; i < xnodec; ++i) {
+                const int id = i + xnodec * j + xnodec * ynodec * k;
+                if (i == 0 || i == xnodec - 1) {
+                    this->ubc.nbc[this->ubc.ibc] = id;
+                    this->ubc.fbc[this->ubc.ibc] = 0.0e0;
+                    this->ubc.ibc++;
+                    this->wbc.nbc[this->wbc.ibc] = id;
+                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
+                    this->wbc.ibc++;
+                }
+                if (j == 0 || j == ynodec - 1) {
+                    this->vbc.nbc[this->vbc.ibc] = id;
+                    this->vbc.fbc[this->vbc.ibc] = 0.0e0;
+                    this->vbc.ibc++;
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+void MPMMPMFSISolidGenerator::CreateParticles() {
+
+    const int xelem = xyelem[0];
+    const int yelem = xyelem[1];
+    const int zelem = xyelem[2];
+    const double dx = dxy[0];
+    const double dy = dxy[1];
+    const double dz = dxy[2];
+    const double xmin = xymin[0];
+    const double ymin = xymin[1];
+    const double zmin = xymin[2];
+    const int nspe = npxye[0] * npxye[1] * npxye[2];
+
+    this->solid_point_volume_ = dx * dy * dz / static_cast<double>(nspe);
+    this->solid_point_mass_ = this->rho * this->solid_point_volume_;
+
+    std::array<std::array<double, 3>, 6> dec2p;
+    GaussianDistribution(dec2p);
+
+    this->coord.resize(nelem * nspe);
+    this->matid.resize(nelem * nspe);
+    this->id.resize(nelem * nspe);
+    this->surf_point.resize(nelem * nspe);
+
+    this->num = 0;
+    for (int k = 0; k < zelem; ++k) {
+        for (int j = 0; j < yelem; ++j) {
+            for (int i = 0; i < xelem; ++i) {
+                const double ecx = dx * (static_cast<double>(i) + 0.5e0) + xmin;
+                const double ecy = dy * (static_cast<double>(j) + 0.5e0) + ymin;
+                const double ecz = dz * (static_cast<double>(k) + 0.5e0) + zmin;
+                for (int kp = 0; kp < npxye[2]; ++kp) {
+                    const double zp = ecz + dec2p[kp][2];
+                    for (int jp = 0; jp < npxye[1]; ++jp) {
+                        const double yp = ecy + dec2p[jp][1];
+                        for (int ip = 0; ip < npxye[0]; ++ip) {
+                            const double xp = ecx + dec2p[ip][0];
+                            if (zp < 0.05e0) {
+                                this->coord[this->num][0] = xp;
+                                this->coord[this->num][1] = yp;
+                                this->coord[this->num][2] = zp;
+                                this->matid[this->num] = 0;
+                                this->id[this->num] = this->num;
+                                this->num++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    this->coord.resize(this->num);
+    this->matid.resize(this->num);
+    this->id.resize(this->num);
+    this->surf_point.resize(this->num);
+    this->MarkSurfacePoints();
+
+    return;
+}
+
+void MPMMPMFSISolidGenerator::MarkSurfacePoints() {
+
+    if (this->num == 0) { return; }
+
+    double upper_surface = -std::numeric_limits<double>::infinity();
+    for (int i = 0; i < this->num; ++i) { upper_surface = std::max(upper_surface, this->coord[i][2]); }
+    for (int i = 0; i < this->num; ++i) {
+        if (std::abs(this->coord[i][2] - upper_surface) <= mtol) { this->surf_point[i] = 1; }
+    }
+
+    return;
+}
+
+std::string MPMMPMFSIGenerator::CaseName() const { return "MPM-MPM FSI"; }
+
+void MPMMPMFSIGenerator::LoadInput() {
+
     std::ifstream infile = OpenInputFile("input.txt");
 
     infile.ignore(1000, '\n');
@@ -67,31 +254,31 @@ void FsiGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> g_wp.spec_rad >> g_sp.spec_rad;
+    infile >> dt >> mtol >> this->fluid_.spec_rad >> this->solid_.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xymin[i];
+    for (int i = 0; i < 3; ++i) infile >> xymin[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xymax[i];
+    for (int i = 0; i < 3; ++i) infile >> xymax[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xyelem[i];
+    for (int i = 0; i < 3; ++i) infile >> xyelem[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> idimc[i];
+    for (int i = 0; i < 3; ++i) infile >> idimc[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> npxye[i];
+    for (int i = 0; i < 3; ++i) infile >> npxye[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> g_sp.rho >> g_wp.rho >> g_wp.rmu;
+    infile >> this->solid_.rho >> this->fluid_.rho >> this->fluid_.rmu;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -101,232 +288,63 @@ void FsiGenerator::LoadInput() {
     VectorAssign(nmat, iprop);
     VectorAssign(nmat, nprop);
     mat_prop.assign(nmat, std::vector<double>(npropmax, 0.0));
-    for (int n = 0; n < nmat; n++) {
+    for (int n = 0; n < nmat; ++n) {
         infile.ignore(1000, '\n');
         infile >> iprop[n] >> nprop[n];
         infile.ignore(1000, '\n');
 
         infile.ignore(1000, '\n');
-        for (int i = 0; i < nprop[n]; i++) { infile >> mat_prop[n][i]; }
+        for (int i = 0; i < nprop[n]; ++i) { infile >> mat_prop[n][i]; }
         infile.ignore(1000, '\n');
     }
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> bb[i];
+    for (int i = 0; i < 3; ++i) infile >> bb[i];
     infile.ignore(1000, '\n');
+
+    return;
 }
 
-void FsiGenerator::BuildData() {
+void MPMMPMFSIGenerator::CreateBCs() {
 
-    this->InitializeGridGeometry();
+    this->solid_.CreateBCs();
+    this->fluid_.CreateBCs();
 
-    int xnodec = xynodec[0];
-    int ynodec = xynodec[1];
-    int znodec = xynodec[2];
-    int xelem = xyelem[0];
-    int yelem = xyelem[1];
-    int zelem = xyelem[2];
-    double dx = dxy[0];
-    double dy = dxy[1];
-    double dz = dxy[2];
-    double xmin = xymin[0];
-    double ymin = xymin[1];
-    double zmin = xymin[2];
-    double xmax = xymax[0];
-    double ymax = xymax[1];
-    double zmax = xymax[2];
-    int nspe = npxye[0] * npxye[1] * npxye[2];
-
-    g_volp = dx * dy * dz / static_cast<double>(nspe);
-    g_msp = g_sp.rho * g_volp;
-    g_mwp = g_wp.rho * g_volp;
-
-    std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
-
-    BuildMesh();
-    BuildControlPoint();
-
-    g_wp.ubc.nbc.resize(nodec);
-    g_wp.vbc.nbc.resize(nodec);
-    g_wp.wbc.nbc.resize(nodec);
-    g_sp.ubc.nbc.resize(nodec);
-    g_sp.vbc.nbc.resize(nodec);
-    g_sp.wbc.nbc.resize(nodec);
-    g_wp.ubc.fbc.resize(nodec);
-    g_wp.vbc.fbc.resize(nodec);
-    g_wp.wbc.fbc.resize(nodec);
-    g_sp.ubc.fbc.resize(nodec);
-    g_sp.vbc.fbc.resize(nodec);
-    g_sp.wbc.fbc.resize(nodec);
-    g_wp.pbc.nbc.resize(nodec);
-    g_wp.pbc.fbc.resize(nodec);
-
-    g_sp.ubc.ibc = 0;
-    g_sp.vbc.ibc = 0;
-    g_sp.wbc.ibc = 0;
-    g_wp.ubc.ibc = 0;
-    g_wp.vbc.ibc = 0;
-    g_wp.wbc.ibc = 0;
-    g_wp.pbc.ibc = 0;
-    for (int k = 0; k < znodec; k++) {
-        for (int j = 0; j < ynodec; j++) {
-            for (int i = 0; i < xnodec; i++) {
-                int id = i + xnodec * j + xnodec * ynodec * k;
-                if (i == 0 || i == xnodec - 1) {
-                    // double vel = 1.0e-2;
-                    // --- Beam 3D ---
-                    // double vel = 4.5e0 * (xyc[id][2] * (zmax - xyc[id][2])) *
-                    //  (std::pow(ymax, 2) - std::pow(xyc[id][1], 2)) / std::pow(zmax, 4);
-                    // --- Turek FSI / CFD ---
-                    // double vel = 3.0e0 * (4.0e0 / std::pow(zmax, 2)) * xyc[id][2] * (zmax - xyc[id][2]);
-                    g_wp.ubc.nbc[g_wp.ubc.ibc] = id;
-                    g_wp.ubc.fbc[g_wp.ubc.ibc] = 0.0e0;
-                    g_wp.ubc.ibc++;
-                    g_wp.wbc.nbc[g_wp.wbc.ibc] = id;
-                    g_wp.wbc.fbc[g_wp.wbc.ibc] = 0.0e0;
-                    g_wp.wbc.ibc++;
-                    g_sp.ubc.nbc[g_sp.ubc.ibc] = id;
-                    g_sp.ubc.fbc[g_sp.ubc.ibc] = 0.0e0;
-                    g_sp.ubc.ibc++;
-                    g_sp.wbc.nbc[g_sp.wbc.ibc] = id;
-                    g_sp.wbc.fbc[g_sp.wbc.ibc] = 0.0e0;
-                    g_sp.wbc.ibc++;
-                }
-                if (j == 0 || j == ynodec - 1) {
-                    g_sp.vbc.nbc[g_sp.vbc.ibc] = id;
-                    g_sp.vbc.fbc[g_sp.vbc.ibc] = 0.0e0;
-                    g_sp.vbc.ibc++;
-                    g_wp.vbc.nbc[g_wp.vbc.ibc] = id;
-                    g_wp.vbc.fbc[g_wp.vbc.ibc] = 0.0e0;
-                    g_wp.vbc.ibc++;
-                }
-                // if (k == 0 || k == znodec - 1) {
-                //     g_wp.ubc.nbc[g_wp.ubc.ibc] = id;
-                //     g_wp.ubc.fbc[g_wp.ubc.ibc] = 0.0e0;
-                //     g_wp.ubc.ibc++;
-                //     g_wp.wbc.nbc[g_wp.wbc.ibc] = id;
-                //     g_wp.wbc.fbc[g_wp.wbc.ibc] = 0.0e0;
-                //     g_wp.wbc.ibc++;
-                // }
-                // if (i == 0 && k == znodec - 1) {
-                //     g_wp.pbc.nbc[g_wp.pbc.ibc] = id;
-                //     g_wp.pbc.fbc[g_wp.pbc.ibc] = 0.0e0;
-                //     g_wp.pbc.ibc++;
-                // }
-            }
-        }
-    }
-
-    g_sp.coord.resize(nelem * nspe);
-    g_sp.matid.resize(nelem * nspe);
-    g_sp.id.resize(nelem * nspe);
-    g_wp.coord.resize(nelem * nspe);
-    g_wp.matid.resize(nelem * nspe);
-    g_wp.id.resize(nelem * nspe);
-
-    g_sp.num = 0;
-    g_wp.num = 0;
-    for (int k = 0; k < zelem; k++) {
-        for (int j = 0; j < yelem; j++) {
-            for (int i = 0; i < xelem; i++) {
-                double ecx = dx * (double(i) + 0.5e0) + xmin;
-                double ecy = dy * (double(j) + 0.5e0) + ymin;
-                double ecz = dz * (double(k) + 0.5e0) + zmin;
-                for (int kp = 0; kp < npxye[2]; kp++) {
-                    double zp = ecz + dec2p[kp][2];
-                    for (int jp = 0; jp < npxye[1]; jp++) {
-                        double yp = ecy + dec2p[jp][1];
-                        for (int ip = 0; ip < npxye[0]; ip++) {
-                            double xp = ecx + dec2p[ip][0];
-                            if (zp < 0.05e0) {
-                                g_sp.coord[g_sp.num][0] = xp;
-                                g_sp.coord[g_sp.num][1] = yp;
-                                g_sp.coord[g_sp.num][2] = zp;
-                                g_sp.matid[g_sp.num] = 0;
-                                g_sp.id[g_sp.num] = g_sp.num;
-                                g_sp.num++;
-                            }
-                            if (zp > 0.05e0 && zp < 2.05e0) {
-                                g_wp.coord[g_wp.num][0] = xp;
-                                g_wp.coord[g_wp.num][1] = yp;
-                                g_wp.coord[g_wp.num][2] = zp;
-                                g_wp.matid[g_wp.num] = 0;
-                                g_wp.id[g_wp.num] = g_wp.num;
-                                g_wp.num++;
-                            }
-                            // } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.15e0 && xp <= 0.25e0) {
-                            //     g_sp.coord[g_sp.num][0] = xp;
-                            //     g_sp.coord[g_sp.num][1] = yp;
-                            //     g_sp.coord[g_sp.num][2] = zp;
-                            //     g_sp.matid[g_sp.num] = 0;
-                            //     g_sp.id[g_sp.num] = g_sp.num;
-                            //     g_sp.num++;
-                            // } else if (zp >= 0.19e0 && zp <= 0.21e0 && xp >= 0.25e0 && xp <= 0.6e0) {
-                            //     g_sp.coord[g_sp.num][0] = xp;
-                            //     g_sp.coord[g_sp.num][1] = yp;
-                            //     g_sp.coord[g_sp.num][2] = zp;
-                            //     g_sp.matid[g_sp.num] = 1;
-                            //     g_sp.id[g_sp.num] = g_sp.num;
-                            //     g_sp.num++;
-                            // }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    g_sp.coord.resize(g_sp.num);
-    g_sp.matid.resize(g_sp.num);
-    g_sp.id.resize(g_sp.num);
-    g_wp.coord.resize(g_wp.num);
-    g_wp.matid.resize(g_wp.num);
-    g_wp.id.resize(g_wp.num);
-
-    VectorAssign(g_sp.num, g_sp.surf_point);
-    CheckSurfacePoint();
+    return;
 }
 
-void FsiGenerator::WriteBcData(std::ofstream &outfile) {
-    g_sp.ubc.BCOutput(outfile, "usbc");
-    g_sp.vbc.BCOutput(outfile, "vsbc");
-    g_sp.wbc.BCOutput(outfile, "wsbc");
+void MPMMPMFSIGenerator::CreateParticles() {
 
-    g_wp.ubc.BCOutput(outfile, "uwbc");
-    g_wp.vbc.BCOutput(outfile, "vwbc");
-    g_wp.wbc.BCOutput(outfile, "wwbc");
-    g_wp.pbc.BCOutput(outfile, "hpbc");
+    this->solid_.CreateParticles();
+    this->fluid_.CreateParticles();
+
+    return;
 }
 
-void FsiGenerator::WriteTextOutputs() {
-    std::cout << "Making grid file" << "\n";
-    this->WriteGridDataFile("griddata.txt");
+void MPMMPMFSIGenerator::WriteBCData(std::ofstream &outfile) {
 
-    std::ofstream pointfile = OpenOutputFile("pointdata.txt");
+    this->solid_.WriteBCData(outfile);
+    this->fluid_.WriteBCData(outfile);
 
-    std::cout << "Making solid point file" << "\n";
-    pointfile << std::setw(10) << g_sp.num << "\n";
-    OutputVector(pointfile, g_sp.num, g_sp.coord);
-    for (int i = 0; i < g_sp.num; i++) {
-        pointfile << std::setw(15) << i << std::setw(15) << g_sp.matid[i] << std::setw(15) << g_sp.surf_point[i]
-                  << std::setw(15) << g_msp << std::setw(15) << g_volp << "\n";
-    }
-
-    std::cout << "Making water point file" << "\n";
-    pointfile << std::setw(10) << g_wp.num << "\n";
-    OutputVector(pointfile, g_wp.num, g_wp.coord);
-    for (int i = 0; i < g_wp.num; i++) {
-        pointfile << std::setw(15) << i << std::setw(15) << g_wp.matid[i] //
-                  << std::setw(15) << g_mwp << std::setw(15) << g_volp << "\n";
-    }
+    return;
 }
 
-void FsiGenerator::WriteVisualizationOutputs() {
+void MPMMPMFSIGenerator::WritePointData(std::ofstream &pointfile) {
+
+    this->solid_.WritePointData(pointfile);
+    this->fluid_.WritePointData(pointfile);
+
+    return;
+}
+
+void MPMMPMFSIGenerator::WriteVisualizationOutputs() {
+
 #ifdef HAVE_HDF5
     std::cout << "Making VTK HDF5 files" << "\n";
     WriteVTKHDFMesh("grid.vtkhdf");
-    WriteVTKHDFPoints("sp.vtkhdf", g_sp);
-    WriteVTKHDFPoints("wp.vtkhdf", g_wp);
+    WriteVTKHDFPoints("sp.vtkhdf", this->solid_);
+    WriteVTKHDFPoints("wp.vtkhdf", this->fluid_);
 #endif
+
+    return;
 }

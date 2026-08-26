@@ -12,29 +12,17 @@
 
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
-#include "module/solid/implicit/implicit_mpm_solid.h"
-
-using namespace implicitmpm;
-
-namespace {
-
-ImplicitSolidMPM g_sp;
-double g_msp = 0.0;
-double g_volp = 0.0;
-
-} // namespace
 
 std::string SolidGenerator::CaseName() const { return "solid"; }
 
 void SolidGenerator::LoadInput() {
+
     std::ifstream infile = OpenInputFile("input.txt");
 
     infile.ignore(1000, '\n');
     std::string solswitch_str;
-    infile >> solswitch_str >> g_sp.NR_flag >> rstflag >> nlstep;
-    g_sp.solswitch = ParseMapScheme(solswitch_str);
+    infile >> solswitch_str >> this->NR_flag >> rstflag >> nlstep;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -42,7 +30,7 @@ void SolidGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> g_sp.spec_rad;
+    infile >> dt >> mtol >> this->spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -66,7 +54,7 @@ void SolidGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> g_sp.rho >> nmat >> npropmax;
+    infile >> this->rho >> nmat >> npropmax;
     infile.ignore(1000, '\n');
 
     VectorAssign(nmat, iprop);
@@ -85,72 +73,77 @@ void SolidGenerator::LoadInput() {
     infile.ignore(1000, '\n');
     for (int i = 0; i < 3; i++) infile >> bb[i];
     infile.ignore(1000, '\n');
+
+    return;
 }
 
-void SolidGenerator::BuildData() {
-    this->InitializeGridGeometry();
+void SolidGenerator::CreateBCs() {
 
-    int xnodec = xynodec[0];
-    int ynodec = xynodec[1];
-    int znodec = xynodec[2];
-    int xelem = xyelem[0];
-    int yelem = xyelem[1];
-    int zelem = xyelem[2];
-    double dx = dxy[0];
-    double dy = dxy[1];
-    double dz = dxy[2];
-    double xmin = xymin[0];
-    double ymin = xymin[1];
-    double zmin = xymin[2];
-    int nspe = npxye[0] * npxye[1] * npxye[2];
+    const int xnodec = xynodec[0];
+    const int ynodec = xynodec[1];
+    const int znodec = xynodec[2];
 
-    g_volp = dx * dy * dz / static_cast<double>(nspe);
-    g_msp = g_sp.rho * g_volp;
+    this->ubc.nbc.resize(nodec);
+    this->vbc.nbc.resize(nodec);
+    this->wbc.nbc.resize(nodec);
+    this->ubc.fbc.resize(nodec);
+    this->vbc.fbc.resize(nodec);
+    this->wbc.fbc.resize(nodec);
 
-    std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
-
-    BuildMesh();
-
-    g_sp.ubc.nbc.resize(nodec);
-    g_sp.vbc.nbc.resize(nodec);
-    g_sp.wbc.nbc.resize(nodec);
-    g_sp.ubc.fbc.resize(nodec);
-    g_sp.vbc.fbc.resize(nodec);
-    g_sp.wbc.fbc.resize(nodec);
-
-    g_sp.ubc.ibc = 0;
-    g_sp.vbc.ibc = 0;
-    g_sp.wbc.ibc = 0;
+    this->ubc.ibc = 0;
+    this->vbc.ibc = 0;
+    this->wbc.ibc = 0;
     for (int k = 0; k < znodec; k++) {
         for (int j = 0; j < ynodec; j++) {
             for (int i = 0; i < xnodec; i++) {
                 int id = i + xnodec * j + xnodec * ynodec * k;
                 if (i == 0 || i == xnodec - 1 || k == 0 || k == znodec - 1) {
-                    g_sp.ubc.nbc[g_sp.ubc.ibc] = id;
-                    g_sp.ubc.fbc[g_sp.ubc.ibc] = 0.0e0;
-                    g_sp.ubc.ibc++;
+                    this->ubc.nbc[this->ubc.ibc] = id;
+                    this->ubc.fbc[this->ubc.ibc] = 0.0e0;
+                    this->ubc.ibc++;
                 }
                 if (k == 0 || j == 0 || j == ynodec - 1) {
-                    g_sp.vbc.nbc[g_sp.vbc.ibc] = id;
-                    g_sp.vbc.fbc[g_sp.vbc.ibc] = 0.0e0;
-                    g_sp.vbc.ibc++;
+                    this->vbc.nbc[this->vbc.ibc] = id;
+                    this->vbc.fbc[this->vbc.ibc] = 0.0e0;
+                    this->vbc.ibc++;
                 }
                 if (i == 0 || i == xnodec - 1 || k == 0 || k == znodec - 1) {
-                    g_sp.wbc.nbc[g_sp.wbc.ibc] = id;
-                    g_sp.wbc.fbc[g_sp.wbc.ibc] = 0.0e0;
-                    g_sp.wbc.ibc++;
+                    this->wbc.nbc[this->wbc.ibc] = id;
+                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
+                    this->wbc.ibc++;
                 }
             }
         }
     }
 
-    g_sp.coord.resize(nelem * nspe);
-    g_sp.matid.resize(nelem * nspe);
-    g_sp.id.resize(nelem * nspe);
-    g_sp.surf_point.resize(nelem * nspe);
+    return;
+}
 
-    g_sp.num = 0;
+void SolidGenerator::CreateParticles() {
+
+    const int xelem = xyelem[0];
+    const int yelem = xyelem[1];
+    const int zelem = xyelem[2];
+    const double dx = dxy[0];
+    const double dy = dxy[1];
+    const double dz = dxy[2];
+    const double xmin = xymin[0];
+    const double ymin = xymin[1];
+    const double zmin = xymin[2];
+    const int nspe = npxye[0] * npxye[1] * npxye[2];
+
+    this->solid_point_volume_ = dx * dy * dz / static_cast<double>(nspe);
+    this->solid_point_mass_ = this->rho * this->solid_point_volume_;
+
+    std::array<std::array<double, 3>, 6> dec2p;
+    GaussianDistribution(dec2p);
+
+    this->coord.resize(nelem * nspe);
+    this->matid.resize(nelem * nspe);
+    this->id.resize(nelem * nspe);
+    this->surf_point.resize(nelem * nspe);
+
+    this->num = 0;
     for (int k = 0; k < zelem; k++) {
         for (int j = 0; j < yelem; j++) {
             for (int i = 0; i < xelem; i++) {
@@ -164,13 +157,13 @@ void SolidGenerator::BuildData() {
                         for (int ip = 0; ip < npxye[0]; ip++) {
                             double xp = ecx + dec2p[ip][0];
                             if (zp >= 3.5e0 && zp <= 4.5e0 && xp <= 4.0e0) {
-                                g_sp.coord[g_sp.num][0] = xp;
-                                g_sp.coord[g_sp.num][1] = yp;
-                                g_sp.coord[g_sp.num][2] = zp;
-                                g_sp.matid[g_sp.num] = 0;
-                                g_sp.id[g_sp.num] = g_sp.num;
-                                g_sp.surf_point[g_sp.num] = 0;
-                                g_sp.num++;
+                                this->coord[this->num][0] = xp;
+                                this->coord[this->num][1] = yp;
+                                this->coord[this->num][2] = zp;
+                                this->matid[this->num] = 0;
+                                this->id[this->num] = this->num;
+                                this->surf_point[this->num] = 0;
+                                this->num++;
                             }
                         }
                     }
@@ -179,36 +172,42 @@ void SolidGenerator::BuildData() {
         }
     }
 
-    g_sp.coord.resize(g_sp.num);
-    g_sp.matid.resize(g_sp.num);
-    g_sp.id.resize(g_sp.num);
-    g_sp.surf_point.resize(g_sp.num);
+    this->coord.resize(this->num);
+    this->matid.resize(this->num);
+    this->id.resize(this->num);
+    this->surf_point.resize(this->num);
+
+    return;
 }
 
-void SolidGenerator::WriteBcData(std::ofstream &outfile) {
-    g_sp.ubc.BCOutput(outfile, "usbc");
-    g_sp.vbc.BCOutput(outfile, "vsbc");
-    g_sp.wbc.BCOutput(outfile, "wsbc");
+void SolidGenerator::WriteBCData(std::ofstream &outfile) {
+
+    this->ubc.BCOutput(outfile, "usbc");
+    this->vbc.BCOutput(outfile, "vsbc");
+    this->wbc.BCOutput(outfile, "wsbc");
+
+    return;
 }
 
-void SolidGenerator::WriteTextOutputs() {
-    std::cout << "Making grid file" << "\n";
-    this->WriteGridDataFile("griddata.txt");
+void SolidGenerator::WritePointData(std::ofstream &pointfile) {
 
-    std::cout << "Making solid point file" << "\n";
-    std::ofstream pointfile = OpenOutputFile("spdata.txt");
-    pointfile << std::setw(10) << g_sp.num << "\n";
-    OutputVector(pointfile, g_sp.num, g_sp.coord);
-    for (int i = 0; i < g_sp.num; i++) {
-        pointfile << std::setw(15) << i << std::setw(15) << g_sp.matid[i] << std::setw(15) << g_sp.surf_point[i]
-                  << std::setw(15) << g_msp << std::setw(15) << g_volp << "\n";
+    pointfile << std::setw(10) << this->num << "\n";
+    OutputVector(pointfile, this->num, this->coord);
+    for (int i = 0; i < this->num; i++) {
+        pointfile << std::setw(15) << i << std::setw(15) << this->matid[i] << std::setw(15) << this->surf_point[i]
+                  << std::setw(15) << this->solid_point_mass_ << std::setw(15) << this->solid_point_volume_ << "\n";
     }
+
+    return;
 }
 
 void SolidGenerator::WriteVisualizationOutputs() {
+
 #ifdef HAVE_HDF5
     std::cout << "Making VTK HDF5 files" << "\n";
     WriteVTKHDFMesh("grid.vtkhdf");
-    WriteVTKHDFPoints("sp.vtkhdf", g_sp);
+    WriteVTKHDFPoints("sp.vtkhdf", *this);
 #endif
+
+    return;
 }

@@ -16,9 +16,9 @@
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
-#include "module/solver/crsmat.h"
-#include "module/solid/solid_material_point.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
+#include "module/solid/solid_material_point.h"
+#include "module/solver/crsmat.h"
 
 using namespace implicitmpm;
 
@@ -71,6 +71,7 @@ void ImplicitSolidMPM::SolveSolid() {
     VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
     double r0r = 0.0e0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
+
         this->BCNRSet();
 
         this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----

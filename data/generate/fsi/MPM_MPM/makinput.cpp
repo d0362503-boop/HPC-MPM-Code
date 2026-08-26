@@ -1,6 +1,8 @@
 #include "data/generate/fsi/MPM_MPM/fsi_generator.h"
 
 int main() {
-    FsiGenerator generator;
+
+    MPMMPMFSIGenerator generator;
+
     return generator.Run();
 }
