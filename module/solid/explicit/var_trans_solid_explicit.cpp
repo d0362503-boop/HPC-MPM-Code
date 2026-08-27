@@ -34,7 +34,7 @@ void ExplicitSolidMPM::Particle2Node() {
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
             std::array<double, 6> sts = this->stress[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -82,7 +82,7 @@ void ExplicitSolidMPM::DoMUSL() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -134,7 +134,7 @@ void ExplicitSolidMPM::G2PVelocity() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -172,7 +172,7 @@ void ExplicitSolidMPM::UpdateDeformationGradient() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, this->delta_def_grad, this->def_grad);
             det_delta_def_grad[pid] = DetMat3(this->delta_def_grad[pid]);
@@ -203,7 +203,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             // 1. Position update
             for (int ni = 0; ni < nenode; ni++) {

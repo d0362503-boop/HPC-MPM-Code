@@ -32,7 +32,7 @@ void ImplicitSolidMPM::Particle2Node() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -90,7 +90,7 @@ void ImplicitSolidMPM::Node2Particle() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, delta_def_grad, this->def_grad);
 

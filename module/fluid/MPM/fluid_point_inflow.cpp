@@ -1,11 +1,11 @@
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/map_and_interpolate.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -174,7 +174,7 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
                     ifp.coord[ifp.num][dir] -= double(sign) * dxy[dir] * offset_coeff[p];
 
                     std::array<double, 3> xyp = ifp.coord[ifp.num];
-                    MakSf(ie, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(ie, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
                     std::array<std::array<double, 3>, 3> ADp{};
                     for (int ni = 0; ni < nenode; ni++) {

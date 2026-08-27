@@ -102,7 +102,7 @@ void MPMMPMFSIFluidGenerator::CreateParticles() {
                         const double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ++ip) {
                             const double xp = ecx + dec2p[ip][0];
-                            if (zp > 0.05e0 && zp < 2.05e0) {
+                            if (zp > 0.06e0 && zp < 2.06e0) {
                                 this->coord[this->num][0] = xp;
                                 this->coord[this->num][1] = yp;
                                 this->coord[this->num][2] = zp;
@@ -201,7 +201,7 @@ void MPMMPMFSISolidGenerator::CreateParticles() {
                         const double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ++ip) {
                             const double xp = ecx + dec2p[ip][0];
-                            if (zp < 0.05e0) {
+                            if (zp > 0.01e0 && zp < 0.06e0) {
                                 this->coord[this->num][0] = xp;
                                 this->coord[this->num][1] = yp;
                                 this->coord[this->num][2] = zp;

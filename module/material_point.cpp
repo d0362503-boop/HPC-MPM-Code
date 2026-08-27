@@ -84,7 +84,7 @@ void MaterialPoint::CalPointUnitNormal() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double dsfi1 = dsf[ni][0];
@@ -150,6 +150,7 @@ MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, doubl
 
 void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
                                     std::vector<std::array<double, 3>> &dsf) const noexcept {
+
     std::array<std::array<double, 3>, 3> def_grad{};
     def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->alpha_f, dsf);
 

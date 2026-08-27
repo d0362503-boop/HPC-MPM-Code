@@ -85,7 +85,7 @@ for NR_it = 0 .. iter_max
 
 For each particle inside each element:
 
-1. **Shape function & gradient** (`MakSf`)
+1. **Shape function & gradient** (`MakeSF`)
 2. **Deformation-gradient update** (`UpdateDefGrad`) — `F^{n+1} = (I + ∆u) · F^n`
 3. **Constitutive model update** (`UpdateConstitutiveModel`) — stress `S` and tangent modulus `C`
 4. **Implicit gradient correction** (`ImplicitDsfCorr`) — background-grid correction for MPM

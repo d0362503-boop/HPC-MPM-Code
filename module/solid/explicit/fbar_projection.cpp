@@ -28,7 +28,7 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
             const double J_new_vol = J_new * this->mass[pid];
 
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 const int nid = ncm[ni];
                 const double sfi = sf[ni];
@@ -47,7 +47,7 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             double Jbar = 0.0e0;
             for (int ni = 0; ni < nenode; ni++) {

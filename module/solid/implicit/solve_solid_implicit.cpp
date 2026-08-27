@@ -122,7 +122,7 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, this->alpha_f, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 

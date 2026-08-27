@@ -11,12 +11,12 @@
 
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/fluid/FEM/stabilized_fem.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 #include "module/solver/crsmat.h"
-#include "module/fluid/FEM/stabilized_fem.h"
 
 using namespace stabilizedfem;
 
@@ -82,7 +82,7 @@ void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
         xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
         xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
 
-        MakSf(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
+        MakeSF(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
 
         double uu = 0.0e0, vv = 0.0e0, ww = 0.0e0;
         for (int ni = 0; ni < nenode; ni++) {
@@ -154,7 +154,7 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             double phi_k = 0.0e0;
             std::array<double, 3> adv_vel_k{};

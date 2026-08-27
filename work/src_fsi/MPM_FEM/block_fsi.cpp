@@ -182,7 +182,7 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
         int m_local;
         if (!LocateLocalElement(xq, m_local)) { continue; }
 
-        MakSf(m_local, xq, idimc, xynodec, ncm, nenode, sf, dsf);
+        MakeSF(m_local, xq, idimc, xynodec, ncm, nenode, sf, dsf);
 
         double phi_q = 0.0e0;
         double pres_q = 0.0e0;
@@ -257,7 +257,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
         int pid = this->solid_.idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->solid_.coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -291,7 +291,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
         int pid = this->fluid_.idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->fluid_.coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             double phi_k = 0.0e0, pres_k = 0.0e0;
             std::array<std::array<double, 3>, 3> grad_vel_k{};

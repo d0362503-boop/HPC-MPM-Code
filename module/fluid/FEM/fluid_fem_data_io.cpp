@@ -5,10 +5,10 @@
 #include <vector>
 
 #include "module/dataset.h"
+#include "module/fluid/FEM/stabilized_fem.h"
 #include "module/mesh.h"
 #include "module/shape_function.h"
 #include "module/vtk_hdf5.h"
-#include "module/fluid/FEM/stabilized_fem.h"
 
 using namespace stabilizedfem;
 
@@ -130,7 +130,7 @@ void StabilizedFEM::Cp2NodeVTK() {
             this->nvel_vtk[id + nu] = 0.0e0;
             this->nvel_vtk[id + nv] = 0.0e0;
             this->nvel_vtk[id + nw] = 0.0e0;
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];

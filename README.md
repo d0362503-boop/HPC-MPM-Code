@@ -87,40 +87,33 @@ Active build options (most are defined in `cmake/options.cmake`; `MPM_ENABLE_NAT
 The active driver is selected by uncommenting **exactly one** `add_subdirectory(...)` line in `work/CMakeLists.txt`:
 
 ```cmake
-add_subdirectory(src_fluid)
+# add_subdirectory(src_fluid)
 # add_subdirectory(src_solid)
-# add_subdirectory(src_fsi)
+add_subdirectory(src_fsi)
 ```
 
-You must also keep `MPM_main.cpp` consistent. The checked-in configuration selects `src_fluid`:
+You must also keep `MPM_main.cpp` consistent. The checked-in configuration selects MPM--FEM FSI:
 
 ```cpp
-StabilizedMixedMPM();
+ImmersedMPMFEMBlockFSI();
 ```
 
-`work/src_solid/CMakeLists.txt` also requires uncommenting exactly one subdirectory (`explicit` or `implicit`).
+For FSI, `work/src_fsi/CMakeLists.txt` selects either `MPM_FEM` or `MPM_MPM`.
+`work/src_solid/CMakeLists.txt` similarly selects `explicit` or `implicit`.
 
 ### Selecting data tools
 
-Generators are selected in `data/generate/CMakeLists.txt`:
+`data/generate/CMakeLists.txt` and `data/divide/CMakeLists.txt` configure all
+standalone fluid/solid tools and both FSI variants by default. Build only the
+target needed for a case:
 
 ```cmake
-add_subdirectory(fluid)
-# add_subdirectory(solid)
-# add_subdirectory(fsi)
-```
-
-Partitioners are selected in `data/divide/CMakeLists.txt`:
-
-```cmake
-add_subdirectory(divide_fluid fluid)
-# add_subdirectory(divide_solid solid)
-# add_subdirectory(divide_fsi fsi)
+cmake --build build --target makinput_fsi_mpm_fem makdivide_fsi_mpm_fem -j8
 ```
 
 ## Build Examples
 
-Current fluid build:
+Current MPM--FEM FSI build:
 
 ```bash
 cmake -S . -B build
@@ -141,7 +134,7 @@ cmake -S . -B build
 cmake --build build -j8
 ```
 
-Current fluid data generator:
+Example fluid data generator:
 
 ```bash
 cmake --build build --target makinput_fluid -j8
@@ -204,8 +197,8 @@ cd build/data/divide/fluid
 
 The partitioner writes rank-split data under `myrank_data/`.
 
-For solid cases, the generated `pointdata.txt` / partitioned `spdata*.txt`
-records now store each particle as:
+For solid cases, generated and partitioned `pointdata*.txt` records store each
+particle as:
 
 1. coordinate triplet
 2. `id`
@@ -217,7 +210,7 @@ records now store each particle as:
 ## Output
 
 - Visualization: VTK HDF5 (`grid.vtkhdf`, `wp.vtkhdf`, `sp.vtkhdf`)
-- Text inputs/outputs: `griddata*.txt`, `wpdata*.txt`, `spdata*.txt`, `pointdata*.txt`
+- Text inputs/outputs: `griddata*.txt`, `pointdata*.txt`
 - Restart: per-rank `*_re.txt` files
 
 ## Important Notes

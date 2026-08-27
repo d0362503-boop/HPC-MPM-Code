@@ -2,4 +2,4 @@
 ../../generate/solid/griddata.txt
 ../../generate/solid/pointdata.txt
 ./myrank_data/griddata
-./myrank_data/spdata
+./myrank_data/pointdata

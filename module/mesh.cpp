@@ -209,7 +209,7 @@ void MakNodalVol() {
                 xyp[1] = xye[1] + dec2p[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
                     xyp[0] = xye[0] + dec2p[ix][0];
-                    MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];

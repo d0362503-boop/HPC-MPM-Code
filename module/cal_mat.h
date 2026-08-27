@@ -1,34 +1,28 @@
 #pragma once
 
+#include "module/dataset.h"
+#include "module/mesh.h"
 #include <array>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include "module/mesh.h"
-#include "module/dataset.h"
 
 /**
  * @brief Return the sign of a scalar value.
  * @param val Input value.
  * @return -1, 0, or 1 depending on the sign of `val`.
  */
-template <typename T>
-T Sign(T val) {
-    return (T(0) < val) - (val < T(0));
-}
+template <typename T> T Sign(T val) { return (T(0) < val) - (val < T(0)); }
 
 /**
  * @brief Compute the Euclidean norm of a 3-component vector.
  * @param vec Input vector.
  * @return L2 norm of `vec`.
  */
-template<typename T>
-double NormVec3(const std::array<T, 3>& vec) {
+template <typename T> double NormVec3(const std::array<T, 3> &vec) {
 
     double norm_vec = 0.0e0;
-    for (int n = 0; n < 3; n++) {
-        norm_vec += vec[n] * vec[n];
-    }
+    for (int n = 0; n < 3; n++) { norm_vec += vec[n] * vec[n]; }
     norm_vec = std::sqrt(norm_vec);
 
     return norm_vec;
@@ -39,13 +33,10 @@ double NormVec3(const std::array<T, 3>& vec) {
  * @param mat Input matrix.
  * @return Trace of `mat`.
  */
-template<typename T>
-double TraceMat3(const std::array<std::array<T, 3>, 3>& mat) {
+template <typename T> double TraceMat3(const std::array<std::array<T, 3>, 3> &mat) {
 
     double tr_mat = 0.0e0;
-    for (int i = 0; i < 3; i++) {
-        tr_mat += mat[i][i]; 
-    }
+    for (int i = 0; i < 3; i++) { tr_mat += mat[i][i]; }
 
     return tr_mat;
 }
@@ -55,13 +46,12 @@ double TraceMat3(const std::array<std::array<T, 3>, 3>& mat) {
  * @param mat Input matrix.
  * @return Determinant of `mat`.
  */
-template<typename T>
-double DetMat3(const std::array<std::array<T, 3>, 3>& mat) {
+template <typename T> double DetMat3(const std::array<std::array<T, 3>, 3> &mat) {
 
     double mat_det = mat[0][0] * (mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1]) +
                      mat[0][1] * (mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) +
                      mat[0][2] * (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]);
-              
+
     return mat_det;
 }
 
@@ -71,8 +61,7 @@ double DetMat3(const std::array<std::array<T, 3>, 3>& mat) {
  * @return Inverse of `mat`.
  * @throws Floating-point division by zero if the determinant is zero.
  */
-template<typename T>
-std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 3>& mat) {
+template <typename T> std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 3> &mat) {
 
     double det = DetMat3(mat);
     det = 1.0e0 / det;
@@ -86,8 +75,8 @@ std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 
     mat_inv[1][2] = (mat[0][2] * mat[1][0] - mat[0][0] * mat[1][2]) * det;
     mat_inv[2][0] = (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]) * det;
     mat_inv[2][1] = (mat[0][1] * mat[2][0] - mat[0][0] * mat[2][1]) * det;
-    mat_inv[2][2] = (mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0]) * det;                
- 
+    mat_inv[2][2] = (mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0]) * det;
+
     return mat_inv;
 }
 
@@ -95,13 +84,11 @@ std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 
  * @brief Transpose a 3x3 matrix in-place.
  * @param mat Input/output matrix.
  */
-template<typename T>
-void TransMat3(std::array<std::array<T, 3>, 3>& mat) {
+template <typename T> void TransMat3(std::array<std::array<T, 3>, 3> &mat) {
 
     for (int i = 0; i < 3; i++) {
-        for (int j = i + 1; j < 3; j++) {
-            std::swap(mat[i][j], mat[j][i]); 
-        }
+        for (int j = i + 1; j < 3; j++) { std::swap(mat[i][j], mat[j][i]); }
     }
+
     return;
 }

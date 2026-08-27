@@ -128,7 +128,7 @@ void SolidMaterialPointBase::DetermineRigidBC() {
         while (pid != -1) {
             if (iprop[this->matid[pid]] == -1) {
                 std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-                MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
                 for (int ni = 0; ni < nenode; ni++) {
                     int nid = ncm[ni];
                     double sfi = sf[ni];

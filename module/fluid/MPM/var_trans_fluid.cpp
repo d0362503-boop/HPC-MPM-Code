@@ -1,11 +1,11 @@
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/map_and_interpolate.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include <array>
 #include <cmath>
 #include <iomanip>
@@ -29,7 +29,7 @@ void StabilizedMPM::Particle2Node() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -91,7 +91,7 @@ void StabilizedMPM::Node2Particle() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {
