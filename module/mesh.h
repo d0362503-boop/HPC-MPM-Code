@@ -89,7 +89,7 @@ bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local);
 /**
  * @brief Compute nodal/control-point volumes from element volumes.
  */
-void MakNodalVol();
+void ComputeNodalVol();
 
 /**
  * @brief Build the background mesh node coordinates and element connectivity.

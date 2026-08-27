@@ -26,7 +26,7 @@ void Solid_implicit_ULMPM() {
 
     sp.SM_.BuildCrsMat(9);
 
-    MakNodalVol();
+    ComputeNodalVol();
 
     istep = ista - 1;
     int iview = istep / iout;

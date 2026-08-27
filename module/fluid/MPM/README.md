@@ -54,7 +54,7 @@ RestartInput()          (if rstflag == 1 or 3)
 BuildMesh()
 BuildControlPoint()
 NS_.BuildCrsMat(16)
-MakNodalVol()
+ComputeNodalVol()
 for istep = ista .. iend
     MeshPointLinklist()
     Particle2Node()

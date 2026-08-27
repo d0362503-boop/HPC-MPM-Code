@@ -26,7 +26,7 @@ void StabilizedMixedMPM() {
 
     wp.NS_.BuildCrsMat(16);
 
-    MakNodalVol();
+    ComputeNodalVol();
 
     istep = ista - 1;
     int iview = istep / iout;

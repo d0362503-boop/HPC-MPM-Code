@@ -21,6 +21,7 @@
 void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
                             std::vector<double> &var_older, std::vector<double> &res_old,
                             std::vector<double> &res_older, BoundaryCondition &intf_bc) {
+
     int num = intf_bc.ibc;
     std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
@@ -90,6 +91,7 @@ void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var,
 
 void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const std::vector<double> &nodal_var,
                             std::vector<double> &res_old, BoundaryCondition &intf_bc) {
+
     int num = intf_bc.ibc;
     std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
@@ -139,6 +141,7 @@ void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const s
 
 void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var,
                        std::vector<double> &res_old, BoundaryCondition &intf_bc) {
+
     const double relax_coef_min = 0.05e0;
     const double relax_coef_max = 0.8e0;
 

@@ -40,7 +40,7 @@ void MPMBlockFSI() {
 
     fsi.fluid_.NS_.BuildCrsMat(16);
 
-    MakNodalVol();
+    ComputeNodalVol();
 
     fsi.solid_.MeshPointLinklist();
 
@@ -70,7 +70,7 @@ void MPMBlockFSI() {
         fsi.fluid_.MeshPointLinklist();
 
         fsi.solid_.Particle2Node();
-        
+
         fsi.fluid_.Particle2Node();
 
         fsi.SolveFSISystem(); // --- Strong coupling: block iteration ---

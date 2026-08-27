@@ -184,7 +184,7 @@ void BuildControlPoint() {
     return;
 }
 
-void MakNodalVol() {
+void ComputeNodalVol() {
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
 

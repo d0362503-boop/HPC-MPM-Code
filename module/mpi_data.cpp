@@ -249,7 +249,7 @@ void MaterialPoint::ApplyDLB() {
 
     BuildControlPoint();
 
-    MakNodalVol();
+    ComputeNodalVol();
 
     this->RebuildBC();
 

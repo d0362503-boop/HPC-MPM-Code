@@ -44,10 +44,10 @@ class MPMMPMBlockFSI {
 
     // Block-iteration control
     const int max_block_iter = 100;
-    const double phi_cut = 0.25e0;
+    static constexpr double phi_cut = 0.15e0;
     double relax_omega = 0.1e0;
-    const double tol_ref = 1.0e-3;
-    const double tol_abs = 1.0e-6;
+    const double tol_ref = 1.0e-5;
+    const double tol_abs = 1.0e-8;
 
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
@@ -65,6 +65,8 @@ class MPMMPMBlockFSI {
     void DataInput();
 
     void DetectFSIInterface();
+
+    void PredictFSIInterfaceBC();
 
     void SolveFSISystem();
 

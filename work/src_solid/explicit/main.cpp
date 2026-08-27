@@ -25,7 +25,7 @@ void Solid_Explicit_ULMPM() {
 
     BuildControlPoint();
 
-    MakNodalVol();
+    ComputeNodalVol();
 
     istep = ista - 1;
     int iview = istep / iout;

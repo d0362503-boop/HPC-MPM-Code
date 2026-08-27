@@ -50,9 +50,9 @@ void MPMMPMFSIFluidGenerator::CreateBCs() {
                     this->ubc.nbc[this->ubc.ibc] = id;
                     this->ubc.fbc[this->ubc.ibc] = 0.0e0;
                     this->ubc.ibc++;
-                    this->wbc.nbc[this->wbc.ibc] = id;
-                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
-                    this->wbc.ibc++;
+                    // this->wbc.nbc[this->wbc.ibc] = id;
+                    // this->wbc.fbc[this->wbc.ibc] = 0.0e0;
+                    // this->wbc.ibc++;
                 }
                 if (j == 0 || j == ynodec - 1) {
                     this->vbc.nbc[this->vbc.ibc] = id;

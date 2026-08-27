@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
@@ -27,7 +28,6 @@
 void MPMMPMBlockFSI::DetectFSIInterface() {
 
     VectorAssign(nodec, this->fsi_intf.nbc);
-    VectorAssign(nodec, this->fsi_intf.fbc);
     VectorAssign(nodec, this->solid_.nphi);
     VectorAssign(nodec, this->fluid_.nphi);
 
@@ -44,6 +44,29 @@ void MPMMPMBlockFSI::DetectFSIInterface() {
         }
     }
 
+    VectorAssign(nodec * 3, this->nfsi_force);
+
+    return;
+}
+
+void MPMMPMBlockFSI::PredictFSIInterfaceBC() {
+
+    int num = this->fsi_intf.ibc;
+    if (num == 0) return;
+
+    double alpha = 0.5e0 - this->solid_.beta_nb;
+
+    VectorAssign(num * 3, this->fsi_intf.fbc);
+    for (int i = 0; i < num; i++) {
+        int nid = this->fsi_intf.nbc[i];
+        this->fsi_intf.fbc[i + 0 * num] = dt * this->solid_.nvel[nid + nuc] + //
+                                          dt * dt * alpha * this->solid_.naccel[nid + nuc];
+        this->fsi_intf.fbc[i + 1 * num] = dt * this->solid_.nvel[nid + nvc] + //
+                                          dt * dt * alpha * this->solid_.naccel[nid + nvc];
+        this->fsi_intf.fbc[i + 2 * num] = dt * this->solid_.nvel[nid + nwc] + //
+                                          dt * dt * alpha * this->solid_.naccel[nid + nwc];
+    }
+
     return;
 }
 
@@ -51,20 +74,22 @@ void MPMMPMBlockFSI::SolveFSISystem() {
 
     this->DetectFSIInterface();
 
+    this->PredictFSIInterfaceBC();
+
     int num = this->fsi_intf.ibc;
     double rtr_fsi_ref, r0r_fsi_ref, rkr_fsi_ref, rtr_fsi_abs;
     std::vector<double> r_k_old(num * 3, 0.0e0), u_s_old(num * 3, 0.0e0);
 
     for (int block_it = 0; block_it <= this->max_block_iter; block_it++) {
 
+        this->fluid_.SolveNS();
+
+        this->CalFSIForce();
+
         this->solid_.SolveSolid();
 
         Anderson_relaxation_M1(block_it, u_s_old, this->solid_.ndispl, r_k_old, this->fsi_intf);
         // Aitken_relaxation(block_it, this->relax_omega, this->solid_.ndispl, r_k_old, this->fsi_intf);
-
-        this->fluid_.SolveNS();
-
-        this->CalFSIForce();
 
         if (block_it == 0) {
             this->CalFSIResidual(r0r_fsi_ref, rtr_fsi_abs);

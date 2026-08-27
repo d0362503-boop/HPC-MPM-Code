@@ -48,7 +48,7 @@ void ImmersedMPMFEMBlockFSI() {
 
     fsi.fluid_.NS_.BuildCrsMat(16);
 
-    MakNodalVol();
+    ComputeNodalVol();
 
     fsi.solid_.MeshPointLinklist();
 

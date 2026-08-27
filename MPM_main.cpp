@@ -11,6 +11,7 @@ void StabilizedMixedMPM();
 void Solid_Explicit_ULMPM();
 void Solid_implicit_ULMPM();
 void ImmersedMPMFEMBlockFSI();
+void MPMBlockFSI();
 // -----------------------
 
 int main(int argc, char *argv[]) {
@@ -26,7 +27,9 @@ int main(int argc, char *argv[]) {
 
     // Solid_implicit_ULMPM();  // ---- currently only for linear elasticity ----
 
-    ImmersedMPMFEMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
+    // ImmersedMPMFEMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
+
+    MPMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
 
     double end_time = MPI_Wtime();
     double calc_time = end_time - start_time;
