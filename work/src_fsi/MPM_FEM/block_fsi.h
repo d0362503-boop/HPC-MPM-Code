@@ -7,6 +7,8 @@
 #include "module/fluid/FEM/stabilized_fem.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 
+namespace mpmfemblockfsi {
+
 class MPMFEMBlockFSI;
 
 class FSIFluid : public stabilizedfem::StabilizedFEM {
@@ -84,3 +86,10 @@ class MPMFEMBlockFSI {
      */
     void CalDragLiftCoeffForTurekCFD();
 };
+
+/**
+ * @brief Entry point of the MPM--FEM block-coupling FSI driver.
+ */
+void ImmersedMPMFEMBlockFSI();
+
+} // namespace mpmfemblockfsi

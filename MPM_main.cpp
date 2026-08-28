@@ -1,18 +1,15 @@
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/mpi_data.h"
+#include "module/solid/explicit/explicit_mpm_solid.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
+#include "work/src_fsi/MPM_FEM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/block_fsi.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
 #include <petsc.h>
-
-// -----------------------
-void StabilizedMixedMPM();
-void Solid_Explicit_ULMPM();
-void Solid_implicit_ULMPM();
-void ImmersedMPMFEMBlockFSI();
-void MPMBlockFSI();
-// -----------------------
 
 int main(int argc, char *argv[]) {
 
@@ -21,15 +18,15 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(PETSC_COMM_WORLD, &myrank);
     double start_time = MPI_Wtime();
 
-    // StabilizedMixedMPM();
+    // stabilizedmpm::StabilizedMixedMPM();
 
-    // Solid_Explicit_ULMPM();
+    // explicitmpm::SolidExplicitULMPM();
 
-    // Solid_implicit_ULMPM();  // ---- currently only for linear elasticity ----
+    // implicitmpm::SolidImplicitULMPM();
 
-    // ImmersedMPMFEMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
+    // mpmfemblockfsi::ImmersedMPMFEMBlockFSI();
 
-    MPMBlockFSI(); // --- MPM FSI strong coupling with block iterative ---
+    mpmmpmblockfsi::MPMBlockFSI();
 
     double end_time = MPI_Wtime();
     double calc_time = end_time - start_time;

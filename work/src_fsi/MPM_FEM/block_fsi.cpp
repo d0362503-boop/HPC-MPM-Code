@@ -24,6 +24,8 @@
 #include "module/solid/solid_material_point.h"
 #include "module/solver/crsmat.h"
 
+using namespace mpmfemblockfsi;
+
 void MPMFEMBlockFSI::DetectFSIInterface() {
 
     VectorAssign(nodec, this->fsi_intf.nbc);

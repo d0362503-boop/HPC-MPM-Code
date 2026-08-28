@@ -7,6 +7,8 @@
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 
+namespace mpmmpmblockfsi {
+
 class MPMMPMBlockFSI;
 
 class FSIFluid : public stabilizedmpm::StabilizedMPM {
@@ -74,3 +76,10 @@ class MPMMPMBlockFSI {
 
     void CalFSIForce();
 };
+
+/**
+ * @brief Entry point of the MPM--MPM block-coupling FSI driver.
+ */
+void MPMBlockFSI();
+
+} // namespace mpmmpmblockfsi

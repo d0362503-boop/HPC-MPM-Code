@@ -19,6 +19,8 @@
 using namespace implicitmpm;
 using namespace stabilizedfem;
 
+using namespace mpmfemblockfsi;
+
 void MPMFEMBlockFSI::DataInput() {
 
     std::ifstream infile = OpenInputFile("file.dat");

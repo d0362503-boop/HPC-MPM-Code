@@ -17,8 +17,9 @@
 
 using namespace implicitmpm;
 using namespace stabilizedmpm;
+using namespace mpmmpmblockfsi;
 
-void MPMBlockFSI() {
+void mpmmpmblockfsi::MPMBlockFSI() {
     MPMMPMBlockFSI fsi;
 
     fsi.DataInput();

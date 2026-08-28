@@ -74,4 +74,9 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
                            const std::vector<double> &det_delta_def_grad);
 };
 
+/**
+ * @brief Driver entry point of the explicit ULMPM solid solver.
+ */
+void SolidExplicitULMPM();
+
 } // namespace explicitmpm

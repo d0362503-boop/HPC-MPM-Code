@@ -12,7 +12,7 @@
 
 using namespace stabilizedmpm;
 
-void StabilizedMixedMPM() {
+void stabilizedmpm::StabilizedMixedMPM() {
 
     StabilizedMPM wp;
 

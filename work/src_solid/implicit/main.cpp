@@ -12,7 +12,7 @@
 
 using namespace implicitmpm;
 
-void Solid_implicit_ULMPM() {
+void implicitmpm::SolidImplicitULMPM() {
 
     ImplicitSolidMPM sp;
 

@@ -153,4 +153,9 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     void UpdateNRIncrement() override;
 };
 
+/**
+ * @brief Driver entry point of the implicit ULMPM solid solver.
+ */
+void SolidImplicitULMPM();
+
 } // namespace implicitmpm

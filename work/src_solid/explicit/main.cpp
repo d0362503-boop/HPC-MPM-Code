@@ -13,7 +13,7 @@
 
 using namespace explicitmpm;
 
-void Solid_Explicit_ULMPM() {
+void explicitmpm::SolidExplicitULMPM() {
 
     ExplicitSolidMPM sp;
 

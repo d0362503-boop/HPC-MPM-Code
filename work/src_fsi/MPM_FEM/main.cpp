@@ -17,8 +17,9 @@
 
 using namespace implicitmpm;
 using namespace stabilizedfem;
+using namespace mpmfemblockfsi;
 
-void ImmersedMPMFEMBlockFSI() {
+void mpmfemblockfsi::ImmersedMPMFEMBlockFSI() {
     MPMFEMBlockFSI fsi;
 
     fsi.DataInput();
