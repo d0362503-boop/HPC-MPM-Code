@@ -57,8 +57,8 @@ class MPMMPMBlockFSI {
 
     // Block-iteration control
     const int max_block_iter = 100;
-    const double tol_ref = 1.0e-8;
-    const double tol_abs = 1.0e-12; // velocity tolerance in m/s
+    const double tol_ref = 1.0e-7;
+    const double tol_abs = 1.0e-11; // velocity tolerance in m/s
 
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
