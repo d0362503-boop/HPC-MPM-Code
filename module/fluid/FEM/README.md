@@ -54,7 +54,7 @@ These overrides replace the former free-function `BCResidualSet` that contained 
 
 ## Numerical Method
 
-The phase helpers below (`ComputeAdvectionVel`, `MakNSStabCoeff`, `AssembleNSSystem`) are private members called by `SolveNS`.
+The phase helpers below (`ComputeAdvectionVel`, `MakeNSStabCoeff`, `AssembleSystem`) are private members called by `SolveNS`.
 
 ### 1. Generalized-α Predictor
 ```cpp
@@ -68,7 +68,7 @@ Per-element values `tau1` (SUPG/PSPG) and `tau2` (shock capturing) are computed 
 - Local advection velocity magnitude
 - Kinematic viscosity `rnue = rmue / rhoe`
 
-### 3. System Assembly (`AssembleNSSystem`)
+### 3. System Assembly (`AssembleSystem`)
 For each particle inside each element, shape functions are evaluated and the following matrices are accumulated into `NS_.amat`:
 
 | Block | Physics |

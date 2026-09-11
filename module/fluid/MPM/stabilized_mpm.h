@@ -134,19 +134,19 @@ class StabilizedMPM : public MaterialPoint {
         return;
     };
 
-  private:
+    //   private:
     /** @brief Compute VMS/PSPG stabilization coefficients.
      * @param nvel_k   Nodal velocity vector.
      */
-    void MakNSStabCoeff(const std::vector<double> &nvel_k);
+    void MakeNSStabCoeff(const std::vector<double> &nvel_k);
 
     /**
      * @brief Assemble stabilized Navier-Stokes matrix and RHS.
      * @param naccel_k Nodal acceleration vector.
      * @param nvel_k   Nodal velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &nvel_k, //
-                          const std::vector<double> &naccel_k);
+    virtual void AssembleSystem(const std::vector<double> &nvel_k, //
+                                const std::vector<double> &naccel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;

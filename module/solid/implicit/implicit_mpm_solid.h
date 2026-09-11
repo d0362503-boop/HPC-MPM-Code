@@ -62,20 +62,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         return;
     };
 
-  private:
-    // Case-specific surface traction force.
-    void SetTracForce() {
-        const double t0 = 1.0e0 * dxy[1] * dxy[2] / (npxye[1] * npxye[2]);
-        double t = 0.0e0;
-        if (real_time < 5.0e-3) { t = -t0; }
-
-        for (int ip = 0; ip < this->num; ip++) {
-            if (this->surf_point[ip] == 1) { this->trac_force[ip][0] = t; }
-        }
-
-        return;
-    };
-
+  protected:
     /**
      * @brief Stress snapshot at the start of the NR loop.
      * @return Particle stress vector.
@@ -132,8 +119,9 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @param nvel_k    Nodal velocity at intermediate time level.
      * @param stress_k  Particle stress state for tangent assembly.
      */
-    void AssembleSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k,
-                        std::vector<std::array<double, 6>> &stress_k);
+    virtual void AssembleSystem(const std::vector<double> &naccel_k, //
+                                const std::vector<double> &nvel_k,   //
+                                std::vector<std::array<double, 6>> &stress_k);
 
     /**
      * @brief Tangent-modulus contribution for one particle-node pair.
@@ -144,8 +132,9 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @param sts_af  Particle stress at intermediate time level.
      * @return Tangent stiffness scalar contribution.
      */
-    auto ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
-                               const std::array<double, 6> &sts_af);
+    std::array<std::array<double, 3>, 3> ComputeTangentModulus(int pid, int ni, int nj,
+                                                               const std::vector<std::array<double, 3>> &dsf,
+                                                               const std::array<double, 6> &sts_af);
 
     /**
      * @brief Apply converged NR displacement increment to nodal displacements.

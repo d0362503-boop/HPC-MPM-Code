@@ -38,9 +38,9 @@ void StabilizedFEM::SolveNS() {
 
     std::vector<double> adv_vel = this->ComputeAdvectionVel();
 
-    this->MakNSStabCoeff(adv_vel); // ---- Stabilized coefficient ----
+    this->MakeNSStabCoeff(adv_vel); // ---- Stabilized coefficient ----
 
-    this->AssembleNSSystem(adv_vel);
+    this->AssembleSystem(adv_vel);
 
     // ---- Initialize LHS x from [nvel, npres] ----
     VectorAssign(nodec * 4, this->NS_.x_lhs);
@@ -64,7 +64,7 @@ void StabilizedFEM::SolveNS() {
     return;
 }
 
-void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
+void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -128,7 +128,7 @@ void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
     return;
 }
 
-void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
+void StabilizedFEM::AssembleSystem(const std::vector<double> &adv_vel) {
     double fx = bb[0] * facl;
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;

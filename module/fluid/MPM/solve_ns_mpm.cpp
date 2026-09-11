@@ -40,7 +40,7 @@ void StabilizedMPM::SolveNS() {
 
         this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
-        this->AssembleNSSystem(nvel_k, naccel_k);
+        this->AssembleSystem(nvel_k, naccel_k);
 
         int iter = this->NS_.SolveSystem(NR_it);
 
@@ -58,7 +58,7 @@ void StabilizedMPM::SolveNS() {
     return;
 }
 
-void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
+void StabilizedMPM::MakeNSStabCoeff(const std::vector<double> &nvel_k) {
 
     double rnu = this->rmu / this->rho;
 
@@ -121,8 +121,8 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
     return;
 }
 
-void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
-                                     const std::vector<double> &naccel_k) {
+void StabilizedMPM::AssembleSystem(const std::vector<double> &nvel_k, //
+                                   const std::vector<double> &naccel_k) {
 
     // double A = 5.0e0 / 180.0e0 * M_PI;
     // double theta = A * std::sin(5.47e0 * real_time);
@@ -148,7 +148,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
         npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
     }
 
-    this->MakNSStabCoeff(nvel_af); // ---- Stabilized coefficient ----
+    this->MakeNSStabCoeff(nvel_af); // ---- Stabilized coefficient ----
 
     int nenode;
     std::vector<int> ncm;
@@ -290,11 +290,11 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
 
                 std::array<double, 4> RHS_G{}, RHS_S{};
                 RHS_G[0] = volp * (dsfi1 * stress_k[0][0] + dsfi2 * stress_k[0][1] + dsfi3 * stress_k[0][2]) //
-                           - sfi * massp * fx; // - volp * dsfi1 * pres_k;
+                           - sfi * massp * fx;
                 RHS_G[1] = volp * (dsfi1 * stress_k[1][0] + dsfi2 * stress_k[1][1] + dsfi3 * stress_k[1][2]) //
-                           - sfi * massp * fy; // - volp * dsfi2 * pres_k;
+                           - sfi * massp * fy;
                 RHS_G[2] = volp * (dsfi1 * stress_k[2][0] + dsfi2 * stress_k[2][1] + dsfi3 * stress_k[2][2]) //
-                           - sfi * massp * fz; // - volp * dsfi3 * pres_k;
+                           - sfi * massp * fz;
                 RHS_G[3] = volp * sfi * TraceMat3(grad_vel_k);
 
                 RHS_S[0] = volp * t2 * dsfi1 * TraceMat3(grad_vel_k);

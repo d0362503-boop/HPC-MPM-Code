@@ -89,7 +89,7 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad`
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet displacement/pressure values
     ComputeNodeVelAccelFromDispl(...);     // predictor
-    AssembleNSSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
+    AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
     iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
     if CheckNRConvergence(...) break;
@@ -111,14 +111,14 @@ For each particle inside each element:
 
 After overlap communication (`NodeVarComm`), nodal velocity and acceleration are obtained by `CutOffSmallNodalVar`, and velocity/acceleration BCs are applied.
 
-### Stabilization coefficients (`MakNSStabCoeff`)
+### Stabilization coefficients (`MakeNSStabCoeff`)
 
 `tau1` and `tau2` are computed at each particle from the local velocity magnitude and element size.  The compile-time selector chooses between:
 
 - `StabCoeff::VMS` (default) — VMS-style `τ`.
 - `StabCoeff::PSPG` — PSPG-style `τ`.
 
-### System assembly (`AssembleNSSystem`)
+### System assembly (`AssembleSystem`)
 
 For each particle:
 

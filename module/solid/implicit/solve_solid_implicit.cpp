@@ -28,8 +28,9 @@ void ImplicitSolidMPM::UpdateNRIncrement() {
     return;
 }
 
-auto ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
-                                             const std::array<double, 6> &sts_af) {
+std::array<std::array<double, 3>, 3>
+ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
+                                        const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[idm[i][j]]; }
@@ -101,7 +102,8 @@ void ImplicitSolidMPM::SolveSolid() {
     return;
 }
 
-void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k,
+void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, //
+                                      const std::vector<double> &nvel_k,   //
                                       std::vector<std::array<double, 6>> &stress_k) {
     const double af = this->alpha_f;
     const double af0 = 1.0e0 - this->alpha_f;
@@ -190,8 +192,8 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
     NodeVarComm(this->SM_.b_rhs, {nuc, nvc, nwc});
 
-    // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
     std::vector<double> naccel_am(nodec * 3);
+    // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
     for (int n = 0; n < nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
     // --------------------------------------
 

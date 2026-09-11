@@ -29,8 +29,8 @@ void mpmmpmblockfsi::MPMBlockFSI() {
     real_time = dt * double(istep);
 
     if (rstflag == 1 || rstflag == 3) {
-        fsi.solid_.RestartInput();
         fsi.fluid_.RestartInput();
+        fsi.solid_.RestartInput();
     }
 
     BuildMesh();
@@ -90,8 +90,8 @@ void mpmmpmblockfsi::MPMBlockFSI() {
             fsi.fluid_.OutputPointDataVTKHDF(iview, istep);
 
             if (rstflag == 2 || rstflag == 3) {
-                fsi.solid_.RestartOutput();
                 fsi.fluid_.RestartOutput();
+                fsi.solid_.RestartOutput();
             }
         }
 

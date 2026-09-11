@@ -446,7 +446,7 @@ void CrsMat::BuildKSPSolver() {
     KSPGetPC(this->ksp, &pc);
     this->ConfigurePreconditioner(pc);
 
-    KSPSetTolerances(this->ksp, 1.0e-8, 1.0e-15, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-10, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
 
@@ -639,10 +639,8 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
         for (int var = 0; var < ndof; ++var) {
             this->petsc_indices_buf[idx] = this->NaturalNodeVarToPetscLocalScalar(natural_id, var);
             const PetscInt gid = this->natural_var_gids[natural_id + var * nodec];
-            const bool is_physical_bc =
-                std::binary_search(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end(), gid);
-            this->petsc_values_buf[idx] =
-                inactive && !is_physical_bc ? 0.0 : this->x_lhs[natural_id + var * nodec];
+            const bool is_physical_bc = std::binary_search(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end(), gid);
+            this->petsc_values_buf[idx] = inactive && !is_physical_bc ? 0.0 : this->x_lhs[natural_id + var * nodec];
             ++idx;
         }
     }
@@ -666,8 +664,7 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
             }
         }
         MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(inactive_gids.size()),
-                           inactive_gids.empty() ? nullptr : inactive_gids.data(), 1.0e0, this->petsc_x,
-                           this->petsc_b);
+                           inactive_gids.empty() ? nullptr : inactive_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);
     }
 
     if (!this->petsc_bc_gids.empty()) {

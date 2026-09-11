@@ -7,8 +7,8 @@
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/vtk_hdf5.h"
 #include "module/solid/solid_material_point.h"
+#include "module/vtk_hdf5.h"
 
 void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
 
@@ -72,7 +72,7 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
 }
 
 void SolidMaterialPointBase::RestartInput() {
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_s_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -114,7 +114,7 @@ void SolidMaterialPointBase::RestartInput() {
 }
 
 void SolidMaterialPointBase::RestartOutput() {
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_s_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);

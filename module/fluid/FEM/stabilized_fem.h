@@ -35,7 +35,6 @@ class StabilizedFEM : public MaterialPoint {
         this->NS_.FEM_flag = true;
         this->PF_.FEM_flag = true;
         this->NS_.use_petsc = true;
-        this->NS_.use_schur_fieldsplit = false;
         this->PF_.use_petsc = true;
         this->NS_.amg_rebuild_freq = 20; // rebuild AMG every 20 steps
         this->PF_.amg_rebuild_freq = 20;
@@ -137,7 +136,7 @@ class StabilizedFEM : public MaterialPoint {
         return;
     };
 
-  private:
+    //   private:
     /**
      * @brief Generalized-alpha advection velocity.
      * @return Advection velocity vector.
@@ -148,13 +147,13 @@ class StabilizedFEM : public MaterialPoint {
      * @brief Compute SUPG/PSPG/LSIC stabilization coefficients.
      * @param adv_vel Advection velocity vector.
      */
-    void MakNSStabCoeff(const std::vector<double> &adv_vel);
+    void MakeNSStabCoeff(const std::vector<double> &adv_vel);
 
     /**
      * @brief Assemble stabilized Navier-Stokes matrix and RHS.
      * @param adv_vel Advection velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &adv_vel);
+    virtual void AssembleSystem(const std::vector<double> &adv_vel);
 };
 
 } // namespace stabilizedfem
