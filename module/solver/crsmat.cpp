@@ -474,6 +474,9 @@ void CrsMat::ConfigurePreconditioner(PC pc) {
         PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
         PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
         PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
     } else {
         PCSetType(pc, PCHYPRE);
         PCHYPRESetType(pc, "boomeramg");

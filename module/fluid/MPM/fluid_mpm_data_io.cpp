@@ -40,6 +40,7 @@ void StabilizedMPM::InputBCData(std::ifstream &infile) {
 }
 
 void StabilizedMPM::InputPointData(std::ifstream &infile) {
+
     infile >> this->num;
     infile.ignore(1000, '\n');
 

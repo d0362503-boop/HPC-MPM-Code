@@ -1,9 +1,9 @@
 #include "module/DLB/mpm_dlb.h"
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include <array>
 #include <fstream>
 #include <iomanip>
@@ -13,6 +13,7 @@
 using namespace stabilizedmpm;
 
 void StabilizedMPM::InitializePointData() {
+
     VectorAssign(this->num, this->id);
     VectorAssign(this->num, this->matid);
     VectorAssign(this->num, this->mass);

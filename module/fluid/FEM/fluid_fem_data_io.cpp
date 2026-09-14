@@ -23,6 +23,7 @@ void StabilizedFEM::InputBCData(std::ifstream &infile) {
 }
 
 void StabilizedFEM::RestartInput() {
+
     this->InitializeMeshData();
 
     std::string filename = gridfile + std::to_string(myrank) + "_re.txt";
@@ -31,18 +32,10 @@ void StabilizedFEM::RestartInput() {
     reinfile.open(filename);
 
     for (int n = 0; n < nodec; n++) {
-        reinfile >> this->naccel[n + nuc] //
-            >> this->naccel[n + nvc]      //
-            >> this->naccel[n + nwc]      //
-            >> this->nvel[n + nuc]        //
-            >> this->nvel[n + nvc]        //
-            >> this->nvel[n + nwc]        //
-            >> this->nvel_old[n + nuc]    //
-            >> this->nvel_old[n + nvc]    //
-            >> this->nvel_old[n + nwc]    //
-            >> this->nvel_older[n + nuc]  //
-            >> this->nvel_older[n + nvc]  //
-            >> this->nvel_older[n + nwc]  //
+        reinfile >> this->naccel[n + nuc] >> this->naccel[n + nvc] >> this->naccel[n + nwc]        //
+            >> this->nvel[n + nuc] >> this->nvel[n + nvc] >> this->nvel[n + nwc]                   //
+            >> this->nvel_old[n + nuc] >> this->nvel_old[n + nvc] >> this->nvel_old[n + nwc]       //
+            >> this->nvel_older[n + nuc] >> this->nvel_older[n + nvc] >> this->nvel_older[n + nwc] //
             >> this->npres[n] >> this->npres_old[n] >> this->nphi[n];
         reinfile.ignore(1000, '\n');
     }
@@ -53,6 +46,7 @@ void StabilizedFEM::RestartInput() {
 }
 
 void StabilizedFEM::RestartOutput() {
+
     std::string filename = gridfile + std::to_string(myrank) + "_re.txt";
 
     std::ofstream reoutfile;
@@ -113,6 +107,7 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
 }
 
 void StabilizedFEM::Cp2NodeVTK() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;

@@ -17,6 +17,65 @@
 
 using namespace mpmmpmblockfsi;
 
+MPMMPMBlockFSI::~MPMMPMBlockFSI() { KSPDestroy(&this->schur_fluid_ksp_); }
+
+void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
+
+    if (block_it > 0) {
+        KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
+        KSPSetReusePreconditioner(this->schur_fluid_ksp_, PETSC_TRUE);
+        return;
+    }
+    KSPDestroy(&this->schur_fluid_ksp_);
+    KSPCreate(PETSC_COMM_WORLD, &this->schur_fluid_ksp_);
+    KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
+    KSPSetType(this->schur_fluid_ksp_, KSPFGMRES);
+    KSPSetOptionsPrefix(this->schur_fluid_ksp_, "fsi_response_");
+    KSPSetTolerances(this->schur_fluid_ksp_, 1.0e-8, 1.0e-15, 1.0e6, 1000);
+    PC pc;
+    KSPGetPC(this->schur_fluid_ksp_, &pc);
+    const PetscInt velocity_fields[] = {0, 1, 2};
+    const PetscInt pressure_field = 3;
+    PCSetType(pc, PCFIELDSPLIT);
+    PCFieldSplitSetBlockSize(pc, 4);
+    PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
+    PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
+    PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+    PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_FULL);
+    PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+    KSPSetUp(this->schur_fluid_ksp_);
+    PetscInt split_count;
+    KSP *response_split;
+    PCFieldSplitGetSubKSP(pc, &split_count, &response_split);
+    PC velocity_pc, pressure_pc;
+    KSPSetType(response_split[0], KSPPREONLY);
+    KSPGetPC(response_split[0], &velocity_pc);
+    PCSetType(velocity_pc, PCPBJACOBI);
+    KSPSetType(response_split[1], KSPPREONLY);
+    KSPGetPC(response_split[1], &pressure_pc);
+    PCSetType(pressure_pc, PCTELESCOPE);
+    PCTelescopeSetReductionFactor(pressure_pc, nprocs);
+    KSPSetUp(response_split[1]);
+    KSP serial_solver;
+    PCTelescopeGetKSP(pressure_pc, &serial_solver);
+    if (myrank == 0) {
+        Mat serial_tangent;
+        KSPGetOperators(serial_solver, &serial_tangent, nullptr);
+        MatEliminateZeros(serial_tangent, PETSC_TRUE);
+        KSPSetDiagonalScale(serial_solver, PETSC_TRUE);
+        KSPSetDiagonalScaleFix(serial_solver, PETSC_FALSE);
+        PC serial_pc;
+        KSPGetPC(serial_solver, &serial_pc);
+        PCSetType(serial_pc, PCILU);
+        PCFactorSetLevels(serial_pc, 2);
+        PCFactorSetMatOrderingType(serial_pc, MATORDERINGRCM);
+        PCFactorSetZeroPivot(serial_pc, 1.0e-30);
+    }
+    PetscFree(response_split);
+
+    return;
+}
+
 void MPMMPMBlockFSI::BuildSolidResponse() {
 
     KSPCreate(PETSC_COMM_WORLD, &this->schur_solid_ksp_);
@@ -43,82 +102,66 @@ void MPMMPMBlockFSI::BuildSolidResponse() {
     return;
 }
 
-void MPMMPMBlockFSI::SolveResponse(CrsMat &mat, int ndof, KSP solver, PetscInt &total_iterations) {
+PetscInt MPMMPMBlockFSI::SolveResponse(Mat coupling, KSP solver, Vec trial_multiplier, Vec load, Vec solution,
+                                       Vec response) {
 
-    // The tangent already has its physical and inactive rows eliminated.
-    for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        const int nid = this->fsi_intf.nbc[n];
-        for (int var = 0; var < 3; var++) {
-            const int id = nid + var * nodec;
-            const PetscInt gid = mat.natural_var_gids[id];
-            if (std::binary_search(mat.petsc_bc_gids.begin(), mat.petsc_bc_gids.end(), gid)) { mat.b_rhs[id] = 0.0e0; }
-        }
-    }
-    mat.UpdatePetscRhs(ndof);
+    MatMult(coupling, trial_multiplier, load);
 
     KSPSetInitialGuessNonzero(solver, PETSC_FALSE);
     KSPSetReusePreconditioner(solver, PETSC_TRUE);
-    KSPSolve(solver, mat.petsc_b, mat.petsc_x);
+    KSPSolve(solver, load, solution);
 
     PetscInt iterations;
     KSPGetIterationNumber(solver, &iterations);
-    total_iterations += iterations;
-
     KSPConvergedReason reason;
     KSPGetConvergedReason(solver, &reason);
     if (reason < 0 && myrank == 0) { std::cout << "PETSc KSP diverged, reason: " << reason << std::endl; }
 
-    VecScatterBegin(mat.scatter_to_all, mat.petsc_x, mat.seq_x, INSERT_VALUES, SCATTER_FORWARD);
-    VecScatterEnd(mat.scatter_to_all, mat.petsc_x, mat.seq_x, INSERT_VALUES, SCATTER_FORWARD);
+    MatMultTranspose(coupling, solution, response);
+    return iterations;
+}
 
-    const PetscScalar *solution;
-    VecGetArrayRead(mat.seq_x, &solution);
-    mat.x_lhs.resize(nodec * ndof);
-    std::copy_n(solution, nodec * ndof, mat.x_lhs.begin());
-    VecRestoreArrayRead(mat.seq_x, &solution);
+void MPMMPMBlockFSI::BuildCouplingOperator(CrsMat &mat, const std::vector<double> &weights,
+                                           const std::vector<PetscInt> &local_interface_ids,
+                                           PetscInt local_multiplier_dofs, PetscInt global_multiplier_dofs,
+                                           Mat &coupling, Vec &load, Vec &solution) {
+
+    PetscInt local_field_dofs, global_field_dofs;
+    VecGetLocalSize(mat.petsc_b, &local_field_dofs);
+    VecGetSize(mat.petsc_b, &global_field_dofs);
+    MatCreateAIJ(PETSC_COMM_WORLD, local_field_dofs, local_multiplier_dofs, global_field_dofs, global_multiplier_dofs,
+                 1, nullptr, 1, nullptr, &coupling);
+
+    for (int n = 0; n < this->fsi_intf.ibc; n++) {
+        const int nid = this->fsi_intf.nbc[n];
+        if (mat.natural_is_owned[nid] == 0) continue;
+
+        for (int var = 0; var < 3; var++) {
+            const PetscInt row = mat.natural_var_gids[nid + var * nodec];
+            if (std::binary_search(mat.petsc_bc_gids.begin(), mat.petsc_bc_gids.end(), row)) continue;
+            const PetscInt column = 3 * local_interface_ids[n] + var;
+            MatSetValue(coupling, row, column, weights[nid], INSERT_VALUES);
+        }
+    }
+    MatAssemblyBegin(coupling, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(coupling, MAT_FINAL_ASSEMBLY);
+    VecDuplicate(mat.petsc_b, &load);
+    VecDuplicate(mat.petsc_x, &solution);
 
     return;
 }
 
 PetscErrorCode MPMMPMBlockFSI::ApplyExactSchur(Vec trial_multiplier, Vec response) {
 
-    VecScatterBegin(this->schur_input_scatter_, trial_multiplier, this->schur_input_, INSERT_VALUES, SCATTER_FORWARD);
-    VecScatterEnd(this->schur_input_scatter_, trial_multiplier, this->schur_input_, INSERT_VALUES, SCATTER_FORWARD);
-    const PetscScalar *trial_values;
-    VecGetArrayRead(this->schur_input_, &trial_values);
-    VectorAssign(nodec * 4, this->fluid_.NS_.b_rhs);
-    VectorAssign(nodec * 3, this->solid_.SM_.b_rhs);
-    for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        const int nid = this->fsi_intf.nbc[n];
-        const PetscInt interface_id = this->schur_interface_ids_[n];
-        for (int var = 0; var < 3; var++) {
-            const double multiplier = PetscRealPart(trial_values[3 * interface_id + var]);
-            this->fluid_.NS_.b_rhs[nid + var * nodec] = this->fluid_.lm_lumped[nid] * multiplier;
-            this->solid_.SM_.b_rhs[nid + var * nodec] = this->solid_.lm_lumped[nid] * multiplier;
-        }
-    }
-    VecRestoreArrayRead(this->schur_input_, &trial_values);
+    this->schur_fluid_iterations_ +=
+        this->SolveResponse(this->schur_fluid_coupling_, this->schur_fluid_ksp_, trial_multiplier,
+                            this->schur_fluid_rhs_, this->schur_fluid_solution_, response);
+    VecScale(response, this->fluid_.nb_para[0]);
 
-    this->SolveResponse(this->fluid_.NS_, 4, this->fluid_.NS_.ksp, this->schur_fluid_iterations_);
-    this->SolveResponse(this->solid_.SM_, 3, this->schur_solid_ksp_, this->schur_solid_iterations_);
-
-    VecZeroEntries(response);
-    for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        const int nid = this->fsi_intf.nbc[n];
-        if (this->fluid_.NS_.natural_is_owned[nid] == 0) continue;
-
-        const PetscInt row = 3 * this->schur_interface_ids_[n];
-        const std::array<PetscInt, 3> rows{row, row + 1, row + 2};
-        std::array<PetscScalar, 3> values;
-        for (int var = 0; var < 3; var++) {
-            values[var] =
-                this->fluid_.nb_para[0] * this->fluid_.lm_lumped[nid] * this->fluid_.NS_.x_lhs[nid + var * nodec] +
-                this->solid_.nb_para[0] * this->solid_.lm_lumped[nid] * this->solid_.SM_.x_lhs[nid + var * nodec];
-        }
-        VecSetValues(response, 3, rows.data(), values.data(), INSERT_VALUES);
-    }
-    VecAssemblyBegin(response);
-    VecAssemblyEnd(response);
+    this->schur_solid_iterations_ +=
+        this->SolveResponse(this->schur_solid_coupling_, this->schur_solid_ksp_, trial_multiplier,
+                            this->schur_solid_rhs_, this->schur_solid_solution_, this->schur_solid_response_);
+    VecAXPY(response, this->solid_.nb_para[0], this->schur_solid_response_);
 
     this->schur_matvec_count_++;
     return PETSC_SUCCESS;
@@ -141,7 +184,7 @@ void MPMMPMBlockFSI::DetectFSIInterface() {
 
     this->fsi_intf.ibc = 0;
     for (int n = 0; n < nodec; n++) {
-        if (this->fluid_.lm_lumped[n] > 0.0e0 && this->fluid_.NS_.active_row_mask[n] != 0 &&
+        if (this->fluid_.lm_lumped[n] > mtol && this->fluid_.NS_.active_row_mask[n] != 0 &&
             this->solid_.SM_.active_row_mask[n] != 0) {
             this->fsi_intf.nbc[this->fsi_intf.ibc++] = n;
         }
@@ -200,8 +243,7 @@ void MPMMPMBlockFSI::LumpedLagrangeMultiplier() {
                     }
                     std::array<double, 3> grad_phi;
                     for (int i = 0; i < 3; i++) { grad_phi[i] = phi_s * grad_phi_f[i] - phi_f * grad_phi_s[i]; }
-                    double norm_grad_phi =
-                        std::sqrt(std::inner_product(grad_phi.begin(), grad_phi.end(), grad_phi.begin(), 0.0e0));
+                    double norm_grad_phi = NormVec3(grad_phi);
 
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
@@ -551,9 +593,9 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
 
     const PetscInt interface_count = static_cast<PetscInt>(interface_nodes.size());
     const PetscInt global_dofs = 3 * interface_count;
-    this->schur_interface_ids_.resize(this->fsi_intf.ibc);
+    std::vector<PetscInt> local_interface_ids(this->fsi_intf.ibc);
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        this->schur_interface_ids_[n] = static_cast<PetscInt>(
+        local_interface_ids[n] = static_cast<PetscInt>(
             std::lower_bound(interface_nodes.begin(), interface_nodes.end(), local_global_nodes[n]) -
             interface_nodes.begin());
     }
@@ -570,7 +612,7 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
         const int nid = this->fsi_intf.nbc[n];
         if (this->fluid_.NS_.natural_is_owned[nid] == 0) continue;
 
-        const PetscInt row = 3 * this->schur_interface_ids_[n];
+        const PetscInt row = 3 * local_interface_ids[n];
         const std::array<PetscInt, 3> rows{row, row + 1, row + 2};
         std::array<PetscScalar, 3> values;
         const double gf = this->fluid_.lm_lumped[nid];
@@ -587,10 +629,14 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     this->schur_matvec_count_ = 0;
     this->schur_fluid_iterations_ = 0;
     this->schur_solid_iterations_ = 0;
-    VecScatterCreateToAll(schur_rhs, &this->schur_input_scatter_, &this->schur_input_);
+    this->BuildCouplingOperator(this->fluid_.NS_, this->fluid_.lm_lumped, local_interface_ids, local_dofs, global_dofs,
+                                this->schur_fluid_coupling_, this->schur_fluid_rhs_, this->schur_fluid_solution_);
+    this->BuildCouplingOperator(this->solid_.SM_, this->solid_.lm_lumped, local_interface_ids, local_dofs, global_dofs,
+                                this->schur_solid_coupling_, this->schur_solid_rhs_, this->schur_solid_solution_);
+    VecDuplicate(schur_rhs, &this->schur_solid_response_);
 
     Mat preconditioner_mat = nullptr;
-    this->BuildLumpedSchurPreconditioner(this->schur_interface_ids_, local_dofs, global_dofs, preconditioner_mat);
+    this->BuildLumpedSchurPreconditioner(local_interface_ids, local_dofs, global_dofs, preconditioner_mat);
 
     Mat schur_mat = nullptr;
     MatCreateShell(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, this, &schur_mat);
@@ -601,12 +647,8 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     };
     MatShellSetOperation(schur_mat, MATOP_MULT, reinterpret_cast<void (*)(void)>(apply_schur));
 
-    PetscReal fluid_rtol, fluid_atol, fluid_dtol;
-    PetscInt fluid_max_it;
-    KSPGetTolerances(this->fluid_.NS_.ksp, &fluid_rtol, &fluid_atol, &fluid_dtol, &fluid_max_it);
-    KSPSetTolerances(this->fluid_.NS_.ksp, 1.0e-10, fluid_atol, fluid_dtol, fluid_max_it);
-
     this->BuildSolidResponse();
+    this->BuildFluidResponse(block_it);
 
     KSP schur_ksp = nullptr;
     KSPCreate(PETSC_COMM_WORLD, &schur_ksp);
@@ -635,22 +677,33 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     VecNorm(delta_multiplier, NORM_2, &delta_norm);
 
     if (reason > 0) {
-        VecScatterBegin(this->schur_input_scatter_, delta_multiplier, this->schur_input_, INSERT_VALUES,
-                        SCATTER_FORWARD);
-        VecScatterEnd(this->schur_input_scatter_, delta_multiplier, this->schur_input_, INSERT_VALUES, SCATTER_FORWARD);
+        std::vector<PetscInt> multiplier_rows(3 * this->fsi_intf.ibc);
+        for (int n = 0; n < this->fsi_intf.ibc; n++) {
+            for (int var = 0; var < 3; var++) { multiplier_rows[3 * n + var] = 3 * local_interface_ids[n] + var; }
+        }
+        IS from_is = nullptr, to_is = nullptr;
+        Vec local_multiplier = nullptr;
+        VecScatter multiplier_scatter = nullptr;
+        ISCreateGeneral(PETSC_COMM_SELF, multiplier_rows.size(), multiplier_rows.data(), PETSC_COPY_VALUES, &from_is);
+        ISCreateStride(PETSC_COMM_SELF, multiplier_rows.size(), 0, 1, &to_is);
+        VecCreateSeq(PETSC_COMM_SELF, multiplier_rows.size(), &local_multiplier);
+        VecScatterCreate(delta_multiplier, from_is, local_multiplier, to_is, &multiplier_scatter);
+        VecScatterBegin(multiplier_scatter, delta_multiplier, local_multiplier, INSERT_VALUES, SCATTER_FORWARD);
+        VecScatterEnd(multiplier_scatter, delta_multiplier, local_multiplier, INSERT_VALUES, SCATTER_FORWARD);
         const PetscScalar *delta_values = nullptr;
-        VecGetArrayRead(this->schur_input_, &delta_values);
+        VecGetArrayRead(local_multiplier, &delta_values);
         for (int n = 0; n < this->fsi_intf.ibc; n++) {
             const int nid = this->fsi_intf.nbc[n];
-            const PetscInt interface_id = this->schur_interface_ids_[n];
-            this->nfsi_force[nid + nuc] += PetscRealPart(delta_values[3 * interface_id]);
-            this->nfsi_force[nid + nvc] += PetscRealPart(delta_values[3 * interface_id + 1]);
-            this->nfsi_force[nid + nwc] += PetscRealPart(delta_values[3 * interface_id + 2]);
+            this->nfsi_force[nid + nuc] += PetscRealPart(delta_values[3 * n]);
+            this->nfsi_force[nid + nvc] += PetscRealPart(delta_values[3 * n + 1]);
+            this->nfsi_force[nid + nwc] += PetscRealPart(delta_values[3 * n + 2]);
         }
-        VecRestoreArrayRead(this->schur_input_, &delta_values);
+        VecRestoreArrayRead(local_multiplier, &delta_values);
+        VecScatterDestroy(&multiplier_scatter);
+        VecDestroy(&local_multiplier);
+        ISDestroy(&from_is);
+        ISDestroy(&to_is);
     }
-
-    KSPSetTolerances(this->fluid_.NS_.ksp, fluid_rtol, fluid_atol, fluid_dtol, fluid_max_it);
 
     if (myrank == 0) {
         std::cout << "Schur_FGMRES_blockPC:" << std::setw(8) << istep << std::setw(6) << block_it << std::setw(8)
@@ -664,8 +717,13 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     KSPDestroy(&this->schur_solid_ksp_);
     MatDestroy(&preconditioner_mat);
     MatDestroy(&schur_mat);
-    VecScatterDestroy(&this->schur_input_scatter_);
-    VecDestroy(&this->schur_input_);
+    MatDestroy(&this->schur_fluid_coupling_);
+    MatDestroy(&this->schur_solid_coupling_);
+    VecDestroy(&this->schur_fluid_rhs_);
+    VecDestroy(&this->schur_fluid_solution_);
+    VecDestroy(&this->schur_solid_rhs_);
+    VecDestroy(&this->schur_solid_solution_);
+    VecDestroy(&this->schur_solid_response_);
     VecDestroy(&delta_multiplier);
     VecDestroy(&schur_rhs);
 

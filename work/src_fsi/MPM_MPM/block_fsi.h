@@ -65,6 +65,9 @@ class MPMMPMBlockFSI {
     // -----------------------------------------------------------------
     MPMMPMBlockFSI() : fluid_(*this), solid_(*this) {}
 
+    /** @brief Release the cached multiplier-response solver. */
+    ~MPMMPMBlockFSI();
+
     /**
      * @brief Read and initialize the coupled FSI case input data.
      *
@@ -109,10 +112,15 @@ class MPMMPMBlockFSI {
                              const std::vector<double> &solid_velocity);
 
   private:
-    std::vector<PetscInt> schur_interface_ids_; // local interface index map
-    VecScatter schur_input_scatter_ = nullptr;  // multiplier gather operation
-    Vec schur_input_ = nullptr;                 // gathered multiplier increment
+    Mat schur_fluid_coupling_ = nullptr;        // fluid multiplier load map
+    Mat schur_solid_coupling_ = nullptr;        // solid multiplier load map
+    Vec schur_fluid_rhs_ = nullptr;              // fluid response load
+    Vec schur_fluid_solution_ = nullptr;         // fluid displacement response
+    Vec schur_solid_rhs_ = nullptr;              // solid response load
+    Vec schur_solid_solution_ = nullptr;         // solid displacement response
+    Vec schur_solid_response_ = nullptr;         // solid interface response
     KSP schur_solid_ksp_ = nullptr;             // factored solid tangent response
+    KSP schur_fluid_ksp_ = nullptr;             // multiplier fluid response solver
     PetscInt schur_matvec_count_ = 0;           // Schur operator application count
     PetscInt schur_fluid_iterations_ = 0;       // fluid response iteration count
     PetscInt schur_solid_iterations_ = 0;       // solid response backsolve count
@@ -134,24 +142,48 @@ class MPMMPMBlockFSI {
     void BuildSolidResponse();
 
     /**
+     * @brief Rebuild the multiplier-response preconditioner at the first block iteration; reuse it thereafter.
+     * @param block_it Coupling iteration within the current physical time step.
+     */
+    void BuildFluidResponse(int block_it);
+
+    /**
      * @brief Solve a homogeneous-BC response with the fixed field tangent and preconditioner.
      *
      * Requires a completed field solve at the current iterate and interface loads
      * supported only on nodes active in both fields. Only the load and
      * response vectors change; Newton iteration and AMG-rebuild history remain untouched.
-     * @param mat Field linear system containing the trial interface load.
-     * @param ndof Number of nodal field unknowns, including fluid pressure.
+     * @param coupling Sparse map from multiplier to field load.
      * @param solver Frozen-tangent response solver, independent of physical Newton iterations.
-     * @param total_iterations Accumulated KSP iterations, one per solid backsolve.
+     * @param trial_multiplier Trial multiplier increment on the interface.
+     * @param load Field load produced by the trial multiplier.
+     * @param solution Field displacement response to the trial load.
+     * @param response Area-weighted interface displacement response.
+     * @return KSP iterations used for this field response.
      */
-    void SolveResponse(CrsMat &mat, int ndof, KSP solver, PetscInt &total_iterations);
+    PetscInt SolveResponse(Mat coupling, KSP solver, Vec trial_multiplier, Vec load, Vec solution, Vec response);
+
+    /**
+     * @brief Build one field's multiplier load map and reusable response vectors.
+     * @param mat Field tangent and parallel ownership map.
+     * @param weights Nodal interface-area weights.
+     * @param local_interface_ids Global multiplier index of each local interface node.
+     * @param local_multiplier_dofs Multiplier unknowns owned by this rank.
+     * @param global_multiplier_dofs Total multiplier unknowns.
+     * @param coupling Sparse multiplier-to-field load map.
+     * @param load Reusable field response load.
+     * @param solution Reusable field displacement response.
+     */
+    void BuildCouplingOperator(CrsMat &mat, const std::vector<double> &weights,
+                               const std::vector<PetscInt> &local_interface_ids, PetscInt local_multiplier_dofs,
+                               PetscInt global_multiplier_dofs, Mat &coupling, Vec &load, Vec &solution);
 
     /**
      * @brief Assemble nodal fluid (4x4) and solid (3x3) tangent responses into a block-lumped Schur preconditioner.
      * @param local_interface_ids Local interface-node map to global interface indices.
      * @param local_dofs Locally owned multiplier degrees of freedom.
      * @param global_dofs Global multiplier degrees of freedom.
-     * @param preconditioner_mat Resulting 3x3-per-node alpha-f velocity-Schur approximation.
+     * @param preconditioner_mat Resulting 3x3-per-node endpoint velocity-Schur approximation.
      */
     void BuildLumpedSchurPreconditioner(const std::vector<PetscInt> &local_interface_ids, PetscInt local_dofs,
                                         PetscInt global_dofs, Mat &preconditioner_mat);

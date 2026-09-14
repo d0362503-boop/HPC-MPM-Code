@@ -1,7 +1,7 @@
 <sp.solswitch, rstflag, nlstep>  !Beam
 TPIC  2  1
 <ista, iend, iout>
-1  3000  5
+1  4000  5
 <dt, mtol, wfem.spec_rad, sp.spec_rad>
 1.0e-3  1.0e-12  0.5e0  0.5e0
 <xymin>
