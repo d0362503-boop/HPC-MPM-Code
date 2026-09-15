@@ -2,9 +2,9 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <mpi.h>
 #include <numeric>
+#include <string>
 #include <vector>
 
 #include "module/cal_mat.h"
@@ -19,85 +19,116 @@ using namespace mpmmpmblockfsi;
 
 MPMMPMBlockFSI::~MPMMPMBlockFSI() { KSPDestroy(&this->schur_fluid_ksp_); }
 
-void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
+PetscErrorCode MPMMPMBlockFSI::ApplyExactSchurShell(Mat mat, Vec trial, Vec response) {
+    void *context = nullptr;
+    MatShellGetContext(mat, &context);
+    return static_cast<MPMMPMBlockFSI *>(context)->ApplyExactSchur(trial, response);
+}
 
+PetscErrorCode MPMMPMBlockFSI::ApplyApproximateSchurShell(Mat mat, Vec trial, Vec response) {
+    void *context = nullptr;
+    MatShellGetContext(mat, &context);
+    return static_cast<MPMMPMBlockFSI *>(context)->ApplyApproximateSchur(trial, response);
+}
+
+PetscErrorCode MPMMPMBlockFSI::SolveApproximateSchur(PC pc, Vec load, Vec solution) {
+    void *context = nullptr;
+    PCShellGetContext(pc, &context);
+    return KSPSolve(static_cast<KSP>(context), load, solution);
+}
+
+void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
     if (block_it > 0) {
         KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
         KSPSetReusePreconditioner(this->schur_fluid_ksp_, PETSC_TRUE);
         return;
     }
+
     KSPDestroy(&this->schur_fluid_ksp_);
     KSPCreate(PETSC_COMM_WORLD, &this->schur_fluid_ksp_);
-    KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
-    KSPSetType(this->schur_fluid_ksp_, KSPFGMRES);
     KSPSetOptionsPrefix(this->schur_fluid_ksp_, "fsi_response_");
-    KSPSetTolerances(this->schur_fluid_ksp_, 1.0e-8, 1.0e-15, 1.0e6, 1000);
-    PC pc;
-    KSPGetPC(this->schur_fluid_ksp_, &pc);
+    KSPSetType(this->schur_fluid_ksp_, KSPFGMRES);
+    KSPGMRESSetRestart(this->schur_fluid_ksp_, 60);
+    KSPSetTolerances(this->schur_fluid_ksp_, 1.0e-8, 1.0e-16, 1.0e6, 1000);
+    KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
+
+    PC field_split_pc;
+    KSPGetPC(this->schur_fluid_ksp_, &field_split_pc);
+    PCSetType(field_split_pc, PCFIELDSPLIT);
+
     const PetscInt velocity_fields[] = {0, 1, 2};
     const PetscInt pressure_field = 3;
-    PCSetType(pc, PCFIELDSPLIT);
-    PCFieldSplitSetBlockSize(pc, 4);
-    PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
-    PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
-    PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
-    PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_FULL);
-    PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+    PCFieldSplitSetBlockSize(field_split_pc, 4);
+    PCFieldSplitSetFields(field_split_pc, "velocity", 3, velocity_fields, velocity_fields);
+    PCFieldSplitSetFields(field_split_pc, "pressure", 1, &pressure_field, &pressure_field);
+    PCFieldSplitSetType(field_split_pc, PC_COMPOSITE_SCHUR);
+    PCFieldSplitSetSchurFactType(field_split_pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+    PCFieldSplitSetSchurPre(field_split_pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
     KSPSetUp(this->schur_fluid_ksp_);
-    PetscInt split_count;
-    KSP *response_split;
-    PCFieldSplitGetSubKSP(pc, &split_count, &response_split);
-    PC velocity_pc, pressure_pc;
-    KSPSetType(response_split[0], KSPPREONLY);
-    KSPGetPC(response_split[0], &velocity_pc);
-    PCSetType(velocity_pc, PCPBJACOBI);
-    KSPSetType(response_split[1], KSPPREONLY);
-    KSPGetPC(response_split[1], &pressure_pc);
-    PCSetType(pressure_pc, PCTELESCOPE);
-    PCTelescopeSetReductionFactor(pressure_pc, nprocs);
-    KSPSetUp(response_split[1]);
-    KSP serial_solver;
-    PCTelescopeGetKSP(pressure_pc, &serial_solver);
-    if (myrank == 0) {
-        Mat serial_tangent;
-        KSPGetOperators(serial_solver, &serial_tangent, nullptr);
-        MatEliminateZeros(serial_tangent, PETSC_TRUE);
-        KSPSetDiagonalScale(serial_solver, PETSC_TRUE);
-        KSPSetDiagonalScaleFix(serial_solver, PETSC_FALSE);
-        PC serial_pc;
-        KSPGetPC(serial_solver, &serial_pc);
-        PCSetType(serial_pc, PCILU);
-        PCFactorSetLevels(serial_pc, 2);
-        PCFactorSetMatOrderingType(serial_pc, MATORDERINGRCM);
-        PCFactorSetZeroPivot(serial_pc, 1.0e-30);
-    }
-    PetscFree(response_split);
 
-    return;
+    PetscInt count;
+    KSP *response_splits;
+    PCFieldSplitGetSubKSP(field_split_pc, &count, &response_splits);
+    for (int i = 0; i < count; i++) {
+        PC response_pc;
+        Mat response_matrix;
+
+        KSPSetType(response_splits[i], KSPPREONLY);
+        KSPGetPC(response_splits[i], &response_pc);
+        KSPGetOperators(response_splits[i], nullptr, &response_matrix);
+        MatEliminateZeros(response_matrix, PETSC_TRUE);
+        PCSetType(response_pc, PCHYPRE);
+        PCHYPRESetType(response_pc, "boomeramg");
+        const std::string prefix = i == 0 ? "fsi_velocity_" : "fsi_pressure_";
+        PCSetOptionsPrefix(response_pc, prefix.c_str());
+
+        PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_coarsen_type").c_str(), "hmis");
+        PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_interp_type").c_str(), "ext+i");
+        PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_relax_type_all").c_str(), "SOR/Jacobi");
+        PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_strong_threshold").c_str(), "0.7");
+        PCSetFromOptions(response_pc);
+    }
+
+    PetscFree(response_splits);
+}
+
+PetscErrorCode MPMMPMBlockFSI::ApplyApproximateSchur(Vec trial, Vec response) {
+    PC fluid_pc, solid_pc;
+    KSPGetPC(this->schur_fluid_ksp_, &fluid_pc);
+    KSPGetPC(this->schur_solid_ksp_, &solid_pc);
+
+    MatMult(this->schur_fluid_coupling_, trial, this->schur_fluid_rhs_);
+    PCApply(fluid_pc, this->schur_fluid_rhs_, this->schur_fluid_solution_);
+    for (int sweep = 0; sweep < 3; sweep++) {
+        MatMult(this->fluid_.NS_.petsc_mat, this->schur_fluid_solution_, this->schur_fluid_defect_);
+        VecAYPX(this->schur_fluid_defect_, -1.0, this->schur_fluid_rhs_);
+        PCApply(fluid_pc, this->schur_fluid_defect_, this->schur_fluid_correction_);
+        VecAXPY(this->schur_fluid_solution_, 1.0, this->schur_fluid_correction_);
+    }
+    MatMultTranspose(this->schur_fluid_coupling_, this->schur_fluid_solution_, response);
+    VecScale(response, this->fluid_.nb_para[0]);
+
+    MatMult(this->schur_solid_coupling_, trial, this->schur_solid_rhs_);
+    PCApply(solid_pc, this->schur_solid_rhs_, this->schur_solid_solution_);
+    MatMultTranspose(this->schur_solid_coupling_, this->schur_solid_solution_, this->schur_solid_response_);
+    VecAXPY(response, this->solid_.nb_para[0], this->schur_solid_response_);
+
+    return PETSC_SUCCESS;
 }
 
 void MPMMPMBlockFSI::BuildSolidResponse() {
 
     KSPCreate(PETSC_COMM_WORLD, &this->schur_solid_ksp_);
     KSPSetOperators(this->schur_solid_ksp_, this->solid_.SM_.petsc_mat, this->solid_.SM_.petsc_mat);
-    KSPSetType(this->schur_solid_ksp_, KSPPREONLY);
-    PC pc;
-    KSPGetPC(this->schur_solid_ksp_, &pc);
-    PCSetType(pc, PCTELESCOPE);
-    PCTelescopeSetReductionFactor(pc, nprocs);
+    KSPSetType(this->schur_solid_ksp_, KSPFGMRES);
+    KSPSetOptionsPrefix(this->schur_solid_ksp_, "fsi_solid_response_");
+    KSPSetTolerances(this->schur_solid_ksp_, 1.0e-8, 1.0e-16, 1.0e6, 1000);
+
+    PC solid_pc;
+    KSPGetPC(this->schur_solid_ksp_, &solid_pc);
+    PCSetType(solid_pc, PCHYPRE);
+    PCHYPRESetType(solid_pc, "boomeramg");
     KSPSetUp(this->schur_solid_ksp_);
-    KSP serial_solver;
-    PCTelescopeGetKSP(pc, &serial_solver);
-    if (myrank == 0) {
-        Mat serial_tangent;
-        KSPGetOperators(serial_solver, &serial_tangent, nullptr);
-        MatEliminateZeros(serial_tangent, PETSC_TRUE);
-        PC serial_pc;
-        KSPGetPC(serial_solver, &serial_pc);
-        PCSetType(serial_pc, PCLU);
-        PCFactorSetMatOrderingType(serial_pc, MATORDERINGND);
-        KSPSetUp(serial_solver);
-    }
 
     return;
 }
@@ -119,6 +150,54 @@ PetscInt MPMMPMBlockFSI::SolveResponse(Mat coupling, KSP solver, Vec trial_multi
 
     MatMultTranspose(coupling, solution, response);
     return iterations;
+}
+
+void MPMMPMBlockFSI::AddMultiplierIncrement(Vec delta_multiplier,
+                                             const std::vector<PetscInt> &local_interface_ids) {
+    std::vector<PetscInt> multiplier_rows(3 * this->fsi_intf.ibc);
+    for (int n = 0; n < this->fsi_intf.ibc; n++) {
+        for (int var = 0; var < 3; var++) { multiplier_rows[3 * n + var] = 3 * local_interface_ids[n] + var; }
+    }
+
+    IS from_is = nullptr, to_is = nullptr;
+    Vec local_multiplier = nullptr;
+    VecScatter multiplier_scatter = nullptr;
+    ISCreateGeneral(PETSC_COMM_SELF, multiplier_rows.size(), multiplier_rows.data(), PETSC_COPY_VALUES, &from_is);
+    ISCreateStride(PETSC_COMM_SELF, multiplier_rows.size(), 0, 1, &to_is);
+    VecCreateSeq(PETSC_COMM_SELF, multiplier_rows.size(), &local_multiplier);
+    VecScatterCreate(delta_multiplier, from_is, local_multiplier, to_is, &multiplier_scatter);
+    VecScatterBegin(multiplier_scatter, delta_multiplier, local_multiplier, INSERT_VALUES, SCATTER_FORWARD);
+    VecScatterEnd(multiplier_scatter, delta_multiplier, local_multiplier, INSERT_VALUES, SCATTER_FORWARD);
+
+    const PetscScalar *delta_values = nullptr;
+    VecGetArrayRead(local_multiplier, &delta_values);
+    for (int n = 0; n < this->fsi_intf.ibc; n++) {
+        const int nid = this->fsi_intf.nbc[n];
+        this->nfsi_force[nid + nuc] += PetscRealPart(delta_values[3 * n]);
+        this->nfsi_force[nid + nvc] += PetscRealPart(delta_values[3 * n + 1]);
+        this->nfsi_force[nid + nwc] += PetscRealPart(delta_values[3 * n + 2]);
+    }
+    VecRestoreArrayRead(local_multiplier, &delta_values);
+
+    VecScatterDestroy(&multiplier_scatter);
+    VecDestroy(&local_multiplier);
+    ISDestroy(&from_is);
+    ISDestroy(&to_is);
+}
+
+void MPMMPMBlockFSI::DestroySchurWorkspace() {
+    KSPDestroy(&this->schur_solid_ksp_);
+
+    MatDestroy(&this->schur_fluid_coupling_);
+    MatDestroy(&this->schur_solid_coupling_);
+
+    VecDestroy(&this->schur_fluid_rhs_);
+    VecDestroy(&this->schur_fluid_solution_);
+    VecDestroy(&this->schur_fluid_defect_);
+    VecDestroy(&this->schur_fluid_correction_);
+    VecDestroy(&this->schur_solid_rhs_);
+    VecDestroy(&this->schur_solid_solution_);
+    VecDestroy(&this->schur_solid_response_);
 }
 
 void MPMMPMBlockFSI::BuildCouplingOperator(CrsMat &mat, const std::vector<double> &weights,
@@ -163,7 +242,6 @@ PetscErrorCode MPMMPMBlockFSI::ApplyExactSchur(Vec trial_multiplier, Vec respons
                             this->schur_solid_rhs_, this->schur_solid_solution_, this->schur_solid_response_);
     VecAXPY(response, this->solid_.nb_para[0], this->schur_solid_response_);
 
-    this->schur_matvec_count_++;
     return PETSC_SUCCESS;
 }
 
@@ -307,9 +385,6 @@ void MPMMPMBlockFSI::SolveFSISystem() {
         this->UpdateFSIMultiplier(block_it, fluid_velocity, solid_velocity);
     }
 
-    // this->ReportFSIContinuity(fluid_velocity, solid_velocity);
-    // this->ReportFSIPressureProfile();
-
     return;
 }
 
@@ -340,199 +415,41 @@ void MPMMPMBlockFSI::CalFSIResidual(const std::vector<double> &fluid_velocity,
     return;
 }
 
-void MPMMPMBlockFSI::ReportFSIPressureProfile() {
-
-    const int layer_count = xynodecw[2];
-    std::vector<int> active_count(layer_count, 0), interface_count(layer_count, 0);
-    std::vector<double> coordinate_sum(layer_count, 0.0e0), pressure_sum(layer_count, 0.0e0);
-    std::vector<double> pressure_min(layer_count, std::numeric_limits<double>::max());
-    std::vector<double> pressure_max(layer_count, std::numeric_limits<double>::lowest());
-    std::vector<double> fluid_phi_sum(layer_count, 0.0e0), solid_phi_sum(layer_count, 0.0e0);
-    std::vector<double> gf_sum(layer_count, 0.0e0), gs_sum(layer_count, 0.0e0), lambda_z_sum(layer_count, 0.0e0);
-    std::vector<unsigned char> is_interface(nodec, 0);
-    for (int n = 0; n < this->fsi_intf.ibc; n++) { is_interface[this->fsi_intf.nbc[n]] = 1; }
-
-    for (int nid = 0; nid < nodec; nid++) {
-        if (this->fluid_.NS_.natural_is_owned[nid] == 0 || this->fluid_.nmass[nid] <= mtol) continue;
-
-        const PetscInt global_node = this->fluid_.NS_.natural_block_gids[nid];
-        const int layer = static_cast<int>(global_node / (xynodecw[0] * xynodecw[1]));
-        active_count[layer]++;
-        coordinate_sum[layer] += xyc[nid][2];
-        pressure_sum[layer] += this->fluid_.npres[nid];
-        pressure_min[layer] = std::min(pressure_min[layer], this->fluid_.npres[nid]);
-        pressure_max[layer] = std::max(pressure_max[layer], this->fluid_.npres[nid]);
-        fluid_phi_sum[layer] += this->fluid_.nphi[nid];
-        solid_phi_sum[layer] += this->solid_.nphi[nid];
-        if (is_interface[nid] != 0) {
-            interface_count[layer]++;
-            gf_sum[layer] += this->fluid_.lm_lumped[nid];
-            gs_sum[layer] += this->solid_.lm_lumped[nid];
-            lambda_z_sum[layer] += this->nfsi_force[nid + nwc];
-        }
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, active_count.data(), layer_count, MPI_INT, MPI_SUM, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, interface_count.data(), layer_count, MPI_INT, MPI_SUM, PETSC_COMM_WORLD);
-    for (std::vector<double> *values :
-         {&coordinate_sum, &pressure_sum, &fluid_phi_sum, &solid_phi_sum, &gf_sum, &gs_sum, &lambda_z_sum}) {
-        MPI_Allreduce(MPI_IN_PLACE, values->data(), layer_count, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
-    }
-    MPI_Allreduce(MPI_IN_PLACE, pressure_min.data(), layer_count, MPI_DOUBLE, MPI_MIN, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, pressure_max.data(), layer_count, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
-
-    if (myrank == 0) {
-        int first_interface_layer = layer_count;
-        int last_interface_layer = -1;
-        for (int layer = 0; layer < layer_count; layer++) {
-            if (interface_count[layer] == 0) continue;
-            first_interface_layer = std::min(first_interface_layer, layer);
-            last_interface_layer = layer;
-        }
-        const int first_layer = std::max(0, first_interface_layer - 3);
-        const int last_layer = std::min(layer_count - 1, last_interface_layer + 6);
-        for (int layer = first_layer; layer <= last_layer; layer++) {
-            if (active_count[layer] == 0) continue;
-            const double active_scale = 1.0e0 / active_count[layer];
-            const double interface_scale = interface_count[layer] > 0 ? 1.0e0 / interface_count[layer] : 0.0e0;
-            std::cout << "FSI_pressure_cp:" << std::setw(8) << istep << std::setw(6) << layer << std::setw(8)
-                      << active_count[layer] << std::setw(8) << interface_count[layer] << std::setw(15)
-                      << std::scientific << coordinate_sum[layer] * active_scale << std::setw(15)
-                      << pressure_sum[layer] * active_scale << std::setw(15) << pressure_min[layer] << std::setw(15)
-                      << pressure_max[layer] << std::setw(15) << fluid_phi_sum[layer] * active_scale << std::setw(15)
-                      << solid_phi_sum[layer] * active_scale << std::setw(15) << gf_sum[layer] * interface_scale
-                      << std::setw(15) << gs_sum[layer] * interface_scale << std::setw(15)
-                      << lambda_z_sum[layer] * interface_scale << "\n";
-        }
-    }
-
-    return;
-}
-
-void MPMMPMBlockFSI::ReportFSIContinuity(const std::vector<double> &fluid_velocity,
-                                         const std::vector<double> &solid_velocity) {
-
-    const int component_offsets[3] = {nuc, nvc, nwc};
-    double displacement_norm_sq = 0.0e0;
-    double velocity_norm_sq = 0.0e0;
-    double history_velocity_norm_sq = 0.0e0;
-    double history_acceleration_norm_sq = 0.0e0;
-    double displacement_max = 0.0e0;
-    double velocity_max = 0.0e0;
-    double history_velocity_max = 0.0e0;
-    double history_acceleration_max = 0.0e0;
-    double velocity_identity_error_max = 0.0e0;
-    int interface_count = 0;
-    for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        const int nid = this->fsi_intf.nbc[n];
-        if (this->fluid_.NS_.natural_is_owned[nid] == 0) continue;
-
-        for (int offset : component_offsets) {
-            const double displacement_jump = this->solid_.ndispl[nid + offset] - this->fluid_.ndispl[nid + offset];
-            const double velocity_jump = solid_velocity[nid + offset] - fluid_velocity[nid + offset];
-            const double history_velocity_jump = this->solid_.nvel[nid + offset] - this->fluid_.nvel[nid + offset];
-            const double history_acceleration_jump =
-                this->solid_.naccel[nid + offset] - this->fluid_.naccel[nid + offset];
-            const double reconstructed_velocity_jump = this->solid_.nb_para[0] * this->solid_.ndispl[nid + offset] -
-                                                       this->fluid_.nb_para[0] * this->fluid_.ndispl[nid + offset] -
-                                                       this->solid_.nb_para[1] * this->solid_.nvel[nid + offset] +
-                                                       this->fluid_.nb_para[1] * this->fluid_.nvel[nid + offset] -
-                                                       this->solid_.nb_para[2] * this->solid_.naccel[nid + offset] +
-                                                       this->fluid_.nb_para[2] * this->fluid_.naccel[nid + offset];
-            displacement_norm_sq += displacement_jump * displacement_jump;
-            velocity_norm_sq += velocity_jump * velocity_jump;
-            history_velocity_norm_sq += history_velocity_jump * history_velocity_jump;
-            history_acceleration_norm_sq += history_acceleration_jump * history_acceleration_jump;
-            displacement_max = std::max(displacement_max, std::abs(displacement_jump));
-            velocity_max = std::max(velocity_max, std::abs(velocity_jump));
-            history_velocity_max = std::max(history_velocity_max, std::abs(history_velocity_jump));
-            history_acceleration_max = std::max(history_acceleration_max, std::abs(history_acceleration_jump));
-            velocity_identity_error_max =
-                std::max(velocity_identity_error_max, std::abs(velocity_jump - reconstructed_velocity_jump));
-        }
-        interface_count++;
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, &displacement_norm_sq, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &velocity_norm_sq, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &history_velocity_norm_sq, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &history_acceleration_norm_sq, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &displacement_max, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &velocity_max, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &history_velocity_max, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &history_acceleration_max, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &velocity_identity_error_max, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &interface_count, 1, MPI_INT, MPI_SUM, PETSC_COMM_WORLD);
-
-    if (myrank == 0 && interface_count > 0) {
-        const double component_count = 3.0e0 * interface_count;
-        std::cout << "FSI_continuity:" << std::setw(8) << istep << std::setw(8) << interface_count << std::setw(15)
-                  << std::scientific << std::sqrt(displacement_norm_sq / component_count) << std::setw(15)
-                  << displacement_max << std::setw(15) << std::sqrt(velocity_norm_sq / component_count) << std::setw(15)
-                  << velocity_max << "\n";
-        std::cout << "FSI_history:" << std::setw(11) << istep << std::setw(8) << interface_count << std::setw(15)
-                  << std::sqrt(history_velocity_norm_sq / component_count) << std::setw(15) << history_velocity_max
-                  << std::setw(15) << std::sqrt(history_acceleration_norm_sq / component_count) << std::setw(15)
-                  << history_acceleration_max << std::setw(15) << velocity_identity_error_max << "\n";
-    }
-
-    return;
-}
-
-void MPMMPMBlockFSI::BuildLumpedSchurPreconditioner(const std::vector<PetscInt> &local_interface_ids,
-                                                    PetscInt local_dofs, PetscInt global_dofs,
-                                                    Mat &preconditioner_mat) {
+void MPMMPMBlockFSI::BuildLumpedSchurPreconditioner(const std::vector<PetscInt> &interface_nodes, PetscInt local_dofs,
+                                                    PetscInt global_dofs, Mat &preconditioner_mat) {
 
     MatCreateAIJ(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, 3, nullptr, 3, nullptr,
                  &preconditioner_mat);
     MatSetBlockSize(preconditioner_mat, 3);
     MatSetOption(preconditioner_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
-    std::vector<PetscInt> fluid_indices, solid_indices;
-    for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        const int nid = this->fsi_intf.nbc[n];
-        if (this->fluid_.NS_.natural_is_owned[nid] == 0) continue;
-
-        for (int var = 0; var < this->fluid_.NS_.ndof; var++) {
-            fluid_indices.push_back(this->fluid_.NS_.natural_var_gids[nid + var * nodec]);
-        }
-        for (int var = 0; var < this->solid_.SM_.ndof; var++) {
-            solid_indices.push_back(this->solid_.SM_.natural_var_gids[nid + var * nodec]);
-        }
-    }
-    // Repartition the interface blocks to their physical-node owners.
-    IS fluid_is, solid_is;
-    ISCreateGeneral(PETSC_COMM_WORLD, fluid_indices.size(), fluid_indices.data(), PETSC_COPY_VALUES, &fluid_is);
-    ISCreateGeneral(PETSC_COMM_WORLD, solid_indices.size(), solid_indices.data(), PETSC_COPY_VALUES, &solid_is);
-    Mat fluid_interface, solid_interface;
-    MatCreateSubMatrix(this->fluid_.NS_.petsc_mat, fluid_is, fluid_is, MAT_INITIAL_MATRIX, &fluid_interface);
-    MatCreateSubMatrix(this->solid_.SM_.petsc_mat, solid_is, solid_is, MAT_INITIAL_MATRIX, &solid_interface);
-    PetscInt fluid_start, solid_start;
-    MatGetOwnershipRange(fluid_interface, &fluid_start, nullptr);
-    MatGetOwnershipRange(solid_interface, &solid_start, nullptr);
-    int local_index = 0;
-    for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        const int nid = this->fsi_intf.nbc[n];
-        if (this->fluid_.NS_.natural_is_owned[nid] == 0) continue;
+    PetscInt row_start, row_end;
+    MatGetOwnershipRange(this->fluid_.NS_.petsc_mat, &row_start, &row_end);
+    for (PetscInt n = 0; n < static_cast<PetscInt>(interface_nodes.size()); n++) {
+        const PetscInt node_id = interface_nodes[n];
+        if (4 * node_id < row_start || 4 * node_id >= row_end) continue;
 
         std::array<PetscInt, 4> fluid_rows;
         std::array<PetscInt, 3> solid_rows;
         std::array<PetscScalar, 16> fluid_block;
         std::array<PetscScalar, 9> solid_block;
-        for (int var = 0; var < 4; var++) { fluid_rows[var] = fluid_start + 4 * local_index + var; }
-        for (int var = 0; var < 3; var++) { solid_rows[var] = solid_start + 3 * local_index + var; }
-        MatGetValues(fluid_interface, 4, fluid_rows.data(), 4, fluid_rows.data(), fluid_block.data());
-        MatGetValues(solid_interface, 3, solid_rows.data(), 3, solid_rows.data(), solid_block.data());
+        for (int var = 0; var < 4; var++) { fluid_rows[var] = 4 * node_id + var; }
+        for (int var = 0; var < 3; var++) { solid_rows[var] = 3 * node_id + var; }
+        MatGetValues(this->fluid_.NS_.petsc_mat, 4, fluid_rows.data(), 4, fluid_rows.data(), fluid_block.data());
+        MatGetValues(this->solid_.SM_.petsc_mat, 3, solid_rows.data(), 3, solid_rows.data(), solid_block.data());
 
         std::array<std::array<double, 3>, 3> fluid_velocity_block, solid_velocity_block;
         std::array<bool, 3> fluid_bc, solid_bc;
+        double gf = 0.0, gs = 0.0;
         for (int i = 0; i < 3; i++) {
-            fluid_bc[i] =
-                std::binary_search(this->fluid_.NS_.petsc_bc_gids.begin(), this->fluid_.NS_.petsc_bc_gids.end(),
-                                   this->fluid_.NS_.natural_var_gids[nid + i * nodec]);
-            solid_bc[i] =
-                std::binary_search(this->solid_.SM_.petsc_bc_gids.begin(), this->solid_.SM_.petsc_bc_gids.end(),
-                                   this->solid_.SM_.natural_var_gids[nid + i * nodec]);
+            const PetscInt column = 3 * n + i;
+            PetscScalar fluid_weight, solid_weight;
+            MatGetValues(this->schur_fluid_coupling_, 1, &fluid_rows[i], 1, &column, &fluid_weight);
+            MatGetValues(this->schur_solid_coupling_, 1, &solid_rows[i], 1, &column, &solid_weight);
+            fluid_bc[i] = (fluid_weight == 0.0);
+            solid_bc[i] = (solid_weight == 0.0);
+            gf = std::max(gf, PetscRealPart(fluid_weight));
+            gs = std::max(gs, PetscRealPart(solid_weight));
             for (int j = 0; j < 3; j++) {
                 fluid_velocity_block[i][j] = PetscRealPart(
                     fluid_block[4 * i + j] - fluid_block[4 * i + 3] * fluid_block[12 + j] / fluid_block[15]);
@@ -541,8 +458,6 @@ void MPMMPMBlockFSI::BuildLumpedSchurPreconditioner(const std::vector<PetscInt> 
         }
         const auto fluid_inverse = InvMat3(fluid_velocity_block);
         const auto solid_inverse = InvMat3(solid_velocity_block);
-        const double gf = this->fluid_.lm_lumped[nid];
-        const double gs = this->solid_.lm_lumped[nid];
         const double fluid_factor = this->fluid_.nb_para[0] * gf * gf;
         const double solid_factor = this->solid_.nb_para[0] * gs * gs;
         std::array<PetscScalar, 9> schur_block;
@@ -554,19 +469,13 @@ void MPMMPMBlockFSI::BuildLumpedSchurPreconditioner(const std::vector<PetscInt> 
             // Fully prescribed components have no multiplier response.
             if (fluid_bc[i] && solid_bc[i]) { schur_block[3 * i + i] = 1.0e0; }
         }
-        const PetscInt row = 3 * local_interface_ids[n];
+        const PetscInt row = 3 * n;
         const std::array<PetscInt, 3> rows{row, row + 1, row + 2};
         MatSetValues(preconditioner_mat, 3, rows.data(), 3, rows.data(), schur_block.data(), INSERT_VALUES);
-        local_index++;
     }
 
     MatAssemblyBegin(preconditioner_mat, MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(preconditioner_mat, MAT_FINAL_ASSEMBLY);
-
-    MatDestroy(&fluid_interface);
-    MatDestroy(&solid_interface);
-    ISDestroy(&fluid_is);
-    ISDestroy(&solid_is);
 
     return;
 }
@@ -626,26 +535,24 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     VecAssemblyBegin(schur_rhs);
     VecAssemblyEnd(schur_rhs);
 
-    this->schur_matvec_count_ = 0;
     this->schur_fluid_iterations_ = 0;
     this->schur_solid_iterations_ = 0;
+
     this->BuildCouplingOperator(this->fluid_.NS_, this->fluid_.lm_lumped, local_interface_ids, local_dofs, global_dofs,
                                 this->schur_fluid_coupling_, this->schur_fluid_rhs_, this->schur_fluid_solution_);
     this->BuildCouplingOperator(this->solid_.SM_, this->solid_.lm_lumped, local_interface_ids, local_dofs, global_dofs,
                                 this->schur_solid_coupling_, this->schur_solid_rhs_, this->schur_solid_solution_);
     VecDuplicate(schur_rhs, &this->schur_solid_response_);
+    VecDuplicate(this->schur_fluid_rhs_, &this->schur_fluid_defect_);
+    VecDuplicate(this->schur_fluid_rhs_, &this->schur_fluid_correction_);
 
     Mat preconditioner_mat = nullptr;
-    this->BuildLumpedSchurPreconditioner(local_interface_ids, local_dofs, global_dofs, preconditioner_mat);
+    this->BuildLumpedSchurPreconditioner(interface_nodes, local_dofs, global_dofs, preconditioner_mat);
 
     Mat schur_mat = nullptr;
     MatCreateShell(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, this, &schur_mat);
-    PetscErrorCode (*apply_schur)(Mat, Vec, Vec) = [](Mat mat, Vec trial, Vec response) -> PetscErrorCode {
-        void *owner;
-        MatShellGetContext(mat, &owner);
-        return static_cast<MPMMPMBlockFSI *>(owner)->ApplyExactSchur(trial, response);
-    };
-    MatShellSetOperation(schur_mat, MATOP_MULT, reinterpret_cast<void (*)(void)>(apply_schur));
+    MatShellSetOperation(schur_mat, MATOP_MULT,
+                         reinterpret_cast<void (*)(void)>(&MPMMPMBlockFSI::ApplyExactSchurShell));
 
     this->BuildSolidResponse();
     this->BuildFluidResponse(block_it);
@@ -659,73 +566,56 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     KSPSetPCSide(schur_ksp, PC_RIGHT);
     KSPSetNormType(schur_ksp, KSP_NORM_UNPRECONDITIONED);
     KSPSetTolerances(schur_ksp, 1.0e-8, 1.0e-20, 1.0e6, 200);
+
     PC schur_pc = nullptr;
     KSPGetPC(schur_ksp, &schur_pc);
-    PCSetType(schur_pc, PCPBJACOBI);
+
+    Mat approximate_mat = nullptr;
+    MatCreateShell(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, this, &approximate_mat);
+    MatShellSetOperation(approximate_mat, MATOP_MULT,
+                         reinterpret_cast<void (*)(void)>(&MPMMPMBlockFSI::ApplyApproximateSchurShell));
+
+    KSP approximate_ksp = nullptr;
+    KSPCreate(PETSC_COMM_WORLD, &approximate_ksp);
+    KSPSetOperators(approximate_ksp, approximate_mat, preconditioner_mat);
+    KSPSetType(approximate_ksp, KSPFGMRES);
+    KSPSetTolerances(approximate_ksp, 5.0e-3, 1.0e-30, 1.0e6, 30);
+
+    PC approximate_pc;
+    KSPGetPC(approximate_ksp, &approximate_pc);
+    PCSetType(approximate_pc, PCPBJACOBI);
+
+    PCSetType(schur_pc, PCSHELL);
+    PCShellSetContext(schur_pc, approximate_ksp);
+    PCShellSetApply(schur_pc, &MPMMPMBlockFSI::SolveApproximateSchur);
     KSPSetFromOptions(schur_ksp);
 
-    PetscReal rhs_norm = 0.0e0;
-    VecNorm(schur_rhs, NORM_2, &rhs_norm);
     KSPSolve(schur_ksp, schur_rhs, delta_multiplier);
 
     KSPConvergedReason reason;
-    PetscInt outer_iterations;
-    PetscReal outer_residual, delta_norm;
+    PetscReal residual_norm;
     KSPGetConvergedReason(schur_ksp, &reason);
-    KSPGetIterationNumber(schur_ksp, &outer_iterations);
-    KSPGetResidualNorm(schur_ksp, &outer_residual);
-    VecNorm(delta_multiplier, NORM_2, &delta_norm);
+    KSPGetResidualNorm(schur_ksp, &residual_norm);
 
-    if (reason > 0) {
-        std::vector<PetscInt> multiplier_rows(3 * this->fsi_intf.ibc);
-        for (int n = 0; n < this->fsi_intf.ibc; n++) {
-            for (int var = 0; var < 3; var++) { multiplier_rows[3 * n + var] = 3 * local_interface_ids[n] + var; }
-        }
-        IS from_is = nullptr, to_is = nullptr;
-        Vec local_multiplier = nullptr;
-        VecScatter multiplier_scatter = nullptr;
-        ISCreateGeneral(PETSC_COMM_SELF, multiplier_rows.size(), multiplier_rows.data(), PETSC_COPY_VALUES, &from_is);
-        ISCreateStride(PETSC_COMM_SELF, multiplier_rows.size(), 0, 1, &to_is);
-        VecCreateSeq(PETSC_COMM_SELF, multiplier_rows.size(), &local_multiplier);
-        VecScatterCreate(delta_multiplier, from_is, local_multiplier, to_is, &multiplier_scatter);
-        VecScatterBegin(multiplier_scatter, delta_multiplier, local_multiplier, INSERT_VALUES, SCATTER_FORWARD);
-        VecScatterEnd(multiplier_scatter, delta_multiplier, local_multiplier, INSERT_VALUES, SCATTER_FORWARD);
-        const PetscScalar *delta_values = nullptr;
-        VecGetArrayRead(local_multiplier, &delta_values);
-        for (int n = 0; n < this->fsi_intf.ibc; n++) {
-            const int nid = this->fsi_intf.nbc[n];
-            this->nfsi_force[nid + nuc] += PetscRealPart(delta_values[3 * n]);
-            this->nfsi_force[nid + nvc] += PetscRealPart(delta_values[3 * n + 1]);
-            this->nfsi_force[nid + nwc] += PetscRealPart(delta_values[3 * n + 2]);
-        }
-        VecRestoreArrayRead(local_multiplier, &delta_values);
-        VecScatterDestroy(&multiplier_scatter);
-        VecDestroy(&local_multiplier);
-        ISDestroy(&from_is);
-        ISDestroy(&to_is);
-    }
+    if (reason > 0) { this->AddMultiplierIncrement(delta_multiplier, local_interface_ids); }
 
     if (myrank == 0) {
-        std::cout << "Schur_FGMRES_blockPC:" << std::setw(8) << istep << std::setw(6) << block_it << std::setw(8)
-                  << interface_count << std::setw(8) << outer_iterations << std::setw(8) << this->schur_matvec_count_
-                  << std::setw(12) << this->schur_fluid_iterations_ << std::setw(12) << this->schur_solid_iterations_
-                  << std::setw(15) << std::scientific << rhs_norm << std::setw(15) << outer_residual << std::setw(15)
-                  << delta_norm << std::setw(6) << static_cast<int>(reason) << "\n";
+        std::cout << "Schur_FGMRES_blockPC:" << std::setw(8) << istep << std::setw(6) << block_it << std::setw(12)
+                  << this->schur_fluid_iterations_ << std::setw(12) << this->schur_solid_iterations_ << std::setw(15)
+                  << std::scientific << residual_norm << "\n";
     }
 
     KSPDestroy(&schur_ksp);
-    KSPDestroy(&this->schur_solid_ksp_);
+    KSPDestroy(&approximate_ksp);
+
+    MatDestroy(&approximate_mat);
     MatDestroy(&preconditioner_mat);
     MatDestroy(&schur_mat);
-    MatDestroy(&this->schur_fluid_coupling_);
-    MatDestroy(&this->schur_solid_coupling_);
-    VecDestroy(&this->schur_fluid_rhs_);
-    VecDestroy(&this->schur_fluid_solution_);
-    VecDestroy(&this->schur_solid_rhs_);
-    VecDestroy(&this->schur_solid_solution_);
-    VecDestroy(&this->schur_solid_response_);
+
     VecDestroy(&delta_multiplier);
     VecDestroy(&schur_rhs);
+
+    this->DestroySchurWorkspace();
 
     return;
 }
