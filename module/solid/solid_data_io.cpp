@@ -27,6 +27,7 @@ void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
 }
 
 void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
+
     infile >> this->num;
     infile.ignore(1000, '\n');
 
@@ -66,6 +67,7 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
     writer.WritePointScalar("VMStress", info.total_npts, info.local_npts, info.global_offset, vm_stress);
     writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, this->id);
     writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, this->matid);
+    writer.WritePointScalar("SurfaceTag", info.total_npts, info.local_npts, info.global_offset, this->surf_point);
 #endif
 
     return;

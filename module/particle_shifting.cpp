@@ -52,7 +52,7 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionParticleShiftin
     }
     MPI_Allreduce(MPI_IN_PLACE, &geup_dot, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    double b_0 = (geup_dot > 1.0e-30) ? (eu_norm / geup_dot) : 0.0e0;
+    double b_0 = (geup_dot > 0.0e0) ? (eu_norm / geup_dot) : 0.0e0;
 
     std::vector<std::array<double, 3>> disp_corr;
     VectorAssign(this->num, disp_corr);
