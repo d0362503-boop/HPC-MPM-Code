@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
@@ -49,6 +50,9 @@ void ImplicitSolidMPM::Particle2Node() {
     NodeVarComm(this->nvof, 0);
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
+
+    VectorAssign(nodec, this->nphi);
+    for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
     this->ApplyVelocityBC(this->nvel);
@@ -115,7 +119,7 @@ void ImplicitSolidMPM::Node2Particle() {
     }
 
     std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionParticleShifting();
+    disp_corr = this->DeltaCorrectionPST();
 
     this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
 

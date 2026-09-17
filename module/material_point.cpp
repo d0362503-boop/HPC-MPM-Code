@@ -14,6 +14,7 @@
 #include "module/shape_function.h"
 
 void MaterialPoint::BuildGaussianPoint() {
+
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
 
@@ -46,6 +47,7 @@ void MaterialPoint::BuildGaussianPoint() {
 }
 
 void MaterialPoint::MeshPointLinklist() {
+
     std::vector<int> idepl(nelem, -1);
     VectorAssign(nelem, this->numep);
     VectorAssign(nelem, this->idepf, -1);
@@ -73,7 +75,8 @@ void MaterialPoint::MeshPointLinklist() {
     return;
 }
 
-void MaterialPoint::CalPointUnitNormal() {
+void MaterialPoint::CalNodalUnitNormal() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -115,15 +118,47 @@ void MaterialPoint::CalPointUnitNormal() {
         }
     }
 
-    // --- TO DO ---
-    // --- Need unit normal BC setting ---
+    return;
+}
+
+void MaterialPoint::CalPointUnitNormal(std::vector<std::array<double, 3>> &particle_normal, std::vector<double> &surface_weight) {
+
+    int nenode;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
+
+    VectorAssign(this->num, particle_normal);
+    VectorAssign(this->num, surface_weight);
+    for (int m = 0; m < nelem; m++) {
+        int pid = this->idepf[m];
+        while (pid != -1) {
+            MakeSF(m, this->coord[pid], idimc, xynodec, ncm, nenode, sf, dsf);
+
+            for (int ni = 0; ni < nenode; ni++) {
+                const int nid = ncm[ni];
+                const double sfi = sf[ni];
+                const double phi = this->nphi[nid];
+                surface_weight[pid] += sfi * phi;
+                particle_normal[pid][0] += sfi * this->nnormal[nid + nuc];
+                particle_normal[pid][1] += sfi * this->nnormal[nid + nvc];
+                particle_normal[pid][2] += sfi * this->nnormal[nid + nwc];
+            }
+
+            const std::array<double, 3> normal = particle_normal[pid];
+            double normal_norm = NormVec3(normal);
+            for (int i = 0; i < 3; i++) { particle_normal[pid][i] /= normal_norm; }
+
+            pid = this->idp2p[pid];
+        }
+    }
 
     return;
 }
 
 std::array<std::array<double, 3>, 3>
-MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, double af_coeff,
-                                   const std::vector<std::array<double, 3>> &dsf) const noexcept {
+MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, //
+                                   double af_coeff, const std::vector<std::array<double, 3>> &dsf) const noexcept {
 
     std::array<std::array<double, 3>, 3> ddg{};
     for (int ni = 0; ni < nenode; ni++) {

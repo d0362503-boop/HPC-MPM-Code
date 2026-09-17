@@ -117,6 +117,7 @@ void SolidMaterialPointBase::MigrateParticleData() {
 }
 
 void SolidMaterialPointBase::DetermineRigidBC() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -178,12 +179,10 @@ void SolidMaterialPointBase::UpdateDefGrad(int pid, int nenode, double af_coeff,
     return;
 }
 
-void SolidMaterialPointBase::UpdateConstitutiveModel(
-    int pid,                                                           //
-    std::vector<std::array<double, 6>> &stress,                        //
-    const std::vector<double> &det_def_grad_bar,                       //
-    const std::vector<std::array<std::array<double, 3>, 3>> &def_grad, //
-    const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad) {
+void SolidMaterialPointBase::UpdateConstitutiveModel(int pid, std::vector<std::array<double, 6>> &stress,               //
+                                                     const std::vector<double> &det_def_grad_bar,                       //
+                                                     const std::vector<std::array<std::array<double, 3>, 3>> &def_grad, //
+                                                     const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad) {
 
     std::array<std::array<double, 3>, 3> F = def_grad[pid];
     std::array<std::array<double, 3>, 3> dF = delta_def_grad[pid];

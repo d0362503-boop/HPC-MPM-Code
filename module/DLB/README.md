@@ -219,7 +219,7 @@ re-evaluates boundary-cell fill under the new partition.
 - `StabilizedMPM::MoveParticle()` and the solid equivalent pass
   `mpm_dlb::CurrentRegions()` to `DetermineParticleRank`, so per-step migration always
   uses the *current* partition without touching the update machinery.
-- `PairwiseRepulsiveParticleShifting` builds its ghost set by intersecting each
+- `PairwiseRepulsivePST` builds its ghost set by intersecting each
   particle's support ball with the peers' physical region bounds read from
   `CurrentRegions()` — correct for non-uniform regions, unlike the old Cartesian rank
   arithmetic. The regions reference is used transiently inside the call (converted to

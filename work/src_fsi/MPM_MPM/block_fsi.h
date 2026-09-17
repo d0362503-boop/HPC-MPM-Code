@@ -65,7 +65,7 @@ class MPMMPMBlockFSI {
     // -----------------------------------------------------------------
     MPMMPMBlockFSI() : fluid_(*this), solid_(*this) {}
 
-    /** @brief Release the fluid response Krylov workspace. */
+    /** @brief Release the fluid and solid response solvers. */
     ~MPMMPMBlockFSI();
 
     /**
@@ -155,9 +155,10 @@ class MPMMPMBlockFSI {
     PetscErrorCode ApplyExactSchur(Vec trial_multiplier, Vec response);
 
     /**
-     * @brief Build parallel solid AMG for repeated Schur responses in this block iteration.
+     * @brief Build parallel solid AMG and reuse it within the current time step.
+     * @param block_it Current fluid-solid block iteration.
      */
-    void BuildSolidResponse();
+    void BuildSolidResponse(int block_it);
 
     /**
      * @brief Build the isolated fluid response solver and reuse it within the current time step.
@@ -196,7 +197,7 @@ class MPMMPMBlockFSI {
      */
     void AddMultiplierIncrement(Vec delta_multiplier, const std::vector<PetscInt> &local_interface_ids);
 
-    /** @brief Release temporary field-response matrices, vectors, and the solid response solver. */
+    /** @brief Release temporary field-response matrices and vectors. */
     void DestroySchurWorkspace();
 
     /**

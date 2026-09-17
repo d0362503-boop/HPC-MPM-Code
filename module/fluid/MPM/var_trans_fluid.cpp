@@ -6,6 +6,8 @@
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
+
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <iomanip>
@@ -48,6 +50,9 @@ void StabilizedMPM::Particle2Node() {
     NodeVarComm(this->npres_old, 0);
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
+
+    VectorAssign(nodec, this->nphi);
+    for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
 
     this->CutOffSmallNodalVar(this->npres_old, this->nmass, {0});
     this->pbc.BCSetVal(0, this->npres_old);
@@ -109,8 +114,8 @@ void StabilizedMPM::Node2Particle() {
     }
 
     std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionParticleShifting();
-    // disp_corr = this->PairwiseRepulsiveParticleShifting();
+    // disp_corr = this->DeltaCorrectionPST();
+    disp_corr = this->PairwiseRepulsivePST();
 
     this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
 

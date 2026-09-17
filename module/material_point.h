@@ -107,8 +107,8 @@ class MaterialPoint {
      * @param weight    Nodal weight vector used as denominator (e.g. mass or volume).
      * @param offsets   Component offsets into the nodal vectors.
      */
-    void CutOffSmallNodalVar(std::vector<double> &result, const std::vector<double> &numerator,
-                             const std::vector<double> &weight, const std::vector<int> &offsets) {
+    void CutOffSmallNodalVar(std::vector<double> &result, const std::vector<double> &numerator, const std::vector<double> &weight,
+                             const std::vector<int> &offsets) {
 
         VectorAssign(numerator.size(), result);
         for (int n = 0; n < nodec; n++) {
@@ -126,8 +126,8 @@ class MaterialPoint {
      * @param weight  Nodal weight vector used as denominator.
      * @param offsets Component offsets into the nodal vector.
      */
-    void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight,
-                             const std::vector<int> &offsets) {
+    void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight, const std::vector<int> &offsets) {
+
         for (int n = 0; n < nodec; n++) {
             if (weight[n] > mtol) {
                 for (int offset : offsets) { var[n + offset] /= weight[n]; }
@@ -246,8 +246,7 @@ class MaterialPoint {
      * @param nenode Number of nodes in the element.
      * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
      */
-    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode,
-                         std::vector<std::array<double, 3>> &dsf) const noexcept;
+    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
     // ------------------------
     // ------------------------
 
@@ -357,9 +356,26 @@ class MaterialPoint {
     void BuildGaussianPoint();
 
     /**
-     * @brief Compute a unit normal vector for each surface particle.
+     * @brief Compute mass-weighted nodal unit normals.
      */
-    void CalPointUnitNormal();
+    void CalNodalUnitNormal();
+
+    /**
+     * @brief Interpolate nodal unit normals and volume fractions to material points.
+     * @param particle_normal Output interface-normal directions; normalization is left to the caller.
+     * @param surface_weight Output volume fraction interpolated at each particle position.
+     */
+    void CalPointUnitNormal(std::vector<std::array<double, 3>> &particle_normal, std::vector<double> &surface_weight);
+
+    /**
+     * @brief Project a particle-shifting displacement into the common interface and wall tangent space.
+     * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
+     * @param interface_normal Unit material-interface normal interpolated at the material point.
+     * @param surface_particle Whether the material-interface constraint is active at the material point.
+     * @param disp_corr Particle-shifting displacement replaced by its constrained value.
+     */
+    void ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &interface_normal,
+                                  bool surface_particle, std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute the incremental deformation gradient at a material point.
@@ -382,7 +398,7 @@ class MaterialPoint {
      *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
+    std::vector<std::array<double, 3>> DeltaCorrectionPST() const;
 
     /**
      * @brief Compute a pairwise repulsive particle-shifting correction.
@@ -394,7 +410,7 @@ class MaterialPoint {
      *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> PairwiseRepulsiveParticleShifting();
+    std::vector<std::array<double, 3>> PairwiseRepulsivePST();
     // ----------------------------------
 
     // ----- Control point variable -----
@@ -481,8 +497,7 @@ class MaterialPoint {
      * @param node_var  Nodal/control-point accumulator vector.
      */
     template <typename T>
-    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var,
-                        std::vector<T> &node_var) const noexcept;
+    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var, std::vector<T> &node_var) const noexcept;
 
     /**
      * @brief Map a per-particle scalar variable to control points with mass weighting.
@@ -531,8 +546,7 @@ void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vect
 
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                                   const std::vector<std::array<T, 3>> &point_var,
-                                   std::vector<T> &node_var) const noexcept {
+                                   const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) const noexcept {
     node_var[nid + nuc] += sfi * point_mass[pid] * point_var[pid][0];
     node_var[nid + nvc] += sfi * point_mass[pid] * point_var[pid][1];
     node_var[nid + nwc] += sfi * point_mass[pid] * point_var[pid][2];

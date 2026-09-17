@@ -195,7 +195,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
 
     // --- Particle shifting correction ---
     std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionParticleShifting();
+    disp_corr = this->DeltaCorrectionPST();
 
     // --- Particle coordinate / volume / stress update ---
     const bool has_shift = !disp_corr.empty();
@@ -222,8 +222,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
                                               this->delta_def_grad_bar);
             } else {
                 this->UpdateVolume(pid, this->det_def_grad[pid]);
-                this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad,
-                                              this->delta_def_grad);
+                this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad, this->delta_def_grad);
             }
 
             pid = this->idp2p[pid];

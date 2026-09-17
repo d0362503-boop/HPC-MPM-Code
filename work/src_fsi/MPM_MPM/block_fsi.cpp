@@ -17,7 +17,10 @@
 
 using namespace mpmmpmblockfsi;
 
-MPMMPMBlockFSI::~MPMMPMBlockFSI() { KSPDestroy(&this->schur_fluid_ksp_); }
+MPMMPMBlockFSI::~MPMMPMBlockFSI() {
+    KSPDestroy(&this->schur_fluid_ksp_);
+    KSPDestroy(&this->schur_solid_ksp_);
+}
 
 PetscErrorCode MPMMPMBlockFSI::ApplyExactSchurShell(Mat mat, Vec trial, Vec response) {
     void *context = nullptr;
@@ -116,8 +119,15 @@ PetscErrorCode MPMMPMBlockFSI::ApplyApproximateSchur(Vec trial, Vec response) {
     return PETSC_SUCCESS;
 }
 
-void MPMMPMBlockFSI::BuildSolidResponse() {
+void MPMMPMBlockFSI::BuildSolidResponse(int block_it) {
 
+    if (block_it > 0) {
+        KSPSetOperators(this->schur_solid_ksp_, this->solid_.SM_.petsc_mat, this->solid_.SM_.petsc_mat);
+        KSPSetReusePreconditioner(this->schur_solid_ksp_, PETSC_TRUE);
+        return;
+    }
+
+    KSPDestroy(&this->schur_solid_ksp_);
     KSPCreate(PETSC_COMM_WORLD, &this->schur_solid_ksp_);
     KSPSetOperators(this->schur_solid_ksp_, this->solid_.SM_.petsc_mat, this->solid_.SM_.petsc_mat);
     KSPSetType(this->schur_solid_ksp_, KSPFGMRES);
@@ -133,8 +143,7 @@ void MPMMPMBlockFSI::BuildSolidResponse() {
     return;
 }
 
-PetscInt MPMMPMBlockFSI::SolveResponse(Mat coupling, KSP solver, Vec trial_multiplier, Vec load, Vec solution,
-                                       Vec response) {
+PetscInt MPMMPMBlockFSI::SolveResponse(Mat coupling, KSP solver, Vec trial_multiplier, Vec load, Vec solution, Vec response) {
 
     MatMult(coupling, trial_multiplier, load);
 
@@ -152,8 +161,7 @@ PetscInt MPMMPMBlockFSI::SolveResponse(Mat coupling, KSP solver, Vec trial_multi
     return iterations;
 }
 
-void MPMMPMBlockFSI::AddMultiplierIncrement(Vec delta_multiplier,
-                                             const std::vector<PetscInt> &local_interface_ids) {
+void MPMMPMBlockFSI::AddMultiplierIncrement(Vec delta_multiplier, const std::vector<PetscInt> &local_interface_ids) {
     std::vector<PetscInt> multiplier_rows(3 * this->fsi_intf.ibc);
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
         for (int var = 0; var < 3; var++) { multiplier_rows[3 * n + var] = 3 * local_interface_ids[n] + var; }
@@ -186,8 +194,6 @@ void MPMMPMBlockFSI::AddMultiplierIncrement(Vec delta_multiplier,
 }
 
 void MPMMPMBlockFSI::DestroySchurWorkspace() {
-    KSPDestroy(&this->schur_solid_ksp_);
-
     MatDestroy(&this->schur_fluid_coupling_);
     MatDestroy(&this->schur_solid_coupling_);
 
@@ -201,15 +207,14 @@ void MPMMPMBlockFSI::DestroySchurWorkspace() {
 }
 
 void MPMMPMBlockFSI::BuildCouplingOperator(CrsMat &mat, const std::vector<double> &weights,
-                                           const std::vector<PetscInt> &local_interface_ids,
-                                           PetscInt local_multiplier_dofs, PetscInt global_multiplier_dofs,
-                                           Mat &coupling, Vec &load, Vec &solution) {
+                                           const std::vector<PetscInt> &local_interface_ids, PetscInt local_multiplier_dofs,
+                                           PetscInt global_multiplier_dofs, Mat &coupling, Vec &load, Vec &solution) {
 
     PetscInt local_field_dofs, global_field_dofs;
     VecGetLocalSize(mat.petsc_b, &local_field_dofs);
     VecGetSize(mat.petsc_b, &global_field_dofs);
-    MatCreateAIJ(PETSC_COMM_WORLD, local_field_dofs, local_multiplier_dofs, global_field_dofs, global_multiplier_dofs,
-                 1, nullptr, 1, nullptr, &coupling);
+    MatCreateAIJ(PETSC_COMM_WORLD, local_field_dofs, local_multiplier_dofs, global_field_dofs, global_multiplier_dofs, 1, nullptr,
+                 1, nullptr, &coupling);
 
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
         const int nid = this->fsi_intf.nbc[n];
@@ -232,14 +237,13 @@ void MPMMPMBlockFSI::BuildCouplingOperator(CrsMat &mat, const std::vector<double
 
 PetscErrorCode MPMMPMBlockFSI::ApplyExactSchur(Vec trial_multiplier, Vec response) {
 
-    this->schur_fluid_iterations_ +=
-        this->SolveResponse(this->schur_fluid_coupling_, this->schur_fluid_ksp_, trial_multiplier,
-                            this->schur_fluid_rhs_, this->schur_fluid_solution_, response);
+    this->schur_fluid_iterations_ += this->SolveResponse(this->schur_fluid_coupling_, this->schur_fluid_ksp_, trial_multiplier,
+                                                         this->schur_fluid_rhs_, this->schur_fluid_solution_, response);
     VecScale(response, this->fluid_.nb_para[0]);
 
     this->schur_solid_iterations_ +=
-        this->SolveResponse(this->schur_solid_coupling_, this->schur_solid_ksp_, trial_multiplier,
-                            this->schur_solid_rhs_, this->schur_solid_solution_, this->schur_solid_response_);
+        this->SolveResponse(this->schur_solid_coupling_, this->schur_solid_ksp_, trial_multiplier, this->schur_solid_rhs_,
+                            this->schur_solid_solution_, this->schur_solid_response_);
     VecAXPY(response, this->solid_.nb_para[0], this->schur_solid_response_);
 
     return PETSC_SUCCESS;
@@ -248,13 +252,13 @@ PetscErrorCode MPMMPMBlockFSI::ApplyExactSchur(Vec trial_multiplier, Vec respons
 void MPMMPMBlockFSI::DetectFSIInterface() {
 
     VectorAssign(nodec, this->fsi_intf.nbc);
-    VectorAssign(nodec, this->solid_.nphi);
-    VectorAssign(nodec, this->fluid_.nphi);
+    // VectorAssign(nodec, this->solid_.nphi);
+    // VectorAssign(nodec, this->fluid_.nphi);
 
-    for (int n = 0; n < nodec; n++) {
-        this->solid_.nphi[n] = std::clamp(this->solid_.nvof[n] / nvol[n], 0.0e0, 1.0e0);
-        this->fluid_.nphi[n] = std::clamp(this->fluid_.nvof[n] / nvol[n], 0.0e0, 1.0e0);
-    }
+    // for (int n = 0; n < nodec; n++) {
+    //     this->solid_.nphi[n] = std::clamp(this->solid_.nvof[n] / nvol[n], 0.0e0, 1.0e0);
+    //     this->fluid_.nphi[n] = std::clamp(this->fluid_.nvof[n] / nvol[n], 0.0e0, 1.0e0);
+    // }
 
     this->LumpedLagrangeMultiplier();
     this->fluid_.NS_.BuildActiveRowMask();
@@ -388,8 +392,8 @@ void MPMMPMBlockFSI::SolveFSISystem() {
     return;
 }
 
-void MPMMPMBlockFSI::CalFSIResidual(const std::vector<double> &fluid_velocity,
-                                    const std::vector<double> &solid_velocity, double &rtr_ref, double &rtr_dof) {
+void MPMMPMBlockFSI::CalFSIResidual(const std::vector<double> &fluid_velocity, const std::vector<double> &solid_velocity,
+                                    double &rtr_ref, double &rtr_dof) {
 
     double norm = 0.0e0, intf_num = 0.0e0;
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
@@ -418,8 +422,7 @@ void MPMMPMBlockFSI::CalFSIResidual(const std::vector<double> &fluid_velocity,
 void MPMMPMBlockFSI::BuildLumpedSchurPreconditioner(const std::vector<PetscInt> &interface_nodes, PetscInt local_dofs,
                                                     PetscInt global_dofs, Mat &preconditioner_mat) {
 
-    MatCreateAIJ(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, 3, nullptr, 3, nullptr,
-                 &preconditioner_mat);
+    MatCreateAIJ(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, 3, nullptr, 3, nullptr, &preconditioner_mat);
     MatSetBlockSize(preconditioner_mat, 3);
     MatSetOption(preconditioner_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
@@ -451,8 +454,8 @@ void MPMMPMBlockFSI::BuildLumpedSchurPreconditioner(const std::vector<PetscInt> 
             gf = std::max(gf, PetscRealPart(fluid_weight));
             gs = std::max(gs, PetscRealPart(solid_weight));
             for (int j = 0; j < 3; j++) {
-                fluid_velocity_block[i][j] = PetscRealPart(
-                    fluid_block[4 * i + j] - fluid_block[4 * i + 3] * fluid_block[12 + j] / fluid_block[15]);
+                fluid_velocity_block[i][j] =
+                    PetscRealPart(fluid_block[4 * i + j] - fluid_block[4 * i + 3] * fluid_block[12 + j] / fluid_block[15]);
                 solid_velocity_block[i][j] = PetscRealPart(solid_block[3 * i + j]);
             }
         }
@@ -504,9 +507,9 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     const PetscInt global_dofs = 3 * interface_count;
     std::vector<PetscInt> local_interface_ids(this->fsi_intf.ibc);
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
-        local_interface_ids[n] = static_cast<PetscInt>(
-            std::lower_bound(interface_nodes.begin(), interface_nodes.end(), local_global_nodes[n]) -
-            interface_nodes.begin());
+        local_interface_ids[n] =
+            static_cast<PetscInt>(std::lower_bound(interface_nodes.begin(), interface_nodes.end(), local_global_nodes[n]) -
+                                  interface_nodes.begin());
     }
 
     const PetscInt local_interface_count = interface_count / nprocs + (myrank < interface_count % nprocs ? 1 : 0);
@@ -551,10 +554,9 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
 
     Mat schur_mat = nullptr;
     MatCreateShell(PETSC_COMM_WORLD, local_dofs, local_dofs, global_dofs, global_dofs, this, &schur_mat);
-    MatShellSetOperation(schur_mat, MATOP_MULT,
-                         reinterpret_cast<void (*)(void)>(&MPMMPMBlockFSI::ApplyExactSchurShell));
+    MatShellSetOperation(schur_mat, MATOP_MULT, reinterpret_cast<void (*)(void)>(&MPMMPMBlockFSI::ApplyExactSchurShell));
 
-    this->BuildSolidResponse();
+    this->BuildSolidResponse(block_it);
     this->BuildFluidResponse(block_it);
 
     KSP schur_ksp = nullptr;
@@ -600,9 +602,8 @@ void MPMMPMBlockFSI::UpdateFSIMultiplier(int block_it, const std::vector<double>
     if (reason > 0) { this->AddMultiplierIncrement(delta_multiplier, local_interface_ids); }
 
     if (myrank == 0) {
-        std::cout << "Schur_FGMRES_blockPC:" << std::setw(8) << istep << std::setw(6) << block_it << std::setw(12)
-                  << this->schur_fluid_iterations_ << std::setw(12) << this->schur_solid_iterations_ << std::setw(15)
-                  << std::scientific << residual_norm << "\n";
+        std::cout << "Schur_FGMRES_blockPC:" << std::setw(6) << block_it << std::setw(12) << this->schur_fluid_iterations_
+                  << std::setw(12) << this->schur_solid_iterations_ << std::setw(15) << std::scientific << residual_norm << "\n";
     }
 
     KSPDestroy(&schur_ksp);
