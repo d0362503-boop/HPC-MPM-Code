@@ -87,7 +87,7 @@ void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
 
         PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_coarsen_type").c_str(), "hmis");
         PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_interp_type").c_str(), "ext+i");
-        PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_relax_type_all").c_str(), "SOR/Jacobi");
+        PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_relax_type_all").c_str(), "l1scaled-SOR/Jacobi");
         PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_strong_threshold").c_str(), "0.7");
         PCSetFromOptions(response_pc);
     }
