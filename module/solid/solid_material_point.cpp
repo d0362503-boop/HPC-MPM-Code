@@ -124,6 +124,7 @@ void SolidMaterialPointBase::DetermineRigidBC() {
     std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(nodec, this->nvof);
+    VectorAssign(nodec * 3, this->nrigid_normal);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
@@ -133,7 +134,13 @@ void SolidMaterialPointBase::DetermineRigidBC() {
                 for (int ni = 0; ni < nenode; ni++) {
                     int nid = ncm[ni];
                     double sfi = sf[ni];
+                    double dsfi1 = dsf[ni][0];
+                    double dsfi2 = dsf[ni][1];
+                    double dsfi3 = dsf[ni][2];
                     this->nvof[nid] += sfi * this->vol[pid];
+                    this->nrigid_normal[nid + nuc] += dsfi1 * this->mass[pid];
+                    this->nrigid_normal[nid + nvc] += dsfi2 * this->mass[pid];
+                    this->nrigid_normal[nid + nwc] += dsfi3 * this->mass[pid];
                 }
             }
             pid = this->idp2p[pid];
@@ -141,6 +148,7 @@ void SolidMaterialPointBase::DetermineRigidBC() {
     }
 
     NodeVarComm(this->nvof, 0);
+    NodeVarComm(this->nrigid_normal, {nuc, nvc, nwc});
 
     VectorAssign(nodec, this->rigid_bc.nbc);
     VectorAssign(nodec, this->rigid_bc.fbc);
@@ -149,6 +157,18 @@ void SolidMaterialPointBase::DetermineRigidBC() {
             this->rigid_bc.nbc[this->rigid_bc.ibc] = n;
             this->rigid_bc.fbc[this->rigid_bc.ibc] = 0.0e0;
             this->rigid_bc.ibc++;
+        }
+        const double norm = std::sqrt(std::pow(this->nrigid_normal[n + nuc], 2) + //
+                                      std::pow(this->nrigid_normal[n + nvc], 2) + //
+                                      std::pow(this->nrigid_normal[n + nwc], 2));
+        if (norm > mtol) {
+            this->nrigid_normal[n + nuc] /= norm;
+            this->nrigid_normal[n + nvc] /= norm;
+            this->nrigid_normal[n + nwc] /= norm;
+        } else {
+            this->nrigid_normal[n + nuc] = 0.0e0;
+            this->nrigid_normal[n + nvc] = 0.0e0;
+            this->nrigid_normal[n + nwc] = 0.0e0;
         }
     }
 

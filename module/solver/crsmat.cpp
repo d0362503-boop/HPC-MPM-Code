@@ -120,7 +120,7 @@ void CrsMat::BuildActiveRowMask() {
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
 
-    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-5;
+    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-4;
 
     PetscReal local_mass_sum = 0.0e0;
     PetscInt local_positive_mass_count = 0;
@@ -330,9 +330,7 @@ void CrsMat::BuildPetscLocalMaps(int ndof) {
         const int natural_id = this->petsc_local_to_natural[pos];
         const PetscInt global_node = this->natural_block_gids[natural_id];
         this->petsc_local_block_gids[pos] = global_node;
-        for (int var = 0; var < ndof; ++var) {
-            this->petsc_local_var_gids[pos + var * nodec] = global_node * ndof + var;
-        }
+        for (int var = 0; var < ndof; ++var) { this->petsc_local_var_gids[pos + var * nodec] = global_node * ndof + var; }
     }
 
     return;
@@ -407,6 +405,13 @@ void CrsMat::BuildPetscMat(int ndof) {
     // points (MPM) or changing active sets, preventing PETSc malloc errors.
     MatSetOption(this->petsc_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
+    // Preserve diagonal storage slots.
+    PetscInt row_begin, row_end;
+    MatGetOwnershipRange(this->petsc_mat, &row_begin, &row_end);
+    for (PetscInt row = row_begin; row < row_end; row++) { MatSetValue(this->petsc_mat, row, row, 0.0, INSERT_VALUES); }
+    MatAssemblyBegin(this->petsc_mat, MAT_FLUSH_ASSEMBLY);
+    MatAssemblyEnd(this->petsc_mat, MAT_FLUSH_ASSEMBLY);
+
     // Create distributed RHS and solution vectors matching the matrix layout.
     VecCreateMPI(MPI_COMM_WORLD, local_n, PETSC_DETERMINE, &this->petsc_b);
     VecCreateMPI(MPI_COMM_WORLD, local_n, PETSC_DETERMINE, &this->petsc_x);
@@ -477,51 +482,18 @@ void CrsMat::ConfigurePreconditioner(PC pc) {
         PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
         PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
         PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
+    } else if (this->ndof == 3) {
+        PCSetType(pc, PCHYPRE);
+        PCHYPRESetType(pc, "boomeramg");
+        PCSetOptionsPrefix(pc, "solid_field_");
+        PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_type", "Euclid");
+        PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_num_levels", "1");
+        PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_eu_level", "1");
+        PCSetFromOptions(pc);
     } else {
         PCSetType(pc, PCHYPRE);
         PCHYPRESetType(pc, "boomeramg");
     }
-
-    return;
-}
-
-void CrsMat::UpdateShiftedSchurPreconditioner(PC pc) {
-
-    constexpr PetscReal kMpmSchurRegularization = 1.0e-4;
-
-    PCSetUp(pc);
-
-    PetscInt split_count = 0;
-    KSP *sub_ksp = nullptr;
-    PCFieldSplitGetSubKSP(pc, &split_count, &sub_ksp);
-
-    Mat pressure_operator = nullptr;
-    Mat pressure_pmat = nullptr;
-    KSPGetOperators(sub_ksp[1], &pressure_operator, &pressure_pmat);
-
-    PetscScalar trace = 0.0e0;
-    PetscInt pressure_rows = 0;
-    MatGetTrace(pressure_pmat, &trace);
-    MatGetSize(pressure_pmat, &pressure_rows, nullptr);
-
-    int local_active = 0;
-    for (int i = 0; i < this->local_node; ++i) { local_active += this->active_row_mask[this->owned_natural_ids[i]]; }
-    int global_active = 0;
-    MPI_Allreduce(&local_active, &global_active, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-    const PetscScalar active_trace = trace - static_cast<PetscScalar>(pressure_rows - global_active);
-    const PetscReal diagonal_shift =
-        global_active > 0
-            ? kMpmSchurRegularization * std::abs(PetscRealPart(active_trace)) / static_cast<PetscReal>(global_active)
-            : 0.0e0;
-    if (diagonal_shift > 0.0e0) { MatShift(pressure_pmat, diagonal_shift); }
-
-    PC pressure_pc;
-    KSPGetPC(sub_ksp[1], &pressure_pc);
-    PCSetReusePreconditioner(pressure_pc, PETSC_FALSE);
-    KSPSetOperators(sub_ksp[1], pressure_operator, pressure_pmat);
-    KSPSetUp(sub_ksp[1]);
-    PetscFree(sub_ksp);
 
     return;
 }
@@ -532,8 +504,7 @@ void CrsMat::BuildPetscBCList() {
     if (this->owner_) { this->owner_->BuildPetscBCList(*this); }
 
     std::sort(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end());
-    this->petsc_bc_gids.erase(std::unique(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end()),
-                              this->petsc_bc_gids.end());
+    this->petsc_bc_gids.erase(std::unique(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end()), this->petsc_bc_gids.end());
 
     return;
 }
@@ -671,8 +642,14 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     }
 
     if (!this->petsc_bc_gids.empty()) {
-        MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()),
-                           this->petsc_bc_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);
+        MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()), this->petsc_bc_gids.data(), 1.0e0,
+                           this->petsc_x, this->petsc_b);
+    }
+
+    Mat solve_mat = this->petsc_mat;
+    if (!this->FEM_flag) {
+        MatDuplicate(this->petsc_mat, MAT_COPY_VALUES, &solve_mat);
+        MatEliminateZeros(solve_mat, PETSC_TRUE);
     }
 
     KSPSetInitialGuessNonzero(this->ksp, PETSC_TRUE);
@@ -699,22 +676,20 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     // externally resetting the split itself.
     if (need_rebuild) {
         if (!this->use_schur_fieldsplit) { PCReset(pc); }
-        KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
+        KSPSetOperators(this->ksp, solve_mat, solve_mat);
         if (!this->use_schur_fieldsplit) { this->ConfigurePreconditioner(pc); }
         PCSetReusePreconditioner(pc, PETSC_FALSE);
     } else {
+        KSPSetOperators(this->ksp, solve_mat, solve_mat);
         PCSetReusePreconditioner(pc, PETSC_TRUE);
     }
-
-    // if (this->use_schur_fieldsplit && !this->FEM_flag && need_rebuild) {
-    //     PCSetReusePreconditioner(pc, PETSC_FALSE);
-    //     this->UpdateShiftedSchurPreconditioner(pc);
-    // }
 
     KSPSolve(this->ksp, this->petsc_b, this->petsc_x);
 
     PetscInt its;
     KSPGetIterationNumber(this->ksp, &its);
+
+    if (!this->FEM_flag) { MatDestroy(&solve_mat); }
 
     KSPConvergedReason reason;
     KSPGetConvergedReason(this->ksp, &reason);
@@ -734,9 +709,7 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
 
     // If KSP iterations grew by more than 2x compared with the previous step,
     // force a rebuild on the next step.  This applies to both fluid and solid.
-    if (this->prev_ksp_its_ >= 0 && static_cast<double>(its) > this->prev_ksp_its_ * 2.0) {
-        this->force_rebuild_next_ = true;
-    }
+    if (this->prev_ksp_its_ >= 0 && static_cast<double>(its) > this->prev_ksp_its_ * 2.0) { this->force_rebuild_next_ = true; }
     this->prev_ksp_its_ = static_cast<int>(its);
 
     return static_cast<int>(its);

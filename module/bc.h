@@ -50,6 +50,13 @@ class BoundaryCondition {
     void BCSetDt(int nn, std::vector<double> &variable);
 
     /**
+     * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.
+     * @param nn       Offset into `variable` for the component being constrained.
+     * @param variable Vector to be modified in-place.
+     */
+    void BCSetFreeSlip(std::vector<double> &variable, const std::vector<double> &normal);
+
+    /**
      * @brief Cache this rank's control-point BCs as a global MPI-wide BC list.
      *
      * Local control-point IDs are converted to global IDs and gathered from all

@@ -32,6 +32,7 @@ class StabilizedFEM : public MaterialPoint {
         this->ode_order = 1;
         this->NS_.ndof = 4;
         this->PF_.ndof = 1;
+        this->NS_.use_schur_fieldsplit = true;
         this->NS_.FEM_flag = true;
         this->PF_.FEM_flag = true;
         this->NS_.use_petsc = true;

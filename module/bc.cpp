@@ -84,6 +84,34 @@ void BoundaryCondition::BCSetDt(int nn, std::vector<double> &variable) {
     return;
 }
 
+void BoundaryCondition::BCSetFreeSlip(std::vector<double> &variable, //
+                                      const std::vector<double> &normal) {
+
+    if (this->ibc != 0) {
+        for (int i = 0; i < this->ibc; i++) {
+            const int n1 = this->nbc[i] + nuc;
+            const int n2 = this->nbc[i] + nvc;
+            const int n3 = this->nbc[i] + nwc;
+            const double nx = normal[n1];
+            const double ny = normal[n2];
+            const double nz = normal[n3];
+            const double norm = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (norm > mtol) {
+                const double qn = variable[n1] * nx + variable[n2] * ny + variable[n3] * nz;
+                variable[n1] -= qn * nx;
+                variable[n2] -= qn * ny;
+                variable[n3] -= qn * nz;
+            } else {
+                variable[n1] = 0.0e0;
+                variable[n2] = 0.0e0;
+                variable[n3] = 0.0e0;
+            }
+        }
+    }
+
+    return;
+}
+
 void BoundaryCondition::CaptureGlobalControlPointBC() {
 
     std::vector<int> local_global_ids(this->ibc);
@@ -212,8 +240,7 @@ void BoundaryCondition::CacheGlobalEntries(const std::vector<int> &local_global_
         }
         all_values.resize(total_count);
         MPI_Allgatherv(this->fbc.data(), local_count, MPIDatatypeCheck<double>::GetType(), //
-                       all_values.data(), counts.data(), offsets.data(), MPIDatatypeCheck<double>::GetType(),
-                       MPI_COMM_WORLD);
+                       all_values.data(), counts.data(), offsets.data(), MPIDatatypeCheck<double>::GetType(), MPI_COMM_WORLD);
     }
 
     this->global_nbc.clear();

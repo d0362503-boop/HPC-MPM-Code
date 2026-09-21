@@ -256,12 +256,6 @@ class CrsMat {
     void ConfigurePreconditioner(PC pc);
 
     /**
-     * @brief Apply a diagonal shift to PETSc's SELFP pressure preconditioner.
-     * @param pc Configured velocity-pressure field-split preconditioner.
-     */
-    void UpdateShiftedSchurPreconditioner(PC pc);
-
-    /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
      * @param ndof Degrees of freedom per node.
      */

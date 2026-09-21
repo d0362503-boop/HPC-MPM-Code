@@ -41,8 +41,11 @@ PetscErrorCode MPMMPMBlockFSI::SolveApproximateSchur(PC pc, Vec load, Vec soluti
 }
 
 void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
+    MatDuplicate(this->fluid_.NS_.petsc_mat, MAT_COPY_VALUES, &this->schur_fluid_response_matrix_);
+    MatEliminateZeros(this->schur_fluid_response_matrix_, PETSC_TRUE);
+
     if (block_it > 0) {
-        KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
+        KSPSetOperators(this->schur_fluid_ksp_, this->schur_fluid_response_matrix_, this->schur_fluid_response_matrix_);
         KSPSetReusePreconditioner(this->schur_fluid_ksp_, PETSC_TRUE);
         return;
     }
@@ -53,7 +56,7 @@ void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
     KSPSetType(this->schur_fluid_ksp_, KSPFGMRES);
     KSPGMRESSetRestart(this->schur_fluid_ksp_, 60);
     KSPSetTolerances(this->schur_fluid_ksp_, 1.0e-8, 1.0e-16, 1.0e6, 1000);
-    KSPSetOperators(this->schur_fluid_ksp_, this->fluid_.NS_.petsc_mat, this->fluid_.NS_.petsc_mat);
+    KSPSetOperators(this->schur_fluid_ksp_, this->schur_fluid_response_matrix_, this->schur_fluid_response_matrix_);
 
     PC field_split_pc;
     KSPGetPC(this->schur_fluid_ksp_, &field_split_pc);
@@ -89,6 +92,11 @@ void MPMMPMBlockFSI::BuildFluidResponse(int block_it) {
         PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_interp_type").c_str(), "ext+i");
         PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_relax_type_all").c_str(), "l1scaled-SOR/Jacobi");
         PetscOptionsSetValue(nullptr, ("-" + prefix + "pc_hypre_boomeramg_strong_threshold").c_str(), "0.7");
+        if (i == 1) {
+            PetscOptionsSetValue(nullptr, "-fsi_pressure_pc_hypre_boomeramg_smooth_type", "ILU");
+            PetscOptionsSetValue(nullptr, "-fsi_pressure_pc_hypre_boomeramg_smooth_num_levels", "1");
+            PetscOptionsSetValue(nullptr, "-fsi_pressure_pc_hypre_boomeramg_ilu_level", "0");
+        }
         PCSetFromOptions(response_pc);
     }
 
@@ -103,7 +111,7 @@ PetscErrorCode MPMMPMBlockFSI::ApplyApproximateSchur(Vec trial, Vec response) {
     MatMult(this->schur_fluid_coupling_, trial, this->schur_fluid_rhs_);
     PCApply(fluid_pc, this->schur_fluid_rhs_, this->schur_fluid_solution_);
     for (int sweep = 0; sweep < 3; sweep++) {
-        MatMult(this->fluid_.NS_.petsc_mat, this->schur_fluid_solution_, this->schur_fluid_defect_);
+        MatMult(this->schur_fluid_response_matrix_, this->schur_fluid_solution_, this->schur_fluid_defect_);
         VecAYPX(this->schur_fluid_defect_, -1.0, this->schur_fluid_rhs_);
         PCApply(fluid_pc, this->schur_fluid_defect_, this->schur_fluid_correction_);
         VecAXPY(this->schur_fluid_solution_, 1.0, this->schur_fluid_correction_);
@@ -121,15 +129,18 @@ PetscErrorCode MPMMPMBlockFSI::ApplyApproximateSchur(Vec trial, Vec response) {
 
 void MPMMPMBlockFSI::BuildSolidResponse(int block_it) {
 
+    MatDuplicate(this->solid_.SM_.petsc_mat, MAT_COPY_VALUES, &this->schur_solid_response_matrix_);
+    MatEliminateZeros(this->schur_solid_response_matrix_, PETSC_TRUE);
+
     if (block_it > 0) {
-        KSPSetOperators(this->schur_solid_ksp_, this->solid_.SM_.petsc_mat, this->solid_.SM_.petsc_mat);
+        KSPSetOperators(this->schur_solid_ksp_, this->schur_solid_response_matrix_, this->schur_solid_response_matrix_);
         KSPSetReusePreconditioner(this->schur_solid_ksp_, PETSC_TRUE);
         return;
     }
 
     KSPDestroy(&this->schur_solid_ksp_);
     KSPCreate(PETSC_COMM_WORLD, &this->schur_solid_ksp_);
-    KSPSetOperators(this->schur_solid_ksp_, this->solid_.SM_.petsc_mat, this->solid_.SM_.petsc_mat);
+    KSPSetOperators(this->schur_solid_ksp_, this->schur_solid_response_matrix_, this->schur_solid_response_matrix_);
     KSPSetType(this->schur_solid_ksp_, KSPFGMRES);
     KSPSetOptionsPrefix(this->schur_solid_ksp_, "fsi_solid_response_");
     KSPSetTolerances(this->schur_solid_ksp_, 1.0e-8, 1.0e-16, 1.0e6, 1000);
@@ -138,6 +149,12 @@ void MPMMPMBlockFSI::BuildSolidResponse(int block_it) {
     KSPGetPC(this->schur_solid_ksp_, &solid_pc);
     PCSetType(solid_pc, PCHYPRE);
     PCHYPRESetType(solid_pc, "boomeramg");
+    PCSetOptionsPrefix(solid_pc, "fsi_solid_response_");
+    PetscOptionsSetValue(nullptr, "-fsi_solid_response_pc_hypre_boomeramg_smooth_type", "Euclid");
+    PetscOptionsSetValue(nullptr, "-fsi_solid_response_pc_hypre_boomeramg_smooth_num_levels", "1");
+    PetscOptionsSetValue(nullptr, "-fsi_solid_response_pc_hypre_boomeramg_eu_level", "1");
+    PCSetFromOptions(solid_pc);
+
     KSPSetUp(this->schur_solid_ksp_);
 
     return;
@@ -194,6 +211,8 @@ void MPMMPMBlockFSI::AddMultiplierIncrement(Vec delta_multiplier, const std::vec
 }
 
 void MPMMPMBlockFSI::DestroySchurWorkspace() {
+    MatDestroy(&this->schur_fluid_response_matrix_);
+    MatDestroy(&this->schur_solid_response_matrix_);
     MatDestroy(&this->schur_fluid_coupling_);
     MatDestroy(&this->schur_solid_coupling_);
 
@@ -252,13 +271,6 @@ PetscErrorCode MPMMPMBlockFSI::ApplyExactSchur(Vec trial_multiplier, Vec respons
 void MPMMPMBlockFSI::DetectFSIInterface() {
 
     VectorAssign(nodec, this->fsi_intf.nbc);
-    // VectorAssign(nodec, this->solid_.nphi);
-    // VectorAssign(nodec, this->fluid_.nphi);
-
-    // for (int n = 0; n < nodec; n++) {
-    //     this->solid_.nphi[n] = std::clamp(this->solid_.nvof[n] / nvol[n], 0.0e0, 1.0e0);
-    //     this->fluid_.nphi[n] = std::clamp(this->fluid_.nvof[n] / nvol[n], 0.0e0, 1.0e0);
-    // }
 
     this->LumpedLagrangeMultiplier();
     this->fluid_.NS_.BuildActiveRowMask();

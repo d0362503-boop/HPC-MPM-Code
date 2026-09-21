@@ -415,7 +415,7 @@ class MaterialPoint {
 
     // ----- Control point variable -----
     std::vector<double> nmass, nvel_old, nvel_older, nvof, nmome, nvel, //
-        ndispl, npres, npres_old, nphi, nnormal,                        //
+        ndispl, npres, npres_old, nphi, nnormal, nrigid_normal,         //
         naccel, nforce, nvel_vtk, npres_vtk, nphi_vtk;
 
     // --- Mapping & Interpolation scheme ---
