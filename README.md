@@ -51,7 +51,7 @@ Key files:
 - `CMakeLists.txt` — root CMake entry
 - `cmake/options.cmake` — build options
 - `AGENTS.md` — engineering rules and pitfalls
-- `MPM_main.cpp` — solver entry point; dispatches to the selected driver
+- `work/**/main.cpp` — each solver's executable entry point; CMake selects one
 
 ## Dependencies
 
@@ -92,11 +92,8 @@ The active driver is selected by uncommenting **exactly one** `add_subdirectory(
 add_subdirectory(src_fsi)
 ```
 
-You must also keep `MPM_main.cpp` consistent. The checked-in configuration selects MPM--FEM FSI:
-
-```cpp
-ImmersedMPMFEMBlockFSI();
-```
+The selected solver's `main.cpp` supplies `main()` directly; there is no separate dispatch entry.
+Initialization and finalization are shared through `InitializeSimulation()` and `FinalizeSimulation()` in `module/dataset.h`.
 
 For FSI, `work/src_fsi/CMakeLists.txt` selects either `MPM_FEM` or `MPM_MPM`.
 `work/src_solid/CMakeLists.txt` similarly selects `explicit` or `implicit`.

@@ -12,58 +12,64 @@
 
 using namespace implicitmpm;
 
-void implicitmpm::SolidImplicitULMPM() {
+int main(int argc, char *argv[]) {
 
-    ImplicitSolidMPM sp;
+    const double start_time = InitializeSimulation(argc, argv);
 
-    sp.DataInput();
+    {
+        ImplicitSolidMPM sp;
 
-    if (rstflag == 1 || rstflag == 3) sp.RestartInput();
+        sp.DataInput();
 
-    BuildMesh();
+        if (rstflag == 1 || rstflag == 3) sp.RestartInput();
 
-    BuildControlPoint();
+        BuildMesh();
 
-    sp.SM_.BuildCrsMat(9);
+        BuildControlPoint();
 
-    ComputeNodalVol();
+        sp.SM_.BuildCrsMat(9);
 
-    istep = ista - 1;
-    int iview = istep / iout;
-    real_time = dt * double(istep);
+        ComputeNodalVol();
 
-    sp.OutputPointDataVTKHDF(iview, istep);
-
-    for (istep = ista; istep <= iend; istep++) {
-
-        // -----------------------------------------------
+        istep = ista - 1;
+        int iview = istep / iout;
         real_time = dt * double(istep);
-        if (istep <= nlstep) {
-            facl = dlstep * double(istep);
-        } else {
-            facl = 1.0e0;
+
+        sp.OutputPointDataVTKHDF(iview, istep);
+
+        for (istep = ista; istep <= iend; istep++) {
+
+            // -----------------------------------------------
+            real_time = dt * double(istep);
+            if (istep <= nlstep) {
+                facl = dlstep * double(istep);
+            } else {
+                facl = 1.0e0;
+            }
+            // -----------------------------------------------
+
+            sp.MeshPointLinklist();
+
+            sp.Particle2Node();
+
+            sp.SolveSolid();
+
+            sp.Node2Particle();
+
+            sp.MoveParticle();
+
+            if (istep / iout * iout == istep) {
+                iview++;
+                sp.OutputPointDataVTKHDF(iview, istep);
+            }
+
+            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
         }
-        // -----------------------------------------------
 
-        sp.MeshPointLinklist();
-
-        sp.Particle2Node();
-
-        sp.SolveSolid();
-
-        sp.Node2Particle();
-
-        sp.MoveParticle();
-
-        if (istep / iout * iout == istep) {
-            iview++;
-            sp.OutputPointDataVTKHDF(iview, istep);
-        }
-
-        if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+        if (rstflag == 2 || rstflag == 3) sp.RestartOutput();
     }
 
-    if (rstflag == 2 || rstflag == 3) sp.RestartOutput();
+    FinalizeSimulation(start_time);
 
-    return;
+    return 0;
 }

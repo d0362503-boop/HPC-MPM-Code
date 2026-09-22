@@ -136,9 +136,4 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     ~MPMMPMMonolithicFSI();
 };
 
-/**
- * @brief Entry point of the MPM--MPM block-coupling FSI driver.
- */
-void MonolithicFSI();
-
 } // namespace mpm_mpm_monolithic_fsi

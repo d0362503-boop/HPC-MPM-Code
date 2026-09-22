@@ -195,9 +195,4 @@ class StabilizedMPM : public MaterialPoint {
     void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 };
 
-/**
- * @brief Driver entry point of the stabilized mixed MPM fluid solver.
- */
-void StabilizedMixedMPM();
-
 } // namespace stabilizedmpm

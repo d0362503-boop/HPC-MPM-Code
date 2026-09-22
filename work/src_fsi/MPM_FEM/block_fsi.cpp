@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "module/bc.h"
-#include "module/contact.h"
 #include "module/dataset.h"
 #include "module/fluid/FEM/stabilized_fem.h"
 #include "module/map_and_interpolate.h"

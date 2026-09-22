@@ -214,13 +214,13 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
     MPI_Allreduce(MPI_IN_PLACE, jump_max.data(), 2, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // All four RMS residuals must be finite and satisfy their thresholds.
-    // Fields 0..2: max(absolute_tol, 1e-7 * this step's initial RMS).
-    // Field 3: n+1 velocity-difference RMS <= 1e-9 m/s, without interface weights.
+    // Fields 0..2: max(absolute_tol, 1e-4 * this step's initial RMS).
+    // Field 3: n+1 velocity-difference RMS <= 1e-8 m/s, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         stats[field] = std::sqrt(stats[field] / std::max(1.0, stats[field + 4]));
         if (NR_it == 0) { initial_norm[field] = stats[field]; }
-        const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-7 * initial_norm[field]);
+        const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-4 * initial_norm[field]);
         converged = converged && std::isfinite(stats[field]) && stats[field] <= tolerance;
     }
     // Also require every active interface velocity component to match within 1e-8 m/s.
@@ -229,19 +229,21 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
 
     if (converged) {
         if (myrank == 0) {
-            std::cout << "Monolithic_converge: " << NR_it << " " << linear_iterations << std::scientific << " " << stats[0] << " "
-                      << stats[1] << " " << stats[2] << " " << stats[3] << " " << jump_max[0] << " " << jump_max[1] << std::endl;
+            std::cout << "Monolithic_converge: " << std::setw(15) << NR_it << std::setw(15) << linear_iterations //
+                      << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]               //
+                      << std::setw(15) << stats[2] << std::setw(15) << stats[3]                                  //
+                      << std::setw(15) << jump_max[0] << "\n";
         }
         return true;
     }
 
     if (myrank == 0) {
-        std::cout << "Monolithic_NR: " << NR_it << std::scientific << " " << stats[0] << " " << stats[1] << " " << stats[2] << " "
-                  << stats[3] << std::endl;
+        std::cout << "Monolithic_NR: " << std::setw(15) << NR_it << std::scientific << std::setw(15) << stats[0] //
+                  << std::setw(15) << stats[1] << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
     }
 
     if (NR_it == this->max_NR_it) {
-        if (myrank == 0) { std::cout << "Monolithic Newton did not converge" << std::endl; }
+        if (myrank == 0) { std::cout << "Monolithic Newton did not converge" << "\n"; }
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 

@@ -3,7 +3,6 @@
 #include <mpi.h>
 
 #include "module/bc.h"
-#include "module/contact.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
@@ -19,8 +18,8 @@
 #include <vector>
 
 void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
-                            std::vector<double> &var_older, std::vector<double> &res_old,
-                            std::vector<double> &res_older, BoundaryCondition &intf_bc) {
+                            std::vector<double> &var_older, std::vector<double> &res_old, std::vector<double> &res_older,
+                            BoundaryCondition &intf_bc) {
 
     int num = intf_bc.ibc;
     std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
@@ -139,8 +138,8 @@ void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const s
     return;
 }
 
-void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var,
-                       std::vector<double> &res_old, BoundaryCondition &intf_bc) {
+void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var, std::vector<double> &res_old,
+                       BoundaryCondition &intf_bc) {
 
     const double relax_coef_min = 0.05e0;
     const double relax_coef_max = 0.8e0;

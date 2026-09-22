@@ -234,7 +234,7 @@ class MaterialPoint {
      */
     virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, //
                                        const std::vector<int> &offsets) {
-        // --- By default, only inertial forces are calculated ---
+
         for (int n = 0; n < nodec; n++) {
             // --- For Generalized-α (if α_m = 1, back to Newmark-β) ---
             mat.b_rhs[n + offsets[0]] -= this->nmass[n] * naccel[n + nuc];

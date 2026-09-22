@@ -93,9 +93,4 @@ class MPMFEMBlockFSI {
     void CalDragLiftCoeffForTurekCFD();
 };
 
-/**
- * @brief Entry point of the MPM--FEM block-coupling FSI driver.
- */
-void ImmersedMPMFEMBlockFSI();
-
 } // namespace mpmfemblockfsi

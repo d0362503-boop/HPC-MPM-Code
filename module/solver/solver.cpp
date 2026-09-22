@@ -404,8 +404,7 @@ std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
             for (int b = 0; b < this->num_block; b++) {
-                rr[i + nodec * this->block_row[b]] +=
-                    this->amat[j + this->block_id[b]] * xx[col + nodec * this->block_col[b]];
+                rr[i + nodec * this->block_row[b]] += this->amat[j + this->block_id[b]] * xx[col + nodec * this->block_col[b]];
             }
         }
     }
@@ -420,6 +419,7 @@ std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
 }
 
 void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
+
     Vec residual = nullptr;
     Vec active_mask = nullptr;
 
@@ -461,6 +461,7 @@ void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
 }
 
 double CrsMat::ComputeNativeResidualNormSq() {
+
     const int var_size = int(this->x_lhs.size());
 
     if (this->owner_) { this->owner_->BCResidualSet(this->b_rhs); }
@@ -482,6 +483,7 @@ double CrsMat::ComputeNativeResidualNormSq() {
 }
 
 double CrsMat::ComputeRefResidual() {
+
     if (this->use_petsc) {
         double res_norm = 0.0e0;
         double active_dof = 0.0e0;
@@ -493,6 +495,7 @@ double CrsMat::ComputeRefResidual() {
 }
 
 double CrsMat::ComputeAbsResidual() {
+
     if (this->use_petsc) {
         double res_norm = 0.0e0;
         double active_dof = 0.0e0;
@@ -529,8 +532,7 @@ bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double 
     if (rtr_ref < 1.0e-6 || r0r < 1.0e-6 || rtr_abs < 1.0e-8) {
         if (myrank == 0) {
             std::cout << "NR_converge:" << std::setw(15) << NR_it << std::setw(15) << solver_it << std::setw(15)
-                      << std::scientific << rtr_ref << std::setw(15) << std::scientific << r0r << std::setw(15)
-                      << std::scientific << rtr_abs << "\n";
+                      << std::scientific << rtr_ref << std::setw(15) << r0r << std::setw(15) << rtr_abs << "\n";
         }
         return true;
     } else if (NR_it == NR_it_max) {

@@ -10,7 +10,7 @@ Key deps: MPI, PETSc 3.24.5 (auto-bootstrapped from `Ext/petsc-3.24.5.tar.gz` in
 
 ## 2. Build & Run
 
-**Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
+**Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and selecting its method in the nested `CMakeLists.txt`; the selected `work/**/main.cpp` supplies `main()`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
 
 **Never delete `build/`:** The `build/` directory contains generated runtime files, partitioned input data, job outputs, and local working state. Deleting it can destroy an ongoing or future simulation setup. If a clean configure is needed, remove only `CMakeCache.txt` and `CMakeFiles/` inside `build/` — never `rm -rf build`, and never use an alternative build directory.
 Run from the project `build/` directory in WSL: `mpirun -np N ./MPM` (or `sh run.sh N`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).

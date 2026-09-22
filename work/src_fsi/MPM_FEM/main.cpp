@@ -4,7 +4,6 @@
 #include <iomanip>
 #include <iostream>
 
-#include "module/contact.h"
 #include "module/data_io.h"
 #include "module/dataset.h"
 #include "module/fluid/FEM/stabilized_fem.h"
@@ -19,89 +18,96 @@ using namespace implicitmpm;
 using namespace stabilizedfem;
 using namespace mpmfemblockfsi;
 
-void mpmfemblockfsi::ImmersedMPMFEMBlockFSI() {
-    MPMFEMBlockFSI fsi;
+int main(int argc, char *argv[]) {
 
-    fsi.DataInput();
+    const double start_time = InitializeSimulation(argc, argv);
 
-    istep = ista - 1;
-    int iview = istep / iout;
-    real_time = dt * double(istep);
+    {
+        MPMFEMBlockFSI fsi;
 
-    if (rstflag == 1 || rstflag == 3) {
-        fsi.solid_.RestartInput();
-        fsi.fluid_.RestartInput();
-    }
+        fsi.DataInput();
 
-    BuildMesh();
-
-    BuildControlPoint();
-
-    fsi.fluid_.BuildGaussianPoint();
-
-    fsi.fluid_.MeshPointLinklist();
-
-    fsi.fluid_.Particle2NodePhi();
-
-    double vol_l0 = fsi.fluid_.CalLiquidVol();
-
-    fsi.solid_.SM_.BuildCrsMat(9);
-
-    fsi.fluid_.NS_.BuildCrsMat(16);
-
-    ComputeNodalVol();
-
-    fsi.solid_.MeshPointLinklist();
-
-    fsi.solid_.DetermineRigidBC();
-
-    fsi.fluid_.Cp2NodeVTK();
-
-    fsi.solid_.OutputPointDataVTKHDF(iview, istep);
-
-    fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
-
-    for (istep = ista; istep <= iend; istep++) {
-        // -----------------------------------------------
+        istep = ista - 1;
+        int iview = istep / iout;
         real_time = dt * double(istep);
-        // if (real_time < 2.0e0) {
-        //     facl = (1.0e0 - std::cos(M_PI * real_time / 2.0e0)) / 2.0e0;
-        // } else {
-        //     facl = 1.0e0;
-        // }
-        if (istep <= nlstep) {
-            facl = dlstep * double(istep);
-        } else {
-            facl = 1.0e0;
-        }
-        // -----------------------------------------------
 
-        fsi.fluid_.SetPFDomain();
+        if (rstflag == 1 || rstflag == 3) {
+            fsi.solid_.RestartInput();
+            fsi.fluid_.RestartInput();
+        }
+
+        BuildMesh();
+
+        BuildControlPoint();
+
+        fsi.fluid_.BuildGaussianPoint();
+
+        fsi.fluid_.MeshPointLinklist();
+
+        fsi.fluid_.Particle2NodePhi();
+
+        double vol_l0 = fsi.fluid_.CalLiquidVol();
+
+        fsi.solid_.SM_.BuildCrsMat(9);
+
+        fsi.fluid_.NS_.BuildCrsMat(16);
+
+        ComputeNodalVol();
 
         fsi.solid_.MeshPointLinklist();
 
-        fsi.solid_.Particle2Node();
+        fsi.solid_.DetermineRigidBC();
 
-        fsi.SolveFSISystem(); // --- Strong coupling: block iteration ---
+        fsi.fluid_.Cp2NodeVTK();
 
-        fsi.solid_.Node2Particle();
+        fsi.solid_.OutputPointDataVTKHDF(iview, istep);
 
-        fsi.solid_.MoveParticle();
+        fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
 
-        if (istep % iout == 0) {
-            iview++;
-            fsi.solid_.OutputPointDataVTKHDF(iview, istep);
-            fsi.fluid_.Cp2NodeVTK();
-            fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
-
-            if (rstflag == 2 || rstflag == 3) {
-                fsi.solid_.RestartOutput();
-                fsi.fluid_.RestartOutput();
+        for (istep = ista; istep <= iend; istep++) {
+            // -----------------------------------------------
+            real_time = dt * double(istep);
+            // if (real_time < 2.0e0) {
+            //     facl = (1.0e0 - std::cos(M_PI * real_time / 2.0e0)) / 2.0e0;
+            // } else {
+            //     facl = 1.0e0;
+            // }
+            if (istep <= nlstep) {
+                facl = dlstep * double(istep);
+            } else {
+                facl = 1.0e0;
             }
-        }
+            // -----------------------------------------------
 
-        if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            fsi.fluid_.SetPFDomain();
+
+            fsi.solid_.MeshPointLinklist();
+
+            fsi.solid_.Particle2Node();
+
+            fsi.SolveFSISystem(); // --- Strong coupling: block iteration ---
+
+            fsi.solid_.Node2Particle();
+
+            fsi.solid_.MoveParticle();
+
+            if (istep % iout == 0) {
+                iview++;
+                fsi.solid_.OutputPointDataVTKHDF(iview, istep);
+                fsi.fluid_.Cp2NodeVTK();
+                fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+
+                if (rstflag == 2 || rstflag == 3) {
+                    fsi.solid_.RestartOutput();
+                    fsi.fluid_.RestartOutput();
+                }
+            }
+
+            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+        }
     }
 
-    return;
+    FinalizeSimulation(start_time);
+
+    return 0;
 }
