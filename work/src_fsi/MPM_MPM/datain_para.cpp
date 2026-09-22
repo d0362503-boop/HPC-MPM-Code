@@ -14,14 +14,14 @@
 #include "module/mpi_data.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "module/solid/solid_material_point.h"
-#include "work/src_fsi/MPM_MPM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 
 using namespace implicitmpm;
 using namespace stabilizedmpm;
 
-using namespace mpmmpmblockfsi;
+using namespace mpm_mpm_monolithic_fsi;
 
-void MPMMPMBlockFSI::DataInput() {
+void MPMMPMMonolithicFSI::DataInput() {
 
     std::ifstream infile = OpenInputFile("file.dat");
     getline(infile, parafile);

@@ -20,6 +20,36 @@
 
 using namespace stabilizedfem;
 
+void StabilizedFEM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
+
+    if (mat.ndof == 4 && mat.use_schur_fieldsplit) {
+        const PetscInt velocity_fields[] = {0, 1, 2};
+        const PetscInt pressure_field = 3;
+
+        PCSetType(pc, PCFIELDSPLIT);
+        PCFieldSplitSetBlockSize(pc, mat.ndof);
+        PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
+        PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
+        PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+        PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+        PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
+    } else {
+        this->MaterialPoint::ConfigurePreconditioner(mat, pc);
+    }
+
+    return;
+}
+
 std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
 
     std::vector<double> adv_vel(nodec * 3);

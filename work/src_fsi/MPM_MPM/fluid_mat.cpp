@@ -1,33 +1,23 @@
-#include "module/bc.h"
-#include "module/dataset.h"
-#include "module/material_point.h"
-#include "module/mesh.h"
-#include "module/mpi_data.h"
-#include "module/shape_function.h"
-#include "module/solver/crsmat.h"
-#include "work/src_fsi/MPM_MPM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 
-#include <array>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <mpi.h>
-#include <optional>
-#include <string>
-#include <vector>
+using namespace mpm_mpm_monolithic_fsi;
 
-using namespace mpmmpmblockfsi;
+void MPMMPMMonolithicFSI::AssembleFluidSystem(const std::vector<double> &nvel_k, //
+                                              const std::vector<double> &naccel_k) {
 
-void FSIFluid::AssembleSystem(const std::vector<double> &nvel_k, //
-                              const std::vector<double> &naccel_k) {
+    this->fluid_.AssembleSystem(this->fsi_sys, nvel_k, naccel_k);
 
-    stabilizedmpm::StabilizedMPM::AssembleSystem(nvel_k, naccel_k);
-
+    const double af = this->fluid_.alpha_f;
     for (int n = 0; n < nodec; n++) {
-        this->NS_.b_rhs[n + nuc] -= this->lm_lumped[n] * this->fsi_.nfsi_force[n + nuc];
-        this->NS_.b_rhs[n + nvc] -= this->lm_lumped[n] * this->fsi_.nfsi_force[n + nvc];
-        this->NS_.b_rhs[n + nwc] -= this->lm_lumped[n] * this->fsi_.nfsi_force[n + nwc];
+        int ncol = 0;
+        int ida = this->fsi_sys.FindIndex(n, n, ncol);
+        double lm = this->nlm_lump_local[n];
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[4]] -= af * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[9]] -= af * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[14]] -= af * lm;
     }
+
+    this->AddLagrangeMultiplierToRHS(af, this->fluid_.RHSOffsets());
 
     return;
 }

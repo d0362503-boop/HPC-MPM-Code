@@ -13,14 +13,14 @@
 #include "module/mpi_data.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "module/solver/crsmat.h"
-#include "work/src_fsi/MPM_MPM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 
 using namespace implicitmpm;
 using namespace stabilizedmpm;
-using namespace mpmmpmblockfsi;
+using namespace mpm_mpm_monolithic_fsi;
 
-void mpmmpmblockfsi::MPMBlockFSI() {
-    MPMMPMBlockFSI fsi;
+void mpm_mpm_monolithic_fsi::MonolithicFSI() {
+    MPMMPMMonolithicFSI fsi;
 
     fsi.DataInput();
 
@@ -37,9 +37,7 @@ void mpmmpmblockfsi::MPMBlockFSI() {
 
     BuildControlPoint();
 
-    fsi.solid_.SM_.BuildCrsMat(9);
-
-    fsi.fluid_.NS_.BuildCrsMat(16);
+    fsi.fsi_sys.BuildCrsMat(37);
 
     ComputeNodalVol();
 
@@ -74,7 +72,7 @@ void mpmmpmblockfsi::MPMBlockFSI() {
 
         fsi.fluid_.Particle2Node();
 
-        fsi.SolveFSISystem(); // --- Strong coupling: block iteration ---
+        fsi.SolveFSISystem(); // --- Monolithic Newton iteration ---
 
         fsi.solid_.Node2Particle();
 

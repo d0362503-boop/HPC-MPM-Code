@@ -135,5 +135,5 @@ npres_old  ← npres
 ## Coding Style Notes
 
 - Trailing underscore for class members (`owner_`, `NS_`, `PF_`).
-- The class lives in namespace `stabilizedfem`; in the FSI driver it is subclassed as `FSIFluid` in `work/src_fsi/block_fsi.h`.
+- The class lives in namespace `stabilizedfem`; in the FSI driver it is subclassed as `FSIFluid` in `work/src_fsi/monolithic_fsi.h`.
 - `using namespace stabilizedfem;` appears in `.cpp` files only.

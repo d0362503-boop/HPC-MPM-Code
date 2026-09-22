@@ -37,7 +37,13 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
 
     std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
 
-    void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
+    /**
+     * @brief Add solid inertia, added-mass inertia and FSI forces to the RHS.
+     * @param mat System receiving the solid momentum residual.
+     * @param naccel Nodal acceleration at the inertia evaluation time level.
+     * @param offsets RHS offsets for the x, y and z momentum components.
+     */
+    void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) override;
 };
 
 class MPMFEMBlockFSI {

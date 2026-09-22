@@ -398,30 +398,23 @@ int GPBiCG(CrsMat &mat) {
 
 std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
 
-    const int var_size = (int)this->x_lhs.size();
+    std::vector<double> rr(nodec * this->ndof, 0.0e0);
 
-    std::vector<double> rr(var_size, 0.0e0);
-
-    for (int i = 0; i < nodec; ++i) {
-        for (int j = this->matrow[i]; j < this->matrow[i + 1]; ++j) {
+    for (int i = 0; i < nodec; i++) {
+        for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
-
-            for (int m = 0; m < this->ndof; ++m) {
-                const int row_off = nodec * m;
-                const int block_base = m * this->ndof;
-
-                for (int n = 0; n < this->ndof; ++n) {
-                    rr[i + row_off] += this->amat[j + this->block_id[block_base + n]] * xx[col + nodec * n];
-                }
+            for (int b = 0; b < this->num_block; b++) {
+                rr[i + nodec * this->block_row[b]] +=
+                    this->amat[j + this->block_id[b]] * xx[col + nodec * this->block_col[b]];
             }
         }
     }
 
     std::vector<int> offsets(this->ndof);
-    for (int n = 0; n < this->ndof; ++n) { offsets[n] = nodec * n; }
+    for (int n = 0; n < this->ndof; n++) { offsets[n] = nodec * n; }
     NodeVarComm(rr, offsets);
 
-    if (this->owner_) { this->owner_->BCResidualSet(rr); }
+    this->owner_->BCResidualSet(rr);
 
     return rr;
 }

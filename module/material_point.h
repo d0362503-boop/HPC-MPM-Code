@@ -174,7 +174,7 @@ class MaterialPoint {
 
     // --- Newmark-β part ---
     double gamma_nb, beta_nb;
-    std::vector<double> nb_para;
+    std::array<double, 6> nb_para{};
 
     /**
      * @brief Set Newmark-β time-integration parameters (`gamma_nb`, `beta_nb`).
@@ -198,6 +198,25 @@ class MaterialPoint {
 
     virtual void BuildPetscBCList(CrsMat &mat) {};
 
+    /**
+     * @brief Assemble field CSR values into the distributed matrix.
+     * @param mat Target linear system with local element contributions.
+     * @param ndof Number of field components per control point.
+     */
+    virtual void AssemblePetscMat(CrsMat &mat, int ndof);
+
+    /**
+     * @brief Configure the default BoomerAMG preconditioner.
+     * @param mat Linear system for the current physical field.
+     * @param pc PETSc preconditioner associated with the system solver.
+     */
+    virtual void ConfigurePreconditioner(CrsMat &mat, PC pc) {
+        PCSetType(pc, PCHYPRE);
+        PCHYPRESetType(pc, "boomeramg");
+
+        return;
+    }
+
     virtual void BCResidualSet(std::vector<double> &rr) {};
     // ------------------------------------------
 
@@ -207,14 +226,20 @@ class MaterialPoint {
         return emd;
     }
 
-    // --- Default for implicit MPM ---
-    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) {
+    /**
+     * @brief Add nodal inertial forces to the implicit system RHS.
+     * @param mat System receiving the inertial force residual.
+     * @param naccel Nodal acceleration at the inertia evaluation time level.
+     * @param offsets RHS offsets for the x, y and z momentum components.
+     */
+    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, //
+                                       const std::vector<int> &offsets) {
         // --- By default, only inertial forces are calculated ---
         for (int n = 0; n < nodec; n++) {
             // --- For Generalized-α (if α_m = 1, back to Newmark-β) ---
-            mat.b_rhs[n + nuc] -= this->nmass[n] * naccel[n + nuc];
-            mat.b_rhs[n + nvc] -= this->nmass[n] * naccel[n + nvc];
-            mat.b_rhs[n + nwc] -= this->nmass[n] * naccel[n + nwc];
+            mat.b_rhs[n + offsets[0]] -= this->nmass[n] * naccel[n + nuc];
+            mat.b_rhs[n + offsets[1]] -= this->nmass[n] * naccel[n + nvc];
+            mat.b_rhs[n + offsets[2]] -= this->nmass[n] * naccel[n + nwc];
         };
 
         return;

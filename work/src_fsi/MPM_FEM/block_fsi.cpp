@@ -336,12 +336,12 @@ void MPMFEMBlockFSI::CalFSIForce() {
                 double dsfi2 = dsf[ni][1];
                 double dsfi3 = dsf[ni][2];
 
-                this->nfsi_force[nid + nuc] += G_Weight * this->solid_.nphi[nid] *
-                                               (dsfi1 * sts_k[0][0] + dsfi2 * sts_k[0][1] + dsfi3 * sts_k[0][2]);
-                this->nfsi_force[nid + nvc] += G_Weight * this->solid_.nphi[nid] *
-                                               (dsfi1 * sts_k[1][0] + dsfi2 * sts_k[1][1] + dsfi3 * sts_k[1][2]);
-                this->nfsi_force[nid + nwc] += G_Weight * this->solid_.nphi[nid] *
-                                               (dsfi1 * sts_k[2][0] + dsfi2 * sts_k[2][1] + dsfi3 * sts_k[2][2]);
+                this->nfsi_force[nid + nuc] +=
+                    G_Weight * this->solid_.nphi[nid] * (dsfi1 * sts_k[0][0] + dsfi2 * sts_k[0][1] + dsfi3 * sts_k[0][2]);
+                this->nfsi_force[nid + nvc] +=
+                    G_Weight * this->solid_.nphi[nid] * (dsfi1 * sts_k[1][0] + dsfi2 * sts_k[1][1] + dsfi3 * sts_k[1][2]);
+                this->nfsi_force[nid + nwc] +=
+                    G_Weight * this->solid_.nphi[nid] * (dsfi1 * sts_k[2][0] + dsfi2 * sts_k[2][1] + dsfi3 * sts_k[2][2]);
             }
             pid = this->fluid_.idp2p[pid];
         }
@@ -382,17 +382,19 @@ std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const 
     return nfext;
 }
 
-void FSISolid::AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) {
+void FSISolid::AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) {
 
     for (int n = 0; n < nodec; n++) {
-        mat.b_rhs[n + nuc] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nuc];
-        mat.b_rhs[n + nvc] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nvc];
-        mat.b_rhs[n + nwc] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nwc];
+        mat.b_rhs[n + offsets[0]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nuc];
+        mat.b_rhs[n + offsets[1]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nvc];
+        mat.b_rhs[n + offsets[2]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nwc];
     }
 
-    for (int n = 0; n < nodec * 3; n++) {
+    for (int n = 0; n < nodec; n++) {
         // --- FSI force ---
-        mat.b_rhs[n] -= this->fsi_.nfsi_force[n];
+        mat.b_rhs[n + offsets[0]] -= this->fsi_.nfsi_force[n + nuc];
+        mat.b_rhs[n + offsets[1]] -= this->fsi_.nfsi_force[n + nvc];
+        mat.b_rhs[n + offsets[2]] -= this->fsi_.nfsi_force[n + nwc];
     }
 
     return;

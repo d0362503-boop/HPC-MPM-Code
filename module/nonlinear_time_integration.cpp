@@ -40,7 +40,6 @@ std::vector<double> MaterialPoint::ComputeNodeAccelFromVel() const noexcept {
 }
 
 void MaterialPoint::NewmarkBetaParaSet() {
-    VectorAssign(6, this->nb_para);
 
     double gamma = this->gamma_nb;
     double beta = this->beta_nb;
@@ -56,8 +55,7 @@ void MaterialPoint::NewmarkBetaParaSet() {
     return;
 }
 
-void MaterialPoint::ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k,
-                                                 std::vector<double> &naccel_k) const noexcept {
+void MaterialPoint::ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept {
     for (int n = 0; n < nodec * 3; n++) {
         nvel_k[n] = this->nb_para[0] * this->ndispl[n] //
                     - this->nb_para[1] * this->nvel[n] //

@@ -21,6 +21,8 @@ class CrsMat {
     bool FEM_flag = true;
 
     int ndof;        // degrees of freedom per node (fluid=4, solid=3)
+    int num_block = 0; // stored scalar block count
+    std::vector<int> block_row, block_col; // component indices per block
     int nmata, nmat; // total scalar entries in amat, and CSR entry count
     int local_node, ghost_node;
 
@@ -47,13 +49,11 @@ class CrsMat {
     // CSR structure (fixed after BuildCrsMat).
     //   matrow[n]      → offset of row n in matcolid / amat.
     //   matcolid[j]    → natural column id of CSR entry j.
-    //   block_id[b]    → offset of scalar block b inside each CSR entry.
+    //   block_id[b]    → start of scalar block b in amat.
     std::vector<int> matcolid, matrow, block_id;
 
-    // Dense values stored in block-major order:
-    //   amat[j + block_id[row_var*ndof + col_var]]
-    // j       = CSR entry index (0 .. nmat-1)
-    // block_id= offset of the ndof*ndof dense block inside that entry.
+    // Stored blocks share one nodal CSR graph.
+    // amat[j + block_id[b]] couples block_row[b] to block_col[b].
     std::vector<double> amat, adiag, b_rhs, x_lhs;
 
     /**
@@ -95,12 +95,12 @@ class CrsMat {
 
     /**
      * @brief Apply left and right diagonal scaling to the CSR matrix.
-     * @param ndof Degrees of freedom per node.
      */
-    void ApplyDiagonalScaling(int ndof);
+    void ApplyDiagonalScaling();
 
     /**
      * @brief Build a diagonal preconditioner from `adiag`.
+     * Requires field diagonals; zero-diagonal multiplier rows need a separate preconditioner.
      * @param ndof Degrees of freedom per node.
      */
     void BuildDiagonalPreconditioner(int ndof);
@@ -244,13 +244,8 @@ class CrsMat {
     void BuildKSPSolver();
 
     /**
-     * @brief Configure the PETSc preconditioner for this system.
-     *
-     * Default is `PCHYPRE`/BoomerAMG. Stabilized fluid systems that set
-     * `use_schur_fieldsplit` instead get a velocity-pressure lower Schur
-     * field split, where velocity is components 0--2 and pressure is 3.
-     * The split requires the 4-DOF block layout; any other `ndof` falls
-     * back to BoomerAMG.
+     * @brief Delegate preconditioner configuration to the owning physical field.
+     * Systems without an owner use BoomerAMG.
      * @param pc PETSc preconditioner associated with `ksp`.
      */
     void ConfigurePreconditioner(PC pc);

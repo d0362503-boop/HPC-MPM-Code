@@ -16,8 +16,12 @@ namespace implicitmpm {
 class ImplicitSolidMPM : public SolidMaterialPointBase {
   public:
     CrsMat SM_;
+    std::vector<int> blocks; // target scalar block indices
+    int rhs_start;          // first target component index
 
     ImplicitSolidMPM() {
+        this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+        this->rhs_start = 0;
         this->NR_flag = true;
         this->do_dlb = false;
         this->gamma_nb = 0.5e0;
@@ -25,6 +29,8 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         this->ode_order = 2;
         this->cm_.implicit_flag = true;
         this->SM_.ndof = 3;
+        this->SM_.block_row = {0, 0, 0, 1, 1, 1, 2, 2, 2};
+        this->SM_.block_col = {0, 1, 2, 0, 1, 2, 0, 1, 2};
         this->SM_.use_petsc = true;
         this->SM_.use_schur_fieldsplit = false;
         this->SM_.FEM_flag = false;
@@ -52,6 +58,21 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      */
     void SolveSolid() override;
 
+    /**
+     * @brief Configure solid BoomerAMG with Euclid smoothing.
+     * @param mat Solid linear system being configured.
+     * @param pc PETSc preconditioner associated with the solid solver.
+     */
+    void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
+
+    /**
+     * @brief Get target RHS offsets for solid momentum.
+     * @return Current control-point offsets for x, y and z momentum.
+     */
+    std::vector<int> RHSOffsets() const {
+        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2)};
+    }
+
     /** @brief Apply DLB and rebuild the implicit-solid matrix structure. */
     void ApplyDLB() override {
 
@@ -62,7 +83,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         return;
     };
 
-  protected:
+    //   protected:
     /**
      * @brief Stress snapshot at the start of the NR loop.
      * @return Particle stress vector.
@@ -115,11 +136,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
 
     /**
      * @brief Assemble tangent matrix and residual vector.
-     * @param naccel_k  Nodal acceleration at intermediate time level.
-     * @param nvel_k    Nodal velocity at intermediate time level.
+     * @param mat Target system, cleared by the caller before assembly.
+     * @param naccel_k Nodal acceleration at the current endpoint iterate.
+     * @param nvel_k Nodal velocity at the current endpoint iterate.
      * @param stress_k  Particle stress state for tangent assembly.
      */
-    virtual void AssembleSystem(const std::vector<double> &naccel_k, //
+    virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
                                 const std::vector<double> &nvel_k,   //
                                 std::vector<std::array<double, 6>> &stress_k);
 

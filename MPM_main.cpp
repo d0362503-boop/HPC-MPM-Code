@@ -4,7 +4,7 @@
 #include "module/solid/explicit/explicit_mpm_solid.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "work/src_fsi/MPM_FEM/block_fsi.h"
-#include "work/src_fsi/MPM_MPM/block_fsi.h"
+#include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 
     // mpmfemblockfsi::ImmersedMPMFEMBlockFSI();
 
-    mpmmpmblockfsi::MPMBlockFSI();
+    mpm_mpm_monolithic_fsi::MonolithicFSI();
 
     double end_time = MPI_Wtime();
     double calc_time = end_time - start_time;

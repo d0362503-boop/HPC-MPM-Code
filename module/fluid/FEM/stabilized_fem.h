@@ -28,10 +28,21 @@ class StabilizedFEM : public MaterialPoint {
     // Phase-field system matrix
     CrsMat PF_;
 
+    /**
+     * @brief Configure Schur field splitting for NS and BoomerAMG for other systems.
+     * @param mat Fluid or phase-field linear system being configured.
+     * @param pc PETSc preconditioner associated with the system solver.
+     */
+    void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
+
     StabilizedFEM() {
         this->ode_order = 1;
         this->NS_.ndof = 4;
+        this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
+        this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
         this->PF_.ndof = 1;
+        this->PF_.block_row = {0};
+        this->PF_.block_col = {0};
         this->NS_.use_schur_fieldsplit = true;
         this->NS_.FEM_flag = true;
         this->PF_.FEM_flag = true;

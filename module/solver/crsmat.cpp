@@ -14,6 +14,8 @@
 
 void CrsMat::BuildCrsMat(int num_block) {
 
+    this->num_block = num_block;
+
     if (this->use_petsc) { this->ResetPetscSolver(); }
 
     this->nmat = 0;
@@ -98,10 +100,10 @@ void CrsMat::ExtractDiagonal(int ndof) {
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             if (i == this->matcolid[j]) {
-                for (int n = 0; n < ndof; n++) {
-                    const int offset = nodec * n;
-                    const int bid = this->block_id[n + ndof * n];
-                    this->adiag[i + offset] = this->amat[j + bid];
+                for (int b = 0; b < this->num_block; b++) {
+                    if (this->block_row[b] != this->block_col[b]) continue;
+                    const int offset = nodec * this->block_row[b];
+                    this->adiag[i + offset] = this->amat[j + this->block_id[b]];
                 }
                 break;
             }
@@ -165,21 +167,16 @@ void CrsMat::ComputeDiagonalInverseSqrt(int ndof) {
     return;
 }
 
-void CrsMat::ApplyDiagonalScaling(int ndof) {
+void CrsMat::ApplyDiagonalScaling() {
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
 
-            for (int m = 0; m < ndof; m++) {
-                const int row_offset = nodec * m;
-                const double diag_i = this->adiag[i + row_offset];
-
-                for (int n = 0; n < ndof; n++) {
-                    const int col_offset = nodec * n;
-                    const int bid = this->block_id[m * ndof + n];
-
-                    this->amat[j + bid] *= diag_i * this->adiag[col + col_offset];
-                }
+            for (int b = 0; b < this->num_block; b++) {
+                const int row_offset = nodec * this->block_row[b];
+                const int col_offset = nodec * this->block_col[b];
+                this->amat[j + this->block_id[b]] *=
+                    this->adiag[i + row_offset] * this->adiag[col + col_offset];
             }
         }
     }
@@ -192,7 +189,7 @@ void CrsMat::BuildDiagonalPreconditioner(int ndof) {
     VectorAssign(nodec * ndof, this->adiag);
     this->ExtractDiagonal(ndof);
     this->ComputeDiagonalInverseSqrt(ndof);
-    this->ApplyDiagonalScaling(ndof);
+    this->ApplyDiagonalScaling();
 
     return;
 }
@@ -460,40 +457,7 @@ void CrsMat::BuildKSPSolver() {
 
 void CrsMat::ConfigurePreconditioner(PC pc) {
 
-    // The Schur split is only defined for the 4-DOF (u,v,w,p) block layout.
-    if (this->ndof == 4 && this->use_schur_fieldsplit) {
-        const PetscInt velocity_fields[] = {0, 1, 2};
-        const PetscInt pressure_field = 3;
-
-        PCSetType(pc, PCFIELDSPLIT);
-        PCFieldSplitSetBlockSize(pc, this->ndof);
-        PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
-        PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
-        PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
-        PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
-        PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
-
-        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
-    } else if (this->ndof == 3) {
-        PCSetType(pc, PCHYPRE);
-        PCHYPRESetType(pc, "boomeramg");
-        PCSetOptionsPrefix(pc, "solid_field_");
-        PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_type", "Euclid");
-        PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_num_levels", "1");
-        PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_eu_level", "1");
-        PCSetFromOptions(pc);
-    } else {
-        PCSetType(pc, PCHYPRE);
-        PCHYPRESetType(pc, "boomeramg");
-    }
+    this->owner_->ConfigurePreconditioner(*this, pc);
 
     return;
 }
@@ -530,42 +494,46 @@ void CrsMat::InitPetscSolver(int ndof) {
 }
 
 void CrsMat::AssemblePetscMat(int ndof) {
-    MatZeroEntries(this->petsc_mat);
-    this->BuildActiveRowMask();
+    this->owner_->AssemblePetscMat(*this, ndof);
+}
+
+void MaterialPoint::AssemblePetscMat(CrsMat &mat, int ndof) {
+    MatZeroEntries(mat.petsc_mat);
+    mat.BuildActiveRowMask();
 
     for (int i = 0; i < nodec; ++i) {
-        bool is_inactive = (!this->FEM_flag && this->active_row_mask[i] == 0);
+        bool is_inactive = (!mat.FEM_flag && mat.active_row_mask[i] == 0);
         if (is_inactive) continue;
 
         int natural_row = i;
-        int row_start = this->matrow[natural_row];
-        int row_end = this->matrow[natural_row + 1];
+        int row_start = mat.matrow[natural_row];
+        int row_end = mat.matrow[natural_row + 1];
         int ncols = row_end - row_start;
 
-        const PetscInt block_row = this->NaturalNodeToPetscLocalBlock(natural_row);
+        const PetscInt block_row = mat.NaturalNodeToPetscLocalBlock(natural_row);
 
         size_t block_col_idx = 0;
         for (int j = row_start; j < row_end; ++j) {
-            const int natural_col = this->matcolid[j];
-            this->petsc_block_cols_buf[block_col_idx++] = this->NaturalNodeToPetscLocalBlock(natural_col);
+            const int natural_col = mat.matcolid[j];
+            mat.petsc_block_cols_buf[block_col_idx++] = mat.NaturalNodeToPetscLocalBlock(natural_col);
         }
 
         size_t val_idx = 0;
         for (int row_var = 0; row_var < ndof; ++row_var) {
             for (int j = row_start; j < row_end; ++j) {
                 for (int col_var = 0; col_var < ndof; ++col_var) {
-                    this->petsc_block_vals_buf[val_idx] = this->amat[j + this->block_id[row_var * ndof + col_var]];
+                    mat.petsc_block_vals_buf[val_idx] = mat.amat[j + mat.block_id[row_var * ndof + col_var]];
                     ++val_idx;
                 }
             }
         }
 
-        MatSetValuesBlockedLocal(this->petsc_mat, 1, &block_row, ncols, this->petsc_block_cols_buf.data(),
-                                 this->petsc_block_vals_buf.data(), ADD_VALUES);
+        MatSetValuesBlockedLocal(mat.petsc_mat, 1, &block_row, ncols, mat.petsc_block_cols_buf.data(),
+                                 mat.petsc_block_vals_buf.data(), ADD_VALUES);
     }
 
-    MatAssemblyBegin(this->petsc_mat, MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(this->petsc_mat, MAT_FINAL_ASSEMBLY);
+    MatAssemblyBegin(mat.petsc_mat, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(mat.petsc_mat, MAT_FINAL_ASSEMBLY);
 
     return;
 }
