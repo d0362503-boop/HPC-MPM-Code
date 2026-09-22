@@ -60,6 +60,8 @@ void StabilizedMPM::SolveNS() {
 
     const int iter_max = 1000;
 
+    this->MakeNSStabCoeff(this->nvel); // ---- Stabilized coefficient ----
+
     VectorAssign(nodec * 3, this->ndispl);
     VectorAssign(nodec, this->npres);
     VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
@@ -181,8 +183,6 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
     for (int n = 0; n < nodec; n++) { //
         npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
     }
-
-    this->MakeNSStabCoeff(nvel_af); // ---- Stabilized coefficient ----
 
     int nenode;
     std::vector<int> ncm;

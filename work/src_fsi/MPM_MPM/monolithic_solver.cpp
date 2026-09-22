@@ -54,7 +54,7 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
         for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
         for (int d = 7; d < 10; d++) {
-            this->fixed_dof[n + d * nodec] = !fluid_active || !solid_active || this->nlm_lump[n] <= 0.0;
+            this->fixed_dof[n + d * nodec] = !fluid_active || !solid_active || this->nlm_lump[n] < mtol;
         }
     }
 
@@ -205,6 +205,10 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_precondition", "selfp"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_type", "hypre"},
+                                // Keep one AMG cycle; limit interpolation fill in the velocity block.
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_hypre_boomeramg_coarsen_type", "hmis"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_hypre_boomeramg_interp_type", "ext+i"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_hypre_boomeramg_P_max", "4"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_type", "hypre"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_hypre_boomeramg_coarsen_type", "hmis"},

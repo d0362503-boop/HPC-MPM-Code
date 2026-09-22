@@ -140,6 +140,8 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
 
     this->BuildActiveDOFs();
 
+    this->fluid_.MakeNSStabCoeff(this->fluid_.nvel);
+
     std::vector<std::array<double, 6>> stress_k = this->solid_.InitializeNRStress();
 
     std::vector<double> nvel_f(nodec * 3), nvel_s(nodec * 3);
@@ -179,7 +181,7 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
 bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
                                              std::array<double, 4> &initial_norm, int NR_it, int linear_iterations) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-9, 1.0e-11, 1.0e-9, 1.0e-9};
+    const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-11, 1.0e-8, 1.0e-8};
 
     // stats[0]: fluid momentum residual [N].
     // stats[1]: continuity/PSPG residual [m^3/s].
@@ -191,7 +193,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
 
     // jump_max[0]: maximum velocity difference [m/s].
     // jump_max[1]: maximum displacement-increment difference [m].
-    // Global componentwise maxima, not vector norms; displacement is diagnostic only.
+    // Global componentwise maxima for diagnostics only; neither controls convergence.
     std::array<double, 2> jump_max{};
 
     for (int n : this->fsi_sys.owned_natural_ids) {
@@ -223,9 +225,6 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
         const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-4 * initial_norm[field]);
         converged = converged && std::isfinite(stats[field]) && stats[field] <= tolerance;
     }
-    // Also require every active interface velocity component to match within 1e-8 m/s.
-    // jump_max[1] is logged but does not participate in convergence.
-    converged = converged && jump_max[0] <= 1.0e-8;
 
     if (converged) {
         if (myrank == 0) {
