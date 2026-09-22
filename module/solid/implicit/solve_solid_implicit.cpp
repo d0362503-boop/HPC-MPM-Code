@@ -77,7 +77,7 @@ void ImplicitSolidMPM::SolveSolid() {
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
 
     // --- NR_flag true for nonlinear elasticity and false for linear elasticity ---
-    int iter_max = (NR_flag) ? 1000 : 0;
+    int iter_max = (NR_flag) ? 100 : 0;
 
     std::vector<std::array<double, 6>> stress_k = this->InitializeNRStress(); // --- Reset stress for NR ---
 

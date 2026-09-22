@@ -223,7 +223,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
         stats[field] = std::sqrt(stats[field] / std::max(1.0, stats[field + 4]));
         if (NR_it == 0) { initial_norm[field] = stats[field]; }
         const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-4 * initial_norm[field]);
-        converged = converged && std::isfinite(stats[field]) && stats[field] <= tolerance;
+        converged = converged && stats[field] <= tolerance;
     }
 
     if (converged) {

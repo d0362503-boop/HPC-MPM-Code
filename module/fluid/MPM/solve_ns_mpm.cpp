@@ -58,7 +58,7 @@ void StabilizedMPM::SolveNS() {
 
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
 
-    const int iter_max = 1000;
+    const int iter_max = 100;
 
     this->MakeNSStabCoeff(this->nvel); // ---- Stabilized coefficient ----
 
