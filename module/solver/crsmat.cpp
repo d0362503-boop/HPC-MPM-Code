@@ -609,10 +609,10 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
                            inactive_gids.empty() ? nullptr : inactive_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);
     }
 
-    if (!this->petsc_bc_gids.empty()) {
-        MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()), this->petsc_bc_gids.data(), 1.0e0,
-                           this->petsc_x, this->petsc_b);
-    }
+    // Collective even when this rank has no fixed rows.
+    MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()),
+                       this->petsc_bc_gids.empty() ? nullptr : this->petsc_bc_gids.data(), 1.0e0,
+                       this->petsc_x, this->petsc_b);
 
     Mat solve_mat = this->petsc_mat;
     if (!this->FEM_flag) {

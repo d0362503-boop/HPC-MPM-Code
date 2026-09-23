@@ -230,8 +230,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
         if (myrank == 0) {
             std::cout << "Monolithic_converge: " << std::setw(15) << NR_it << std::setw(15) << linear_iterations //
                       << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]               //
-                      << std::setw(15) << stats[2] << std::setw(15) << stats[3]                                  //
-                      << std::setw(15) << jump_max[0] << "\n";
+                      << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
         }
         return true;
     }

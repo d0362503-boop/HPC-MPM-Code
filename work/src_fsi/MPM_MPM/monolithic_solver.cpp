@@ -13,8 +13,8 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
-    // Tighten as Newton converges.
-    // const double linear_tol = NR_it == 0 ? 1.0e-6 : 1.0e-10;
+    // Rebuild for the current scaled Newton matrix.
+    this->fsi_sys.force_rebuild_next_ = true;
     KSPSetTolerances(this->fsi_sys.ksp, 1.0e-10, 1.0e-15, PETSC_CURRENT, PETSC_CURRENT);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
@@ -61,10 +61,11 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
     const BoundaryCondition *bc[] = {&this->fluid_.ubc, &this->fluid_.vbc, &this->fluid_.wbc, &this->fluid_.pbc,
                                      &this->solid_.ubc, &this->solid_.vbc, &this->solid_.wbc};
     for (int d = 0; d < 7; d++) {
-        for (int n : bc[d]->nbc) { this->fixed_dof[n + d * nodec] = 1; }
+        for (int i = 0; i < bc[d]->ibc; i++) { this->fixed_dof[bc[d]->nbc[i] + d * nodec] = 1; }
     }
 
-    for (int n : this->solid_.rigid_bc.nbc) {
+    for (int i = 0; i < this->solid_.rigid_bc.ibc; i++) {
+        const int n = this->solid_.rigid_bc.nbc[i];
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = 1; }
     }
     for (int n = 0; n < nodec; n++) {
@@ -196,25 +197,13 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_type", "fgmres"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_rtol", "0.5"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_max_it", "100"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_type", "fieldsplit"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_block_size", "4"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_0_fields", "0,1,2"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_1_fields", "3"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_type", "schur"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_fact_type", "lower"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_precondition", "selfp"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_type", "hypre"},
-                                // Keep one AMG cycle; limit interpolation fill in the velocity block.
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_hypre_boomeramg_coarsen_type", "hmis"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_hypre_boomeramg_interp_type", "ext+i"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_hypre_boomeramg_P_max", "4"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_type", "hypre"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_hypre_boomeramg_coarsen_type", "hmis"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_hypre_boomeramg_interp_type", "ext+i"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_hypre_boomeramg_agg_nl", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_hypre_boomeramg_P_max", "4"},
+                                // Retain local velocity-pressure coupling in the fluid preconditioner.
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_type", "asm"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "hypre"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_type", "Euclid"},
