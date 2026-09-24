@@ -195,7 +195,7 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
             std::array<double, 3> xyp = this->coord[pid];
             MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
-            // this->ImplicitDsfCorr(ncm, nenode, dsf);
+            this->ImplicitDsfCorr(ncm, nenode, dsf);
 
             double t1 = this->tau1[pid];
             double t2 = this->tau2[pid];
