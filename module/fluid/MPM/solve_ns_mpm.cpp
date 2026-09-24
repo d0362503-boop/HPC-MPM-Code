@@ -60,7 +60,7 @@ void StabilizedMPM::SolveNS() {
 
     const int iter_max = 100;
 
-    this->MakeNSStabCoeff(this->nvel); // ---- Stabilized coefficient ----
+    this->MakeNSStabCoeff(this->nvel); // ---- Stabilized coefficient ---->
 
     VectorAssign(nodec * 3, this->ndispl);
     VectorAssign(nodec, this->npres);
