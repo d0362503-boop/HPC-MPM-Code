@@ -4,8 +4,8 @@
 #include <mpi.h>
 #include <vector>
 
-#include "dataset.h"
-#include "material_point.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
 
 bool MaterialPoint::InflowMeshisFilled(const BoundaryCondition &infbc) {
 

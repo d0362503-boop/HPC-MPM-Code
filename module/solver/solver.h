@@ -1,6 +1,6 @@
 #pragma once
 
-#include "crsmat.h"
+#include "module/solver/crsmat.h"
 #include <cmath>
 #include <mpi.h>
 #include <vector>

@@ -56,10 +56,10 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 
 ### 1. Time Integration — Newmark-β / Generalized-α
 
-The solver inherits `PredictNewmarkBetaVelAndAccel` and `CommitNodalKinematics` from `MaterialPoint` (shared with the fluid solver).  At the beginning of each time step:
+The solver inherits `ComputeNodeVelAccelFromDispl` and `CommitNodalKinematics` from `MaterialPoint` (shared with the fluid solver).  At the beginning of each time step:
 
 ```cpp
-PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);  // predictor
+ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);  // predictor
 ...
 CommitNodalKinematics(nvel_k, naccel_k);          // commit converged state
 ```
@@ -71,7 +71,7 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set via `Generalize
 ```cpp
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
-    PredictNewmarkBetaVelAndAccel(...);     // predictor step
+    ComputeNodeVelAccelFromDispl(...);     // predictor step
     AssembleSystem(naccel_k, nvel_k, stress_k);
     iter = SolveSystem(SM_, NR_it);         // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
@@ -85,7 +85,7 @@ for NR_it = 0 .. iter_max
 
 For each particle inside each element:
 
-1. **Shape function & gradient** (`MakSf`)
+1. **Shape function & gradient** (`MakeSF`)
 2. **Deformation-gradient update** (`UpdateDefGrad`) — `F^{n+1} = (I + ∆u) · F^n`
 3. **Constitutive model update** (`UpdateConstitutiveModel`) — stress `S` and tangent modulus `C`
 4. **Implicit gradient correction** (`ImplicitDsfCorr`) — background-grid correction for MPM
@@ -124,14 +124,14 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 - Commit nodal kinematics (`CommitNodalKinematics`)
 - G2P: update particle displacement gradient (`UpdateDefGrad`), stress, velocity, acceleration
 - Update particle position: `coord += disp + disp_corr`
-- Particle shifting (`DeltaCorrectionParticleShifting`) for uniform distribution
+- Particle shifting (`DeltaCorrectionPST`) for uniform distribution
 
 ---
 
 ## Integration with the Rest of the Codebase
 
 - **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; BC logic injected through `owner_` virtuals. `SM_.ndof = 3` configures the generic solver for 3-DOF solid mechanics.
-- **`MaterialPoint`** (`module/material_point.h`) — base class providing `PredictNewmarkBetaVelAndAccel`, `CommitNodalKinematics`, and the virtual BC hooks.
+- **`MaterialPoint`** (`module/material_point.h`) — base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, and the virtual BC hooks.
 - **`SolidMaterialPointBase`** (`module/solid/solid_material_point.h`) — intermediate base providing constitutive-model interface (`UpdateConstitutiveModel`).
 - **Solvers** (`module/solver/solver.cpp`) — `GPBiCGSafe` called on `SM_`; residual callbacks dispatched through `SM_.owner_->BCResidualSet(rr)`.
 

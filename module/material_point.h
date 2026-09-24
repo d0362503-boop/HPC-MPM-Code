@@ -5,12 +5,12 @@
 #include <string>
 #include <vector>
 
-#include "bc.h"
-#include "dataset.h"
-#include "map_and_interpolate.h"
-#include "mesh.h"
-#include "mpi_data.h"
-#include "solver/crsmat.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solver/crsmat.h"
 
 namespace mpm_dlb {
 struct Region;
@@ -107,8 +107,8 @@ class MaterialPoint {
      * @param weight    Nodal weight vector used as denominator (e.g. mass or volume).
      * @param offsets   Component offsets into the nodal vectors.
      */
-    void CutOffSmallNodalVar(std::vector<double> &result, const std::vector<double> &numerator,
-                             const std::vector<double> &weight, const std::vector<int> &offsets) {
+    void CutOffSmallNodalVar(std::vector<double> &result, const std::vector<double> &numerator, const std::vector<double> &weight,
+                             const std::vector<int> &offsets) {
 
         VectorAssign(numerator.size(), result);
         for (int n = 0; n < nodec; n++) {
@@ -126,8 +126,8 @@ class MaterialPoint {
      * @param weight  Nodal weight vector used as denominator.
      * @param offsets Component offsets into the nodal vector.
      */
-    void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight,
-                             const std::vector<int> &offsets) {
+    void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight, const std::vector<int> &offsets) {
+
         for (int n = 0; n < nodec; n++) {
             if (weight[n] > mtol) {
                 for (int offset : offsets) { var[n + offset] /= weight[n]; }
@@ -166,14 +166,15 @@ class MaterialPoint {
     void GeneralizedAlphaParaSet();
 
     /**
-     * @brief Compute the nodal acceleration at the Generalized-α intermediate time level.
-     * @return Vector of intermediate accelerations sized to `nodec * 3`.
+     * @brief Compute nodal acceleration from nodal velocity by inverting the
+     *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
+     * @return Vector of derived accelerations sized to `nodec * 3`.
      */
-    std::vector<double> GeneralizedAlphaNodeAccelUpdate() const noexcept;
+    std::vector<double> ComputeNodeAccelFromVel() const noexcept;
 
     // --- Newmark-β part ---
     double gamma_nb, beta_nb;
-    std::vector<double> nb_para;
+    std::array<double, 6> nb_para{};
 
     /**
      * @brief Set Newmark-β time-integration parameters (`gamma_nb`, `beta_nb`).
@@ -181,11 +182,12 @@ class MaterialPoint {
     void NewmarkBetaParaSet();
 
     /**
-     * @brief Predict velocity and acceleration at the beginning of an implicit time step.
-     * @param nvel_k   Nodal velocity vector to be predicted (size `nodec * 3`).
-     * @param naccel_k Nodal acceleration vector to be predicted (size `nodec * 3`).
+     * @brief Compute nodal velocity and acceleration from the nodal displacement
+     *        increment by inverting the Newmark-β relations (implicit path).
+     * @param nvel_k   Output nodal velocity vector (size `nodec * 3`).
+     * @param naccel_k Output nodal acceleration vector (size `nodec * 3`).
      */
-    void PredictNewmarkBetaVelAndAccel(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
+    void ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
     // ------------------------------
 
     // --- Newton-Raphson ---
@@ -196,6 +198,25 @@ class MaterialPoint {
 
     virtual void BuildPetscBCList(CrsMat &mat) {};
 
+    /**
+     * @brief Assemble field CSR values into the distributed matrix.
+     * @param mat Target linear system with local element contributions.
+     * @param ndof Number of field components per control point.
+     */
+    virtual void AssemblePetscMat(CrsMat &mat, int ndof);
+
+    /**
+     * @brief Configure the default BoomerAMG preconditioner.
+     * @param mat Linear system for the current physical field.
+     * @param pc PETSc preconditioner associated with the system solver.
+     */
+    virtual void ConfigurePreconditioner(CrsMat &mat, PC pc) {
+        PCSetType(pc, PCHYPRE);
+        PCHYPRESetType(pc, "boomeramg");
+
+        return;
+    }
+
     virtual void BCResidualSet(std::vector<double> &rr) {};
     // ------------------------------------------
 
@@ -205,14 +226,20 @@ class MaterialPoint {
         return emd;
     }
 
-    // --- Default for implicit MPM ---
-    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) {
-        // --- By default, only inertial forces are calculated ---
+    /**
+     * @brief Add nodal inertial forces to the implicit system RHS.
+     * @param mat System receiving the inertial force residual.
+     * @param naccel Nodal acceleration at the inertia evaluation time level.
+     * @param offsets RHS offsets for the x, y and z momentum components.
+     */
+    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, //
+                                       const std::vector<int> &offsets) {
+
         for (int n = 0; n < nodec; n++) {
             // --- For Generalized-α (if α_m = 1, back to Newmark-β) ---
-            mat.b_rhs[n + nuc] -= this->nmass[n] * naccel[n + nuc];
-            mat.b_rhs[n + nvc] -= this->nmass[n] * naccel[n + nvc];
-            mat.b_rhs[n + nwc] -= this->nmass[n] * naccel[n + nwc];
+            mat.b_rhs[n + offsets[0]] -= this->nmass[n] * naccel[n + nuc];
+            mat.b_rhs[n + offsets[1]] -= this->nmass[n] * naccel[n + nvc];
+            mat.b_rhs[n + offsets[2]] -= this->nmass[n] * naccel[n + nwc];
         };
 
         return;
@@ -228,15 +255,15 @@ class MaterialPoint {
     void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
 
     /**
-     * @brief Commit particle kinematics: update velocity via Newmark-β, update position, and apply optional
-     * particle-shifting correction.
-     * @param accel_old Nodal/particle acceleration from the previous step.
+     * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
+     *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
+     * @param accel_old Particle acceleration from the previous step.
      * @param disp      Nodal displacement increment applied to particle coordinates.
      * @param disp_corr Optional particle-shifting correction displacement.
      */
-    void CommitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
-                                  const std::vector<std::array<double, 3>> &disp,
-                                  const std::vector<std::array<double, 3>> &disp_corr = {});
+    void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
+                                          const std::vector<std::array<double, 3>> &disp,
+                                          const std::vector<std::array<double, 3>> &disp_corr = {});
 
     /**
      * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
@@ -244,8 +271,7 @@ class MaterialPoint {
      * @param nenode Number of nodes in the element.
      * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
      */
-    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode,
-                         std::vector<std::array<double, 3>> &dsf) const noexcept;
+    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
     // ------------------------
     // ------------------------
 
@@ -355,9 +381,26 @@ class MaterialPoint {
     void BuildGaussianPoint();
 
     /**
-     * @brief Compute a unit normal vector for each surface particle.
+     * @brief Compute mass-weighted nodal unit normals.
      */
-    void CalPointUnitNormal();
+    void CalNodalUnitNormal();
+
+    /**
+     * @brief Interpolate nodal unit normals and volume fractions to material points.
+     * @param particle_normal Output interface-normal directions; normalization is left to the caller.
+     * @param surface_weight Output volume fraction interpolated at each particle position.
+     */
+    void CalPointUnitNormal(std::vector<std::array<double, 3>> &particle_normal, std::vector<double> &surface_weight);
+
+    /**
+     * @brief Project a particle-shifting displacement into the common interface and wall tangent space.
+     * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
+     * @param interface_normal Unit material-interface normal interpolated at the material point.
+     * @param surface_particle Whether the material-interface constraint is active at the material point.
+     * @param disp_corr Particle-shifting displacement replaced by its constrained value.
+     */
+    void ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &interface_normal,
+                                  bool surface_particle, std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute the incremental deformation gradient at a material point.
@@ -380,7 +423,7 @@ class MaterialPoint {
      *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> DeltaCorrectionParticleShifting() const;
+    std::vector<std::array<double, 3>> DeltaCorrectionPST() const;
 
     /**
      * @brief Compute a pairwise repulsive particle-shifting correction.
@@ -392,12 +435,12 @@ class MaterialPoint {
      *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> PairwiseRepulsiveParticleShifting();
+    std::vector<std::array<double, 3>> PairwiseRepulsivePST();
     // ----------------------------------
 
     // ----- Control point variable -----
     std::vector<double> nmass, nvel_old, nvel_older, nvof, nmome, nvel, //
-        ndispl, npres, npres_old, nphi, nnormal,                        //
+        ndispl, npres, npres_old, nphi, nnormal, nrigid_normal,         //
         naccel, nforce, nvel_vtk, npres_vtk, nphi_vtk;
 
     // --- Mapping & Interpolation scheme ---
@@ -479,8 +522,7 @@ class MaterialPoint {
      * @param node_var  Nodal/control-point accumulator vector.
      */
     template <typename T>
-    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var,
-                        std::vector<T> &node_var) const noexcept;
+    void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_var, std::vector<T> &node_var) const noexcept;
 
     /**
      * @brief Map a per-particle scalar variable to control points with mass weighting.
@@ -529,8 +571,7 @@ void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vect
 
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
-                                   const std::vector<std::array<T, 3>> &point_var,
-                                   std::vector<T> &node_var) const noexcept {
+                                   const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) const noexcept {
     node_var[nid + nuc] += sfi * point_mass[pid] * point_var[pid][0];
     node_var[nid + nvc] += sfi * point_mass[pid] * point_var[pid][1];
     node_var[nid + nwc] += sfi * point_mass[pid] * point_var[pid][2];

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
@@ -5,15 +6,15 @@
 #include <iostream>
 #include <vector>
 
-#include "../../bc.h"
-#include "../../cal_mat.h"
-#include "../../dataset.h"
-#include "../../map_and_interpolate.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "implicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 
 using namespace implicitmpm;
 
@@ -32,7 +33,7 @@ void ImplicitSolidMPM::Particle2Node() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -50,6 +51,9 @@ void ImplicitSolidMPM::Particle2Node() {
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
 
+    VectorAssign(nodec, this->nphi);
+    for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
+
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
     this->ApplyVelocityBC(this->nvel);
 
@@ -63,7 +67,7 @@ void ImplicitSolidMPM::Node2Particle() {
 
     // ---- Newmark beta velocity & acceleration ----
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
-    this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
+    this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
 
     this->CommitNodalKinematics(nvel_k, naccel_k);
 
@@ -90,7 +94,7 @@ void ImplicitSolidMPM::Node2Particle() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, delta_def_grad, this->def_grad);
 
@@ -115,9 +119,9 @@ void ImplicitSolidMPM::Node2Particle() {
     }
 
     std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionParticleShifting();
+    disp_corr = this->DeltaCorrectionPST();
 
-    this->CommitParticleKinematics(accel_old, displ, disp_corr);
+    this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
 
     return;
 }

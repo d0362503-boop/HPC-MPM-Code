@@ -1,7 +1,7 @@
-#include "DLB/mpm_dlb.h"
+#include "module/DLB/mpm_dlb.h"
 
-#include "mesh.h"
-#include "mpi_data.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 
 #include <algorithm>
 #include <cmath>
@@ -40,6 +40,7 @@ void AbortDLB(const char *message) {
 }
 
 void CollectCurrentRegions() {
+
     Region local_region;
     for (int dir = 0; dir < 3; ++dir) {
         local_region.elem_min[dir] = aelemmin[dir];

@@ -1,11 +1,11 @@
 #pragma once
 
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
 #include <array>
 #include <vector>
-#include "mesh.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "cal_mat.h"
 
 /**
  * @brief Evaluate shape functions and gradients at point `xyg` for element `m`.
@@ -18,5 +18,6 @@
  * @param sf       Output shape-function values.
  * @param dsf      Output shape-function gradients.
  */
-void MakSf(const int m, const std::array<double, 3>& xyg, const std::vector<int>& idimc, const std::vector<int>& xynodec,
-           std::vector<int>& nc, int& nenode, std::vector<double>& sf, std::vector<std::array<double, 3>>& dsf);
+void MakeSF(const int m, const std::array<double, 3> &xyg, const std::vector<int> &idimc,
+            const std::vector<int> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
+            std::vector<std::array<double, 3>> &dsf);

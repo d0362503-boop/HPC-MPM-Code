@@ -3,13 +3,13 @@
 #include <string>
 #include <vector>
 
-#include "../../data_io.h"
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../vtk_hdf5.h"
-#include "stabilized_mpm.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/vtk_hdf5.h"
 
 using namespace stabilizedmpm;
 
@@ -40,6 +40,7 @@ void StabilizedMPM::InputBCData(std::ifstream &infile) {
 }
 
 void StabilizedMPM::InputPointData(std::ifstream &infile) {
+
     infile >> this->num;
     infile.ignore(1000, '\n');
 
@@ -74,7 +75,7 @@ void StabilizedMPM::OutputPointDataVTKHDF(int iview, int istep) {
 
 void StabilizedMPM::RestartInput() {
 
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -113,7 +114,7 @@ void StabilizedMPM::RestartInput() {
 
 void StabilizedMPM::RestartOutput() {
 
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);

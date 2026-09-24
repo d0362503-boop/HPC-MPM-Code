@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 # Include all solid method implementations. The active driver is selected in
-# work/CMakeLists.txt together with the matching call in MPM_main.cpp.
+# work/CMakeLists.txt; its main.cpp supplies the executable entry point.
 add_subdirectory(explicit)
 add_subdirectory(implicit)
 message(STATUS "Including EXPLICIT and IMPLICIT solid methods in module/solid")

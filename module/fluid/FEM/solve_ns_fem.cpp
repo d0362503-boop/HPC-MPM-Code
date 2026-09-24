@@ -9,16 +9,46 @@
 #include <string>
 #include <vector>
 
-#include "../../bc.h"
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "../../solver/crsmat.h"
-#include "stabilized_fem.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solver/crsmat.h"
 
 using namespace stabilizedfem;
+
+void StabilizedFEM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
+
+    if (mat.ndof == 4 && mat.use_schur_fieldsplit) {
+        const PetscInt velocity_fields[] = {0, 1, 2};
+        const PetscInt pressure_field = 3;
+
+        PCSetType(pc, PCFIELDSPLIT);
+        PCFieldSplitSetBlockSize(pc, mat.ndof);
+        PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
+        PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
+        PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+        PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+        PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
+        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
+    } else {
+        this->MaterialPoint::ConfigurePreconditioner(mat, pc);
+    }
+
+    return;
+}
 
 std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
 
@@ -38,9 +68,9 @@ void StabilizedFEM::SolveNS() {
 
     std::vector<double> adv_vel = this->ComputeAdvectionVel();
 
-    this->MakNSStabCoeff(adv_vel); // ---- Stabilized coefficient ----
+    this->MakeNSStabCoeff(adv_vel); // ---- Stabilized coefficient ----
 
-    this->AssembleNSSystem(adv_vel);
+    this->AssembleSystem(adv_vel);
 
     // ---- Initialize LHS x from [nvel, npres] ----
     VectorAssign(nodec * 4, this->NS_.x_lhs);
@@ -64,11 +94,7 @@ void StabilizedFEM::SolveNS() {
     return;
 }
 
-void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
-
+void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -79,16 +105,14 @@ void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
     for (int m = 0; m < nelem; m++) {
         double rnue = this->rmue[m] / this->rhoe[m];
 
-        int ize = m / (nex * ney);
-        int iye = (m - ize * (nex * ney)) / nex;
-        int ixe = m - ize * (nex * ney) - iye * nex;
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         std::array<double, 3> xye;
-        xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
+        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
+        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
+        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
 
-        MakSf(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
+        MakeSF(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
 
         double uu = 0.0e0, vv = 0.0e0, ww = 0.0e0;
         for (int ni = 0; ni < nenode; ni++) {
@@ -134,7 +158,7 @@ void StabilizedFEM::MakNSStabCoeff(const std::vector<double> &adv_vel) {
     return;
 }
 
-void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
+void StabilizedFEM::AssembleSystem(const std::vector<double> &adv_vel) {
     double fx = bb[0] * facl;
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;
@@ -160,7 +184,7 @@ void StabilizedFEM::AssembleNSSystem(const std::vector<double> &adv_vel) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             double phi_k = 0.0e0;
             std::array<double, 3> adv_vel_k{};

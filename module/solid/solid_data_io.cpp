@@ -3,12 +3,12 @@
 #include <string>
 #include <vector>
 
-#include "../dataset.h"
-#include "../material_point.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
-#include "../vtk_hdf5.h"
-#include "solid_material_point.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solid/solid_material_point.h"
+#include "module/vtk_hdf5.h"
 
 void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
 
@@ -27,6 +27,7 @@ void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
 }
 
 void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
+
     infile >> this->num;
     infile.ignore(1000, '\n');
 
@@ -66,13 +67,14 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
     writer.WritePointScalar("VMStress", info.total_npts, info.local_npts, info.global_offset, vm_stress);
     writer.WritePointScalar("ID", info.total_npts, info.local_npts, info.global_offset, this->id);
     writer.WritePointScalar("MatID", info.total_npts, info.local_npts, info.global_offset, this->matid);
+    writer.WritePointScalar("SurfaceTag", info.total_npts, info.local_npts, info.global_offset, this->surf_point);
 #endif
 
     return;
 }
 
 void SolidMaterialPointBase::RestartInput() {
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_s_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -114,7 +116,7 @@ void SolidMaterialPointBase::RestartInput() {
 }
 
 void SolidMaterialPointBase::RestartOutput() {
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_s_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);

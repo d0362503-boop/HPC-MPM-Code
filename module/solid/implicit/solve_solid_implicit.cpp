@@ -8,19 +8,32 @@
 #include <string>
 #include <vector>
 
-#include "../../bc.h"
-#include "../../cal_mat.h"
-#include "../../dataset.h"
-#include "../../map_and_interpolate.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "../../solver/crsmat.h"
-#include "../solid_material_point.h"
-#include "implicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
+#include "module/solid/solid_material_point.h"
+#include "module/solver/crsmat.h"
 
 using namespace implicitmpm;
+
+void ImplicitSolidMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
+
+    PCSetType(pc, PCHYPRE);
+    PCHYPRESetType(pc, "boomeramg");
+    PCSetOptionsPrefix(pc, "solid_field_");
+    PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_type", "Euclid");
+    PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_num_levels", "1");
+    PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_eu_level", "1");
+    PCSetFromOptions(pc);
+
+    return;
+}
 
 void ImplicitSolidMPM::UpdateNRIncrement() {
     for (int n = 0; n < nodec * 3; n++) { this->ndispl[n] += this->SM_.x_lhs[n]; }
@@ -28,8 +41,9 @@ void ImplicitSolidMPM::UpdateNRIncrement() {
     return;
 }
 
-auto ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
-                                             const std::array<double, 6> &sts_af) {
+std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj,
+                                                                             const std::vector<std::array<double, 3>> &dsf,
+                                                                             const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[idm[i][j]]; }
@@ -63,7 +77,7 @@ void ImplicitSolidMPM::SolveSolid() {
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
 
     // --- NR_flag true for nonlinear elasticity and false for linear elasticity ---
-    int iter_max = (NR_flag) ? 1000 : 0;
+    int iter_max = (NR_flag) ? 100 : 0;
 
     std::vector<std::array<double, 6>> stress_k = this->InitializeNRStress(); // --- Reset stress for NR ---
 
@@ -71,11 +85,14 @@ void ImplicitSolidMPM::SolveSolid() {
     VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
     double r0r = 0.0e0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
+
         this->BCNRSet();
 
-        this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
-        this->AssembleSystem(naccel_k, nvel_k, stress_k);
+        VectorAssign(this->SM_.nmata, this->SM_.amat);
+        VectorAssign(nodec * 3, this->SM_.b_rhs);
+        this->AssembleSystem(this->SM_, naccel_k, nvel_k, stress_k);
 
         int iter = this->SM_.SolveSystem(NR_it);
 
@@ -100,12 +117,16 @@ void ImplicitSolidMPM::SolveSolid() {
     return;
 }
 
-void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const std::vector<double> &nvel_k,
+void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
+                                      const std::vector<double> &nvel_k,                //
                                       std::vector<std::array<double, 6>> &stress_k) {
+
+    const std::vector<int> offsets = this->RHSOffsets();
+
     const double af = this->alpha_f;
-    const double af0 = 1.0e0 - this->alpha_f;
+    const double af0 = 1.0e0 - af;
     const double am = this->alpha_m;
-    const double am0 = 1.0e0 - this->alpha_m;
+    const double am0 = 1.0e0 - am;
 
     int nenode;
     std::vector<int> ncm;
@@ -115,13 +136,11 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
 
     VectorAssign(this->num, delta_def_grad);
     VectorAssign(this->num, def_grad_NR);
-    VectorAssign(this->SM_.nmata, this->SM_.amat);
-    VectorAssign(nodec * 3, this->SM_.b_rhs);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, this->alpha_f, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 
@@ -153,25 +172,25 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
                     double dsfj2 = dsf[nj][1];
                     double dsfj3 = dsf[nj][2];
 
-                    int ida = this->SM_.FindIndex(nid, njd, ncol);
+                    int ida = mat.FindIndex(nid, njd, ncol);
 
                     std::array<std::array<double, 3>, 3> K_mat;
                     K_mat = this->ComputeTangentModulus(pid, ni, nj, dsf, sts_af);
 
                     if (nid == njd) {
-                        this->SM_.amat[ida + this->SM_.block_id[0]] += am * emd_lu;
-                        this->SM_.amat[ida + this->SM_.block_id[4]] += am * emd_lu;
-                        this->SM_.amat[ida + this->SM_.block_id[8]] += am * emd_lu;
+                        mat.amat[ida + mat.block_id[this->blocks[0]]] += am * emd_lu;
+                        mat.amat[ida + mat.block_id[this->blocks[4]]] += am * emd_lu;
+                        mat.amat[ida + mat.block_id[this->blocks[8]]] += am * emd_lu;
                     }
-                    this->SM_.amat[ida + this->SM_.block_id[0]] += af * K_mat[0][0] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[1]] += af * K_mat[0][1] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[2]] += af * K_mat[0][2] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[3]] += af * K_mat[1][0] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[4]] += af * K_mat[1][1] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[5]] += af * K_mat[1][2] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[6]] += af * K_mat[2][0] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[7]] += af * K_mat[2][1] * volp;
-                    this->SM_.amat[ida + this->SM_.block_id[8]] += af * K_mat[2][2] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[0]]] += af * K_mat[0][0] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[1]]] += af * K_mat[0][1] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[2]]] += af * K_mat[0][2] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[3]]] += af * K_mat[1][0] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[4]]] += af * K_mat[1][1] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[5]]] += af * K_mat[1][2] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[6]]] += af * K_mat[2][0] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[7]]] += af * K_mat[2][1] * volp;
+                    mat.amat[ida + mat.block_id[this->blocks[8]]] += af * K_mat[2][2] * volp;
                 }
 
                 // --- For Generalized-α (if α_f = 1, back to Newmark-β) ---
@@ -179,22 +198,22 @@ void ImplicitSolidMPM::AssembleSystem(const std::vector<double> &naccel_k, const
                 nfint = this->ComputeInternalForce(ni, pid, dsf, sts_af);
                 nfext = this->ComputeExternalForce(pid, sfi);
 
-                this->SM_.b_rhs[nid + nuc] += nfint[0] + nfext[0];
-                this->SM_.b_rhs[nid + nvc] += nfint[1] + nfext[1];
-                this->SM_.b_rhs[nid + nwc] += nfint[2] + nfext[2];
+                mat.b_rhs[nid + offsets[0]] += nfint[0] + nfext[0];
+                mat.b_rhs[nid + offsets[1]] += nfint[1] + nfext[1];
+                mat.b_rhs[nid + offsets[2]] += nfint[2] + nfext[2];
             }
             pid = this->idp2p[pid];
         }
     }
 
-    NodeVarComm(this->SM_.b_rhs, {nuc, nvc, nwc});
+    NodeVarComm(mat.b_rhs, offsets);
 
-    // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
     std::vector<double> naccel_am(nodec * 3);
+    // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
     for (int n = 0; n < nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
     // --------------------------------------
 
-    this->AddInertialForceToRHS(this->SM_, naccel_am);
+    this->AddInertialForceToRHS(mat, naccel_am, offsets);
 
     return;
 }

@@ -3,17 +3,19 @@
 #include <array>
 #include <vector>
 
-#include "../module/bc.h"
-#include "../module/fluid/FEM/stabilized_fem.h"
-#include "../module/solid/implicit/implicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 
-class BlockFSI;
+namespace mpmfemblockfsi {
+
+class MPMFEMBlockFSI;
 
 class FSIFluid : public stabilizedfem::StabilizedFEM {
   public:
-    BlockFSI &fsi_; // Reference back to the FSI coordinator
+    MPMFEMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSIFluid(BlockFSI &fsi) : fsi_(fsi) {}
+    FSIFluid(MPMFEMBlockFSI &fsi) : fsi_(fsi) {}
 
     // ---- Boundary Condition Overrides ----
     // --- For PETSc ---
@@ -27,18 +29,24 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
 
 class FSISolid : public implicitmpm::ImplicitSolidMPM {
   public:
-    BlockFSI &fsi_; // Reference back to the FSI coordinator
+    MPMFEMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSISolid(BlockFSI &fsi) : fsi_(fsi) {}
+    FSISolid(MPMFEMBlockFSI &fsi) : fsi_(fsi) {}
 
     double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    // std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
+    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
 
-    void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel) override;
+    /**
+     * @brief Add solid inertia, added-mass inertia and FSI forces to the RHS.
+     * @param mat System receiving the solid momentum residual.
+     * @param naccel Nodal acceleration at the inertia evaluation time level.
+     * @param offsets RHS offsets for the x, y and z momentum components.
+     */
+    void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) override;
 };
 
-class BlockFSI {
+class MPMFEMBlockFSI {
   public:
     BoundaryCondition fsi_intf;
 
@@ -56,7 +64,7 @@ class BlockFSI {
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
     // -----------------------------------------------------------------
-    BlockFSI() : fluid_(*this), solid_(*this) {}
+    MPMFEMBlockFSI() : fluid_(*this), solid_(*this) {}
 
     std::vector<double> added_mass;
     std::vector<double> nfsi_force;
@@ -84,3 +92,5 @@ class BlockFSI {
      */
     void CalDragLiftCoeffForTurekCFD();
 };
+
+} // namespace mpmfemblockfsi

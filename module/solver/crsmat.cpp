@@ -1,4 +1,4 @@
-#include "crsmat.h"
+#include "module/solver/crsmat.h"
 
 #include <petsc.h>
 
@@ -6,13 +6,15 @@
 #include <cmath>
 #include <vector>
 
-#include "../bc.h"
-#include "../dataset.h"
-#include "../material_point.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 
 void CrsMat::BuildCrsMat(int num_block) {
+
+    this->num_block = num_block;
 
     if (this->use_petsc) { this->ResetPetscSolver(); }
 
@@ -98,10 +100,10 @@ void CrsMat::ExtractDiagonal(int ndof) {
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             if (i == this->matcolid[j]) {
-                for (int n = 0; n < ndof; n++) {
-                    const int offset = nodec * n;
-                    const int bid = this->block_id[n + ndof * n];
-                    this->adiag[i + offset] = this->amat[j + bid];
+                for (int b = 0; b < this->num_block; b++) {
+                    if (this->block_row[b] != this->block_col[b]) continue;
+                    const int offset = nodec * this->block_row[b];
+                    this->adiag[i + offset] = this->amat[j + this->block_id[b]];
                 }
                 break;
             }
@@ -120,7 +122,7 @@ void CrsMat::BuildActiveRowMask() {
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
 
-    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-5;
+    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-4;
 
     PetscReal local_mass_sum = 0.0e0;
     PetscInt local_positive_mass_count = 0;
@@ -165,21 +167,16 @@ void CrsMat::ComputeDiagonalInverseSqrt(int ndof) {
     return;
 }
 
-void CrsMat::ApplyDiagonalScaling(int ndof) {
+void CrsMat::ApplyDiagonalScaling() {
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
 
-            for (int m = 0; m < ndof; m++) {
-                const int row_offset = nodec * m;
-                const double diag_i = this->adiag[i + row_offset];
-
-                for (int n = 0; n < ndof; n++) {
-                    const int col_offset = nodec * n;
-                    const int bid = this->block_id[m * ndof + n];
-
-                    this->amat[j + bid] *= diag_i * this->adiag[col + col_offset];
-                }
+            for (int b = 0; b < this->num_block; b++) {
+                const int row_offset = nodec * this->block_row[b];
+                const int col_offset = nodec * this->block_col[b];
+                this->amat[j + this->block_id[b]] *=
+                    this->adiag[i + row_offset] * this->adiag[col + col_offset];
             }
         }
     }
@@ -192,7 +189,7 @@ void CrsMat::BuildDiagonalPreconditioner(int ndof) {
     VectorAssign(nodec * ndof, this->adiag);
     this->ExtractDiagonal(ndof);
     this->ComputeDiagonalInverseSqrt(ndof);
-    this->ApplyDiagonalScaling(ndof);
+    this->ApplyDiagonalScaling();
 
     return;
 }
@@ -330,9 +327,7 @@ void CrsMat::BuildPetscLocalMaps(int ndof) {
         const int natural_id = this->petsc_local_to_natural[pos];
         const PetscInt global_node = this->natural_block_gids[natural_id];
         this->petsc_local_block_gids[pos] = global_node;
-        for (int var = 0; var < ndof; ++var) {
-            this->petsc_local_var_gids[pos + var * nodec] = global_node * ndof + var;
-        }
+        for (int var = 0; var < ndof; ++var) { this->petsc_local_var_gids[pos + var * nodec] = global_node * ndof + var; }
     }
 
     return;
@@ -407,6 +402,13 @@ void CrsMat::BuildPetscMat(int ndof) {
     // points (MPM) or changing active sets, preventing PETSc malloc errors.
     MatSetOption(this->petsc_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 
+    // Preserve diagonal storage slots.
+    PetscInt row_begin, row_end;
+    MatGetOwnershipRange(this->petsc_mat, &row_begin, &row_end);
+    for (PetscInt row = row_begin; row < row_end; row++) { MatSetValue(this->petsc_mat, row, row, 0.0, INSERT_VALUES); }
+    MatAssemblyBegin(this->petsc_mat, MAT_FLUSH_ASSEMBLY);
+    MatAssemblyEnd(this->petsc_mat, MAT_FLUSH_ASSEMBLY);
+
     // Create distributed RHS and solution vectors matching the matrix layout.
     VecCreateMPI(MPI_COMM_WORLD, local_n, PETSC_DETERMINE, &this->petsc_b);
     VecCreateMPI(MPI_COMM_WORLD, local_n, PETSC_DETERMINE, &this->petsc_x);
@@ -446,7 +448,7 @@ void CrsMat::BuildKSPSolver() {
     KSPGetPC(this->ksp, &pc);
     this->ConfigurePreconditioner(pc);
 
-    KSPSetTolerances(this->ksp, 1.0e-8, 1.0e-15, 1.0e6, 1000);
+    KSPSetTolerances(this->ksp, 1.0e-10, 1.0e-15, 1.0e6, 1000);
 
     KSPSetFromOptions(this->ksp);
 
@@ -455,70 +457,7 @@ void CrsMat::BuildKSPSolver() {
 
 void CrsMat::ConfigurePreconditioner(PC pc) {
 
-    // The Schur split is only defined for the 4-DOF (u,v,w,p) block layout.
-    if (this->ndof == 4 && this->use_schur_fieldsplit) {
-        const PetscInt velocity_fields[] = {0, 1, 2};
-        const PetscInt pressure_field = 3;
-
-        PCSetType(pc, PCFIELDSPLIT);
-        PCFieldSplitSetBlockSize(pc, this->ndof);
-        PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
-        PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
-        PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
-        PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
-        PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
-
-        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
-        PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
-    } else {
-        PCSetType(pc, PCHYPRE);
-        PCHYPRESetType(pc, "boomeramg");
-    }
-
-    return;
-}
-
-void CrsMat::UpdateShiftedSchurPreconditioner(PC pc) {
-
-    constexpr PetscReal kMpmSchurRegularization = 1.0e-4;
-
-    PCSetUp(pc);
-
-    PetscInt split_count = 0;
-    KSP *sub_ksp = nullptr;
-    PCFieldSplitGetSubKSP(pc, &split_count, &sub_ksp);
-
-    Mat pressure_operator = nullptr;
-    Mat pressure_pmat = nullptr;
-    KSPGetOperators(sub_ksp[1], &pressure_operator, &pressure_pmat);
-
-    PetscScalar trace = 0.0e0;
-    PetscInt pressure_rows = 0;
-    MatGetTrace(pressure_pmat, &trace);
-    MatGetSize(pressure_pmat, &pressure_rows, nullptr);
-
-    int local_active = 0;
-    for (int i = 0; i < this->local_node; ++i) { local_active += this->active_row_mask[this->owned_natural_ids[i]]; }
-    int global_active = 0;
-    MPI_Allreduce(&local_active, &global_active, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-    const PetscScalar active_trace = trace - static_cast<PetscScalar>(pressure_rows - global_active);
-    const PetscReal diagonal_shift =
-        global_active > 0
-            ? kMpmSchurRegularization * std::abs(PetscRealPart(active_trace)) / static_cast<PetscReal>(global_active)
-            : 0.0e0;
-    if (diagonal_shift > 0.0e0) { MatShift(pressure_pmat, diagonal_shift); }
-
-    PC pressure_pc;
-    KSPGetPC(sub_ksp[1], &pressure_pc);
-    PCSetReusePreconditioner(pressure_pc, PETSC_FALSE);
-    KSPSetOperators(sub_ksp[1], pressure_operator, pressure_pmat);
-    KSPSetUp(sub_ksp[1]);
-    PetscFree(sub_ksp);
+    this->owner_->ConfigurePreconditioner(*this, pc);
 
     return;
 }
@@ -529,8 +468,7 @@ void CrsMat::BuildPetscBCList() {
     if (this->owner_) { this->owner_->BuildPetscBCList(*this); }
 
     std::sort(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end());
-    this->petsc_bc_gids.erase(std::unique(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end()),
-                              this->petsc_bc_gids.end());
+    this->petsc_bc_gids.erase(std::unique(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end()), this->petsc_bc_gids.end());
 
     return;
 }
@@ -556,42 +494,46 @@ void CrsMat::InitPetscSolver(int ndof) {
 }
 
 void CrsMat::AssemblePetscMat(int ndof) {
-    MatZeroEntries(this->petsc_mat);
-    this->BuildActiveRowMask();
+    this->owner_->AssemblePetscMat(*this, ndof);
+}
+
+void MaterialPoint::AssemblePetscMat(CrsMat &mat, int ndof) {
+    MatZeroEntries(mat.petsc_mat);
+    mat.BuildActiveRowMask();
 
     for (int i = 0; i < nodec; ++i) {
-        bool is_inactive = (!this->FEM_flag && this->active_row_mask[i] == 0);
+        bool is_inactive = (!mat.FEM_flag && mat.active_row_mask[i] == 0);
         if (is_inactive) continue;
 
         int natural_row = i;
-        int row_start = this->matrow[natural_row];
-        int row_end = this->matrow[natural_row + 1];
+        int row_start = mat.matrow[natural_row];
+        int row_end = mat.matrow[natural_row + 1];
         int ncols = row_end - row_start;
 
-        const PetscInt block_row = this->NaturalNodeToPetscLocalBlock(natural_row);
+        const PetscInt block_row = mat.NaturalNodeToPetscLocalBlock(natural_row);
 
         size_t block_col_idx = 0;
         for (int j = row_start; j < row_end; ++j) {
-            const int natural_col = this->matcolid[j];
-            this->petsc_block_cols_buf[block_col_idx++] = this->NaturalNodeToPetscLocalBlock(natural_col);
+            const int natural_col = mat.matcolid[j];
+            mat.petsc_block_cols_buf[block_col_idx++] = mat.NaturalNodeToPetscLocalBlock(natural_col);
         }
 
         size_t val_idx = 0;
         for (int row_var = 0; row_var < ndof; ++row_var) {
             for (int j = row_start; j < row_end; ++j) {
                 for (int col_var = 0; col_var < ndof; ++col_var) {
-                    this->petsc_block_vals_buf[val_idx] = this->amat[j + this->block_id[row_var * ndof + col_var]];
+                    mat.petsc_block_vals_buf[val_idx] = mat.amat[j + mat.block_id[row_var * ndof + col_var]];
                     ++val_idx;
                 }
             }
         }
 
-        MatSetValuesBlockedLocal(this->petsc_mat, 1, &block_row, ncols, this->petsc_block_cols_buf.data(),
-                                 this->petsc_block_vals_buf.data(), ADD_VALUES);
+        MatSetValuesBlockedLocal(mat.petsc_mat, 1, &block_row, ncols, mat.petsc_block_cols_buf.data(),
+                                 mat.petsc_block_vals_buf.data(), ADD_VALUES);
     }
 
-    MatAssemblyBegin(this->petsc_mat, MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(this->petsc_mat, MAT_FINAL_ASSEMBLY);
+    MatAssemblyBegin(mat.petsc_mat, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(mat.petsc_mat, MAT_FINAL_ASSEMBLY);
 
     return;
 }
@@ -639,10 +581,8 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
         for (int var = 0; var < ndof; ++var) {
             this->petsc_indices_buf[idx] = this->NaturalNodeVarToPetscLocalScalar(natural_id, var);
             const PetscInt gid = this->natural_var_gids[natural_id + var * nodec];
-            const bool is_physical_bc =
-                std::binary_search(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end(), gid);
-            this->petsc_values_buf[idx] =
-                inactive && !is_physical_bc ? 0.0 : this->x_lhs[natural_id + var * nodec];
+            const bool is_physical_bc = std::binary_search(this->petsc_bc_gids.begin(), this->petsc_bc_gids.end(), gid);
+            this->petsc_values_buf[idx] = inactive && !is_physical_bc ? 0.0 : this->x_lhs[natural_id + var * nodec];
             ++idx;
         }
     }
@@ -666,13 +606,18 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
             }
         }
         MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(inactive_gids.size()),
-                           inactive_gids.empty() ? nullptr : inactive_gids.data(), 1.0e0, this->petsc_x,
-                           this->petsc_b);
+                           inactive_gids.empty() ? nullptr : inactive_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);
     }
 
-    if (!this->petsc_bc_gids.empty()) {
-        MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()),
-                           this->petsc_bc_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);
+    // Collective even when this rank has no fixed rows.
+    MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()),
+                       this->petsc_bc_gids.empty() ? nullptr : this->petsc_bc_gids.data(), 1.0e0,
+                       this->petsc_x, this->petsc_b);
+
+    Mat solve_mat = this->petsc_mat;
+    if (!this->FEM_flag) {
+        MatDuplicate(this->petsc_mat, MAT_COPY_VALUES, &solve_mat);
+        MatEliminateZeros(solve_mat, PETSC_TRUE);
     }
 
     KSPSetInitialGuessNonzero(this->ksp, PETSC_TRUE);
@@ -699,22 +644,20 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
     // externally resetting the split itself.
     if (need_rebuild) {
         if (!this->use_schur_fieldsplit) { PCReset(pc); }
-        KSPSetOperators(this->ksp, this->petsc_mat, this->petsc_mat);
+        KSPSetOperators(this->ksp, solve_mat, solve_mat);
         if (!this->use_schur_fieldsplit) { this->ConfigurePreconditioner(pc); }
         PCSetReusePreconditioner(pc, PETSC_FALSE);
     } else {
+        KSPSetOperators(this->ksp, solve_mat, solve_mat);
         PCSetReusePreconditioner(pc, PETSC_TRUE);
     }
-
-    // if (this->use_schur_fieldsplit && !this->FEM_flag && need_rebuild) {
-    //     PCSetReusePreconditioner(pc, PETSC_FALSE);
-    //     this->UpdateShiftedSchurPreconditioner(pc);
-    // }
 
     KSPSolve(this->ksp, this->petsc_b, this->petsc_x);
 
     PetscInt its;
     KSPGetIterationNumber(this->ksp, &its);
+
+    if (!this->FEM_flag) { MatDestroy(&solve_mat); }
 
     KSPConvergedReason reason;
     KSPGetConvergedReason(this->ksp, &reason);
@@ -734,9 +677,7 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
 
     // If KSP iterations grew by more than 2x compared with the previous step,
     // force a rebuild on the next step.  This applies to both fluid and solid.
-    if (this->prev_ksp_its_ >= 0 && static_cast<double>(its) > this->prev_ksp_its_ * 2.0) {
-        this->force_rebuild_next_ = true;
-    }
+    if (this->prev_ksp_its_ >= 0 && static_cast<double>(its) > this->prev_ksp_its_ * 2.0) { this->force_rebuild_next_ = true; }
     this->prev_ksp_its_ = static_cast<int>(its);
 
     return static_cast<int>(its);

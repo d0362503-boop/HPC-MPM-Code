@@ -1,11 +1,13 @@
-#include "../../bc.h"
-#include "../../dataset.h"
-#include "../../map_and_interpolate.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "stabilized_mpm.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/map_and_interpolate.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <iomanip>
@@ -29,7 +31,7 @@ void StabilizedMPM::Particle2Node() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -49,6 +51,9 @@ void StabilizedMPM::Particle2Node() {
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
 
+    VectorAssign(nodec, this->nphi);
+    for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
+
     this->CutOffSmallNodalVar(this->npres_old, this->nmass, {0});
     this->pbc.BCSetVal(0, this->npres_old);
 
@@ -65,7 +70,7 @@ void StabilizedMPM::Node2Particle() {
 
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     // ---- Newmark beta velocity & acceleration ----
-    this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
+    this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
 
     this->CommitNodalKinematics(nvel_k, naccel_k);
 
@@ -91,7 +96,7 @@ void StabilizedMPM::Node2Particle() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {
@@ -109,10 +114,10 @@ void StabilizedMPM::Node2Particle() {
     }
 
     std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionParticleShifting();
-    // disp_corr = this->PairwiseRepulsiveParticleShifting();
+    // disp_corr = this->DeltaCorrectionPST();
+    disp_corr = this->PairwiseRepulsivePST();
 
-    this->CommitParticleKinematics(accel_old, displ, disp_corr);
+    this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
 
     return;
 }

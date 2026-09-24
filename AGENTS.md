@@ -10,10 +10,10 @@ Key deps: MPI, PETSc 3.24.5 (auto-bootstrapped from `Ext/petsc-3.24.5.tar.gz` in
 
 ## 2. Build & Run
 
-**Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and matching the call in `MPM_main.cpp`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
+**Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and selecting its method in the nested `CMakeLists.txt`; the selected `work/**/main.cpp` supplies `main()`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
 
 **Never delete `build/`:** The `build/` directory contains generated runtime files, partitioned input data, job outputs, and local working state. Deleting it can destroy an ongoing or future simulation setup. If a clean configure is needed, remove only `CMakeCache.txt` and `CMakeFiles/` inside `build/` — never `rm -rf build`, and never use an alternative build directory.
-Run: `mpirun -np N ./build/MPM` (or use `build/run.sh`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
+Run from the project `build/` directory in WSL: `mpirun -np N ./MPM` (or `sh run.sh N`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
 A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh [N]`.
 
 ### CMake target dependency rules
@@ -82,7 +82,7 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 
 ## 7. Agent Discipline
 
-- **Think first:** State assumptions explicitly. If uncertain, ask. Surface tradeoffs, don't pick silently.
+- **Clarification:** Resolve uncertainty from the existing context and focused inspection first. For routine, reversible choices within scope, use a reasonable default and continue; state material assumptions briefly. Ask only when missing information would materially change the requested outcome, correctness, or a consequential tradeoff that cannot reasonably be inferred. While waiting, continue work that does not depend on the answer.
 - **Simplicity first:** Minimum code that solves the problem. No speculative abstractions. No unrequested flexibility.
 - **Surgical changes:** Touch only what you must. Match existing style. Clean up only what your changes made unused.
 - **Goal-driven:** Transform tasks into verifiable goals. State brief plan with verification steps for multi-step tasks.

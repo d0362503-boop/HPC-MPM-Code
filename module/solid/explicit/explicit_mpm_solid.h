@@ -4,12 +4,12 @@
 #include <string>
 #include <vector>
 
-#include "../../dataset.h"
-#include "../../map_and_interpolate.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../solver/crsmat.h"
-#include "../solid_material_point.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solver/crsmat.h"
+#include "module/solid/solid_material_point.h"
 
 namespace explicitmpm {
 

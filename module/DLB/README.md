@@ -72,7 +72,7 @@ ComputeDLBRegions(local_samples)     // 3. root cuts new regions, MPI_Bcast
 RebalanceDLBParticles(regions)       // 4. global particle migration to new owners
 UpdateDLBRegions(regions)            // 5. new mesh sizes + overlap tables + weights
 BuildMesh(); BuildControlPoint();
-MakNodalVol(); RebuildBC();   // 6. partition-dependent data
+ComputeNodalVol(); RebuildBC();   // 6. partition-dependent data
 ```
 
 The physics class then rebuilds its solver system (stage 8, in the overrides).
@@ -184,7 +184,7 @@ it, in this order:
    griddata path, so `NodeVarComm`'s sum-then-weight averaging is unchanged.
 
 The caller then rebuilds derived data: `BuildMesh()` (also re-collects
-`g_current_regions`), `BuildControlPoint()` (`ncc`, `xyc`), `MakNodalVol()` (`nvol`,
+`g_current_regions`), `BuildControlPoint()` (`ncc`, `xyc`), `ComputeNodalVol()` (`nvol`,
 with the new overlap tables), `RebuildBC()` (§10), and the physics
 class rebuilds its `CrsMat` — with `use_petsc`, `BuildCrsMat` first calls
 `ResetPetscSolver()` to destroy the old `Mat/Vec/KSP/lgmap/scatter` (all handles are
@@ -219,7 +219,7 @@ re-evaluates boundary-cell fill under the new partition.
 - `StabilizedMPM::MoveParticle()` and the solid equivalent pass
   `mpm_dlb::CurrentRegions()` to `DetermineParticleRank`, so per-step migration always
   uses the *current* partition without touching the update machinery.
-- `PairwiseRepulsiveParticleShifting` builds its ghost set by intersecting each
+- `PairwiseRepulsivePST` builds its ghost set by intersecting each
   particle's support ball with the peers' physical region bounds read from
   `CurrentRegions()` — correct for non-uniform regions, unlike the old Cartesian rank
   arithmetic. The regions reference is used transiently inside the call (converted to

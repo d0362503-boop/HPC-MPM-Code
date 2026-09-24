@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dataset.h"
+#include "module/dataset.h"
 #include <array>
 #include <vector>
 
@@ -42,6 +42,21 @@ inline void InitializeMeshAndTimeParameters() {
 }
 
 /**
+ * @brief Decompose a linear background element index into per-direction element indices.
+ * @param m  Linear element index (x varies fastest, then y, then z).
+ * @param ne Number of background elements along x/y/z (typically the global `xyelem`).
+ * @return Element indices along x/y/z.
+ */
+inline std::array<int, 3> IndexToIJK(int m, const std::vector<int> &ne) {
+
+    const int ize = m / (ne[0] * ne[1]);
+    const int iye = (m - ize * (ne[0] * ne[1])) / ne[0];
+    const int ixe = m - ize * (ne[0] * ne[1]) - iye * ne[0];
+
+    return {ixe, iye, ize};
+}
+
+/**
  * @brief Compute Gaussian quadrature points and weights for hexahedral elements.
  * @param dec2p Output array of quadrature data.
  */
@@ -74,7 +89,7 @@ bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local);
 /**
  * @brief Compute nodal/control-point volumes from element volumes.
  */
-void MakNodalVol();
+void ComputeNodalVol();
 
 /**
  * @brief Build the background mesh node coordinates and element connectivity.

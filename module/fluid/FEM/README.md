@@ -54,7 +54,7 @@ These overrides replace the former free-function `BCResidualSet` that contained 
 
 ## Numerical Method
 
-The phase helpers below (`ComputeAdvectionVel`, `MakNSStabCoeff`, `AssembleNSSystem`) are private members called by `SolveNS`.
+The phase helpers below (`ComputeAdvectionVel`, `MakeNSStabCoeff`, `AssembleSystem`) are private members called by `SolveNS`.
 
 ### 1. Generalized-α Predictor
 ```cpp
@@ -68,7 +68,7 @@ Per-element values `tau1` (SUPG/PSPG) and `tau2` (shock capturing) are computed 
 - Local advection velocity magnitude
 - Kinematic viscosity `rnue = rmue / rhoe`
 
-### 3. System Assembly (`AssembleNSSystem`)
+### 3. System Assembly (`AssembleSystem`)
 For each particle inside each element, shape functions are evaluated and the following matrices are accumulated into `NS_.amat`:
 
 | Block | Physics |
@@ -97,8 +97,9 @@ velocity `blockdiag` inverse approximation. The trace-scaled
 `epsilon I` shift is MPM-only (`FEM_flag == false`). `PF_` keeps the default monolithic
 AMG preconditioner.
 
-### 5. Time-Advance (`UpdateNodeVar`)
-Shifts the velocity / pressure history arrays for the next time step:
+### 5. Time-History Update (`UpdateNodalVar`)
+At the end of each time step, the velocity / pressure history levels are moved down
+one level to prepare for the next step:
 ```
 nvel_older ← nvel_old
 nvel_old   ← nvel
@@ -134,5 +135,5 @@ npres_old  ← npres
 ## Coding Style Notes
 
 - Trailing underscore for class members (`owner_`, `NS_`, `PF_`).
-- The class lives in namespace `stabilizedfem`; in the FSI driver it is subclassed as `FSIFluid` in `work/src_fsi/block_fsi.h`.
+- The class lives in namespace `stabilizedfem`; in the FSI driver it is subclassed as `FSIFluid` in `work/src_fsi/monolithic_fsi.h`.
 - `using namespace stabilizedfem;` appears in `.cpp` files only.

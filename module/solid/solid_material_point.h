@@ -4,12 +4,12 @@
 #include <string>
 #include <vector>
 
-#include "../data_io.h"
-#include "../dataset.h"
-#include "../material_point.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
-#include "constitutive_model.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solid/constitutive_model.h"
 
 class SolidMaterialPointBase : public MaterialPoint {
   public:
@@ -72,11 +72,11 @@ class SolidMaterialPointBase : public MaterialPoint {
     }
 
     double ComputeVMStress(int pid) const noexcept {
-        double VM_stress = std::sqrt(
-            0.5e0 * (pow((this->stress[pid][0] - this->stress[pid][1]), 2)   //
-                     + pow((this->stress[pid][1] - this->stress[pid][2]), 2) //
-                     + pow((this->stress[pid][2] - this->stress[pid][0]), 2)) +
-            3.0e0 * (pow(this->stress[pid][3], 2) + pow(this->stress[pid][4], 2) + pow(this->stress[pid][5], 2)));
+        double VM_stress =
+            std::sqrt(0.5e0 * (pow((this->stress[pid][0] - this->stress[pid][1]), 2)   //
+                               + pow((this->stress[pid][1] - this->stress[pid][2]), 2) //
+                               + pow((this->stress[pid][2] - this->stress[pid][0]), 2)) +
+                      3.0e0 * (pow(this->stress[pid][3], 2) + pow(this->stress[pid][4], 2) + pow(this->stress[pid][5], 2)));
         return VM_stress;
     }
     // -------------------------------
@@ -137,10 +137,12 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @param nvel Vector to be modified in-place at constrained DOFs.
      */
     void ApplyVelocityBC(std::vector<double> &nvel) override {
+
         MaterialPoint::ApplyVelocityBC(nvel);
-        this->rigid_bc.BCSetVal(nuc, nvel);
-        this->rigid_bc.BCSetVal(nvc, nvel);
-        this->rigid_bc.BCSetVal(nwc, nvel);
+
+        this->rigid_bc.BCSetZero(nuc, nvel);
+        this->rigid_bc.BCSetZero(nvc, nvel);
+        this->rigid_bc.BCSetZero(nwc, nvel);
 
         return;
     }
@@ -151,7 +153,9 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @param naccel Vector to be zeroed in-place at constrained DOFs.
      */
     void ApplyAccelerationBC(std::vector<double> &naccel) override {
+
         MaterialPoint::ApplyAccelerationBC(naccel);
+
         this->rigid_bc.BCSetZero(nuc, naccel);
         this->rigid_bc.BCSetZero(nvc, naccel);
         this->rigid_bc.BCSetZero(nwc, naccel);
@@ -177,8 +181,7 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @param def_grad         Total deformation-gradient tensor for each particle.
      * @param delta_def_grad   Incremental deformation-gradient tensor for each particle.
      */
-    void UpdateConstitutiveModel(int pid, std::vector<std::array<double, 6>> &stress,
-                                 const std::vector<double> &det_def_grad_bar,
+    void UpdateConstitutiveModel(int pid, std::vector<std::array<double, 6>> &stress, const std::vector<double> &det_def_grad_bar,
                                  const std::vector<std::array<std::array<double, 3>, 3>> &def_grad,
                                  const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad);
     // -------------------------------------

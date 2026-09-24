@@ -1,9 +1,9 @@
-#include "../../module/bc.h"
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/mesh.h"
-#include "../../module/mpi_data.h"
-#include "../../module/solid/implicit/implicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/solid/implicit/implicit_mpm_solid.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>

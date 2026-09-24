@@ -50,3 +50,17 @@ template <typename T, std::size_t N> void VectorAssign(int size, std::vector<std
 
     return;
 }
+
+/**
+ * @brief Initialize PETSc and the global MPI rank information.
+ * @param argc Number of command-line arguments, updated by PETSc.
+ * @param argv Command-line arguments containing runtime solver options.
+ * @return Wall-clock start time in seconds for this simulation.
+ */
+double InitializeSimulation(int &argc, char **&argv);
+
+/**
+ * @brief Report elapsed simulation time and finalize PETSc.
+ * @param start_time Wall-clock start time returned by InitializeSimulation.
+ */
+void FinalizeSimulation(double start_time);

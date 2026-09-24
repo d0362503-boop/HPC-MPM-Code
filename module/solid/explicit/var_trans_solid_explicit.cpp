@@ -1,13 +1,13 @@
-#include "../../bc.h"
-#include "../../cal_mat.h"
-#include "../../dataset.h"
-#include "../../map_and_interpolate.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../shape_function.h"
-#include "../constitutive_model.h"
-#include "explicit_mpm_solid.h"
+#include "module/bc.h"
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/map_and_interpolate.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
+#include "module/solid/constitutive_model.h"
+#include "module/solid/explicit/explicit_mpm_solid.h"
 #include <array>
 #include <cmath>
 #include <fstream>
@@ -34,7 +34,7 @@ void ExplicitSolidMPM::Particle2Node() {
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
             std::array<double, 6> sts = this->stress[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -82,7 +82,7 @@ void ExplicitSolidMPM::DoMUSL() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -134,7 +134,7 @@ void ExplicitSolidMPM::G2PVelocity() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -172,7 +172,7 @@ void ExplicitSolidMPM::UpdateDeformationGradient() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, this->delta_def_grad, this->def_grad);
             det_delta_def_grad[pid] = DetMat3(this->delta_def_grad[pid]);
@@ -195,7 +195,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
 
     // --- Particle shifting correction ---
     std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionParticleShifting();
+    disp_corr = this->DeltaCorrectionPST();
 
     // --- Particle coordinate / volume / stress update ---
     const bool has_shift = !disp_corr.empty();
@@ -203,7 +203,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             // 1. Position update
             for (int ni = 0; ni < nenode; ni++) {
@@ -222,8 +222,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
                                               this->delta_def_grad_bar);
             } else {
                 this->UpdateVolume(pid, this->det_def_grad[pid]);
-                this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad,
-                                              this->delta_def_grad);
+                this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad, this->delta_def_grad);
             }
 
             pid = this->idp2p[pid];
