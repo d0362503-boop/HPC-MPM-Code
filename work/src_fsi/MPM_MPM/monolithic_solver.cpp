@@ -15,7 +15,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
     // Rebuild for the current scaled Newton matrix.
     this->fsi_sys.force_rebuild_next_ = true;
-    KSPSetTolerances(this->fsi_sys.ksp, 1.0e-10, 1.0e-15, PETSC_CURRENT, PETSC_CURRENT);
+    KSPSetTolerances(this->fsi_sys.ksp, 1.0e-12, 1.0e-15, PETSC_CURRENT, PETSC_CURRENT);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
