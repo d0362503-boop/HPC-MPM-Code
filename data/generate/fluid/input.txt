@@ -1,30 +1,9 @@
-<solswitch, rstflag, nlstep>  !Sloshing
-APIC  2  1
-<ista, iend, iout>
-1  1  1
-<dt, mtol, wp.gamma_nb, wp.beta_nb>
-1.0e-3  1.0e-10  1.0e0  0.5e0
-<xymin>
-0.0e0  0.0e0  0.0e0
-<xymax>
-1.0e0  0.05e0  2.0e0
-<xyelem>
-20  1  40
-<idimc>  ! ---- Open-form B-Spline order ----
-2  1  2
-<npxye>
-4  1  4
-<rhol, rmul>
-1.0e3  1.0e-3
-<bb>
-0.0e0  0.0e0  -9.81e0
-
-<solswitch, rstflag, nlstep>  !Cavity-flow
-APIC  2  1000
+<solswitch, do_dlb, rstflag, nlstep>  !Cavity-flow
+APIC  0  2  1000
 <ista, iend, iout>
 1  50000  100
-<dt, mtol, gamma_nb, beta_nb>
-1.0e-3  1.0e-10  1.0e0  0.5e0
+<dt, mtol, spec_rad>
+1.0e-3  1.0e-10  0.5e0
 <xymin>
 0.0e0  0.0e0  0.0e0
 <xymax>
@@ -40,12 +19,33 @@ APIC  2  1000
 <bb>
 0.0e0  0.0e0  0.0e0
 
-<solswitch, rstflag, nlstep>  !Dam-break
-APIC  2  1
+<solswitch, do_dlb, rstflag, nlstep>  !Sloshing
+APIC  0  2  1
+<ista, iend, iout>
+1  10000  100
+<dt, mtol, spec_rad>
+1.0e-3  1.0e-10  0.5e0
+<xymin>
+0.0e0  0.0e0  0.0e0
+<xymax>
+1.0e0  0.05e0  2.0e0
+<xyelem>
+20  1  40
+<idimc>  ! ---- Open-form B-Spline order ----
+2  1  2
+<npxye>
+4  1  4
+<rhol, rmul>
+1.0e3  1.0e-3
+<bb>
+0.0e0  0.0e0  -9.81e0
+
+<solswitch, do_dlb, rstflag, nlstep>  !Dam-break
+APIC  0  2  1
 <ista, iend, iout>
 1  10000  20
-<dt, mtol, gamma_nb, beta_nb>
-1.0e-3  1.0e-10  1.0e0  0.5e0 
+<dt, mtol, spec_rad>
+1.0e-3  1.0e-10  0.5e0 
 <xymin>
 0.0e0  0.0e0  0.0e0
 <xymax>
