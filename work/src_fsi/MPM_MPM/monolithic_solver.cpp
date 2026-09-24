@@ -188,7 +188,8 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
     PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
     PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
 
-    const char *options[][2] = {{"-fsi_fieldsplit_fields_ksp_type", "preonly"},
+    const char *options[][2] = {{"-fsi_ksp_gmres_cgs_refinement_type", "refine_always"},
+                                {"-fsi_fieldsplit_fields_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_pc_type", "fieldsplit"},
                                 {"-fsi_fieldsplit_fields_pc_fieldsplit_type", "additive"},
                                 {"-fsi_fieldsplit_fields_pc_fieldsplit_block_size", "7"},
@@ -197,20 +198,33 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_type", "fgmres"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_rtol", "0.5"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_max_it", "100"},
-                                // Retain local velocity-pressure coupling in the fluid preconditioner.
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_pc_type", "asm"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_pc_asm_overlap", "1"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_sub_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_type", "ilu"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_levels", "1"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_zeropivot", "1e-8"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "hypre"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_type", "Euclid"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_num_levels", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_eu_level", "2"},
-                                {"-fsi_fieldsplit_lambda_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_lambda_pc_type", "jacobi"}};
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "asm"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
+                                {"-fsi_fieldsplit_lambda_ksp_type", "gmres"},
+                                {"-fsi_fieldsplit_lambda_ksp_rtol", "0.2"},
+                                {"-fsi_fieldsplit_lambda_ksp_max_it", "5"},
+                                {"-fsi_fieldsplit_lambda_ksp_gmres_restart", "5"},
+                                {"-fsi_fieldsplit_lambda_pc_type", "asm"},
+                                {"-fsi_fieldsplit_lambda_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_lambda_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_lambda_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_lambda_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_lambda_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_lambda_sub_pc_factor_shift_amount", "1e-3"}};
 
     for (const auto &option : options) {
         PetscBool supplied;

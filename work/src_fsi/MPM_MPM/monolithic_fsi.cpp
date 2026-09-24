@@ -17,6 +17,50 @@
 
 using namespace mpm_mpm_monolithic_fsi;
 
+void MPMMPMMonolithicFSI::SolveFSISystem() {
+
+    this->LumpedLagrangeMultiplier();
+
+    this->BuildActiveDOFs();
+
+    this->fluid_.MakeNSStabCoeff(this->fluid_.nvel);
+
+    std::vector<std::array<double, 6>> stress_k = this->solid_.InitializeNRStress();
+
+    std::vector<double> nvel_f(nodec * 3), nvel_s(nodec * 3);
+    std::vector<double> naccel_f(nodec * 3), naccel_s(nodec * 3);
+    std::array<double, 4> initial_norm{};
+
+    VectorAssign(nodec * 3, this->fluid_.ndispl);
+    VectorAssign(nodec * 3, this->solid_.ndispl);
+    VectorAssign(nodec * 3, this->nlambda);
+    VectorAssign(nodec, this->fluid_.npres);
+    VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
+
+    for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
+        VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
+        VectorAssign(nodec * 10, this->fsi_sys.b_rhs);
+
+        this->fluid_.BCNRSet();
+        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
+
+        this->solid_.BCNRSet();
+        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
+
+        this->AssembleFluidSystem(nvel_f, naccel_f);
+        this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
+        this->AssembleInterfaceSystem(nvel_f, nvel_s);
+
+        int linear_iterations = this->SolveSystem(NR_it);
+
+        this->UpdateNRIncrement();
+
+        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
+    }
+
+    return;
+}
+
 void MPMMPMMonolithicFSI::AssembleInterfaceSystem(const std::vector<double> &nvel_f, //
                                                   const std::vector<double> &nvel_s) {
 
@@ -134,54 +178,10 @@ void MPMMPMMonolithicFSI::UpdateNRIncrement() {
     return;
 }
 
-void MPMMPMMonolithicFSI::SolveFSISystem() {
-
-    this->LumpedLagrangeMultiplier();
-
-    this->BuildActiveDOFs();
-
-    this->fluid_.MakeNSStabCoeff(this->fluid_.nvel);
-
-    std::vector<std::array<double, 6>> stress_k = this->solid_.InitializeNRStress();
-
-    std::vector<double> nvel_f(nodec * 3), nvel_s(nodec * 3);
-    std::vector<double> naccel_f(nodec * 3), naccel_s(nodec * 3);
-    std::array<double, 4> initial_norm{};
-
-    VectorAssign(nodec * 3, this->fluid_.ndispl);
-    VectorAssign(nodec * 3, this->solid_.ndispl);
-    VectorAssign(nodec * 3, this->nlambda);
-    VectorAssign(nodec, this->fluid_.npres);
-    VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
-
-    for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
-        VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
-        VectorAssign(nodec * 10, this->fsi_sys.b_rhs);
-
-        this->fluid_.BCNRSet();
-        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
-
-        this->solid_.BCNRSet();
-        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
-
-        this->AssembleFluidSystem(nvel_f, naccel_f);
-        this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
-        this->AssembleInterfaceSystem(nvel_f, nvel_s);
-
-        int linear_iterations = this->SolveSystem(NR_it);
-
-        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
-
-        this->UpdateNRIncrement();
-    }
-
-    return;
-}
-
 bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
                                              std::array<double, 4> &initial_norm, int NR_it, int linear_iterations) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-11, 1.0e-8, 1.0e-8};
+    const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-10, 1.0e-8, 1.0e-8};
 
     // stats[0]: fluid momentum residual [N].
     // stats[1]: continuity/PSPG residual [m^3/s].
