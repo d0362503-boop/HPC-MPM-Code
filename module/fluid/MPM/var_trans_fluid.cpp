@@ -114,8 +114,8 @@ void StabilizedMPM::Node2Particle() {
     }
 
     std::vector<std::array<double, 3>> disp_corr;
-    // disp_corr = this->DeltaCorrectionPST();
-    disp_corr = this->PairwiseRepulsivePST();
+    disp_corr = this->DeltaCorrectionPST();
+    // disp_corr = this->PairwiseRepulsivePST();
 
     this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
 
