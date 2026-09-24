@@ -15,7 +15,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
     // Rebuild for the current scaled Newton matrix.
     this->fsi_sys.force_rebuild_next_ = true;
-    KSPSetTolerances(this->fsi_sys.ksp, 1.0e-10, 1.0e-15, PETSC_CURRENT, PETSC_CURRENT);
+    KSPSetTolerances(this->fsi_sys.ksp, 1.0e-6, 1.0e-10, PETSC_CURRENT, PETSC_CURRENT);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
@@ -207,6 +207,7 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_zeropivot", "1e-8"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_ksp_type", "preonly"},
+
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "asm"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_pc_asm_overlap", "1"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_sub_ksp_type", "preonly"},
@@ -214,6 +215,7 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_levels", "1"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
+
                                 {"-fsi_fieldsplit_lambda_ksp_type", "gmres"},
                                 {"-fsi_fieldsplit_lambda_ksp_rtol", "0.2"},
                                 {"-fsi_fieldsplit_lambda_ksp_max_it", "5"},
