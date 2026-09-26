@@ -78,7 +78,7 @@ void MaterialPoint::CommitNodalKinematics(const std::vector<double> &nvel_k, con
 void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                                      const std::vector<std::array<double, 3>> &disp,
                                                      const std::vector<std::array<double, 3>> &disp_corr) {
-    const bool has_shift = !disp_corr.empty();
+    // const bool has_shift = !disp_corr.empty();
     for (int n = 0; n < this->num; n++) {
         std::array<double, 3> advected_coord;
         bool advected_outside = false;
@@ -88,17 +88,17 @@ void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::arra
                                          + this->gamma_nb * this->accel[n][i]);
             }
             advected_coord[i] = this->coord[n][i] + disp[n][i];
-            this->coord[n][i] = advected_coord[i];
-            if (advected_coord[i] < xyminw[i] || advected_coord[i] > xymaxw[i]) { advected_outside = true; }
+            this->coord[n][i] = advected_coord[i] + disp_corr[n][i];
+            // if (advected_coord[i] < xyminw[i] || advected_coord[i] > xymaxw[i]) { advected_outside = true; }
         }
 
         // Reject shifting-induced boundary crossings.
-        if (has_shift && !advected_outside) {
-            for (int i = 0; i < 3; i++) {
-                double shifted_coord = advected_coord[i] + disp_corr[n][i];
-                if (shifted_coord > xyminw[i] && shifted_coord < xymaxw[i]) { this->coord[n][i] = shifted_coord; }
-            }
-        }
+        // if (has_shift && !advected_outside) {
+        //     for (int i = 0; i < 3; i++) {
+        //         double shifted_coord = advected_coord[i] + disp_corr[n][i];
+        //         if (shifted_coord > xyminw[i] && shifted_coord < xymaxw[i]) { this->coord[n][i] = shifted_coord; }
+        //     }
+        // }
     }
 
     return;

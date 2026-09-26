@@ -37,6 +37,7 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
     VectorAssign(nodec, this->fluid_.npres);
     VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
 
+    int linear_iterations = 0;
     for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
         VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
         VectorAssign(nodec * 10, this->fsi_sys.b_rhs);
@@ -51,11 +52,11 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
         this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
         this->AssembleInterfaceSystem(nvel_f, nvel_s);
 
-        int linear_iterations = this->SolveSystem(NR_it);
+        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
+
+        linear_iterations = this->SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
-
-        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
     }
 
     return;

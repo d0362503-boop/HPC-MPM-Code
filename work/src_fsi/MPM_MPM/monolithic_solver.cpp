@@ -22,7 +22,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
 
     // Rebuild for the current scaled Newton matrix.
-    this->fsi_sys.force_rebuild_next_ = true;
+    // this->fsi_sys.force_rebuild_next_ = true;
     KSPSetTolerances(this->fsi_sys.ksp, ref_tol, 1.0e-15, PETSC_CURRENT, 1000);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
@@ -186,7 +186,7 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 
     KSPSetOptionsPrefix(mat.ksp, "fsi_");
     PCSetOptionsPrefix(pc, "fsi_");
-    KSPGMRESSetRestart(mat.ksp, 100);
+    KSPGMRESSetRestart(mat.ksp, 200);
 
     PCSetType(pc, PCFIELDSPLIT);
     PCFieldSplitSetBlockSize(pc, 10);
@@ -206,28 +206,41 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_type", "fgmres"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_rtol", "0.5"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_max_it", "100"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_type", "asm"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_asm_overlap", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_type", "ilu"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_levels", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_zeropivot", "1e-8"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_type", "fieldsplit"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_block_size", "4"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_type", "schur"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_0_fields", "0,1,2"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_1_fields", "3"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_fact_type", "lower"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_precondition", "selfp"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_type", "asm"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_type", "asm"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
 
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "asm"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_asm_overlap", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_type", "ilu"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_levels", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "hypre"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_type", "boomeramg"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_type", "Euclid"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_num_levels", "1"},
+                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_eu_level", "1"},
 
                                 {"-fsi_fieldsplit_lambda_ksp_type", "gmres"},
-                                {"-fsi_fieldsplit_lambda_ksp_rtol", "0.2"},
-                                {"-fsi_fieldsplit_lambda_ksp_max_it", "5"},
-                                {"-fsi_fieldsplit_lambda_ksp_gmres_restart", "5"},
+                                {"-fsi_fieldsplit_lambda_ksp_rtol", "0.02"},
+                                {"-fsi_fieldsplit_lambda_ksp_max_it", "20"},
+                                {"-fsi_fieldsplit_lambda_ksp_gmres_restart", "20"},
                                 {"-fsi_fieldsplit_lambda_pc_type", "asm"},
                                 {"-fsi_fieldsplit_lambda_pc_asm_overlap", "1"},
                                 {"-fsi_fieldsplit_lambda_sub_ksp_type", "preonly"},
