@@ -20,9 +20,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
     MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
-
     // Rebuild for the current scaled Newton matrix.
-    // this->fsi_sys.force_rebuild_next_ = true;
     KSPSetTolerances(this->fsi_sys.ksp, ref_tol, 1.0e-15, PETSC_CURRENT, 1000);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
