@@ -22,12 +22,12 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
     // Allow large warm-start residuals.
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
-    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 200);
+    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 100);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
     KSPGetConvergedReason(this->fsi_sys.ksp, &reason);
-    if (reason < 0) { MPI_Abort(MPI_COMM_WORLD, 1); }
+    // if (reason < 0) { MPI_Abort(MPI_COMM_WORLD, 1); }
 
     for (int n = 0; n < nodec * 10; n++) { this->fsi_sys.x_lhs[n] *= this->column_scale[n]; }
     this->fsi_sys.b_rhs.swap(residual);

@@ -51,6 +51,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     /** @brief Integrate the paired fluid-solid phase gradient into common nodal interface-area weights. */
     void LumpedLagrangeMultiplier();
 
+    /**
+     * @brief Add interface multiplier forces to the fluid or solid momentum RHS.
+     * @param af_coeff Signed generalized-alpha force weight: positive for fluid and negative for solid.
+     * @param offsets Start indices of the field's three momentum components in the coupled RHS.
+     */
     void AddLagrangeMultiplierToRHS(double af_coeff, const std::vector<int> &offsets);
 
     /**
@@ -71,6 +76,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
                              const std::vector<double> &naccel_k, //
                              std::vector<std::array<double, 6>> &stress_k);
 
+    /**
+     * @brief Assemble the weighted interface velocity constraint and its displacement coupling blocks.
+     * @param nvel_f Fluid nodal velocity at the current endpoint iterate.
+     * @param nvel_s Solid nodal velocity at the current endpoint iterate.
+     */
     void AssembleInterfaceSystem(const std::vector<double> &nvel_f, //
                                  const std::vector<double> &nvel_s);
 
@@ -92,12 +102,13 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @param initial_norm Post-solve NR0 RMS norms of b-A*increment in physical units for the first three fields.
      * @param NR_it Current Newton iteration.
      * @param solver_it Krylov iterations in the last coupled linear solve.
-     * @return Whether all field residuals and the velocity jump meet tolerance.
+     * @return Whether all field residuals meet tolerance.
      * @note The linear residual is not a reassembled nonlinear residual at the updated state.
      */
     bool CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
                             std::array<double, 4> &initial_norm, int NR_it, int solver_it);
 
+    /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
     void UpdateNRIncrement() override;
 
     /** @brief Select active components using field-specific nodal-mass thresholds and physical boundary constraints. */

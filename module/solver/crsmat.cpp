@@ -660,7 +660,7 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
 
     KSPConvergedReason reason;
     KSPGetConvergedReason(this->ksp, &reason);
-    if (reason < 0 && myrank == 0) { std::cout << "PETSc KSP diverged, reason: " << reason << std::endl; }
+    if (reason < 0 && myrank == 0) { std::cout << "PETSc KSP diverged, reason: " << reason << "\n"; }
 
     // Gather only the nodec*ndof entries needed by this rank (owned + ghost),
     // instead of materialising the full global solution on every rank.
