@@ -10,7 +10,6 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     this->BCResidualSet(this->fsi_sys.b_rhs);
     std::vector<double> residual = this->fsi_sys.b_rhs;
 
-    VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
     double active_dof = 0.0e0;
@@ -21,8 +20,9 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
-    // Rebuild for the current scaled Newton matrix.
-    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, PETSC_CURRENT, 1000);
+    // Allow large warm-start residuals.
+    const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
+    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 100);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
@@ -52,8 +52,9 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
     }
 
     MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
-    const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
+    const double fluid_cut = 1.0e-3 * mass_stats[0] / mass_stats[1];
+    const double solid_cut = 1.0e-3 * mass_stats[2] / mass_stats[3];
+
     this->fixed_dof.assign(nodec * 10, 0);
     for (int n = 0; n < nodec; n++) {
         const bool fluid_active = this->fluid_.nmass[n] > fluid_cut;
@@ -95,32 +96,23 @@ void MPMMPMMonolithicFSI::BuildPetscBCList(CrsMat &mat) {
 
 void MPMMPMMonolithicFSI::ScaleSystem() {
 
-    std::vector<double> diagonal(nodec * 7, 0.0);
-    for (int n = 0; n < nodec; n++) {
-        int ncol = 0;
-        const int j = this->fsi_sys.FindIndex(n, n, ncol);
-        for (int b = 0; b < this->fsi_sys.num_block; b++) {
-            if (this->fsi_sys.block_row[b] == this->fsi_sys.block_col[b]) {
-                diagonal[n + this->fsi_sys.block_row[b] * nodec] = this->fsi_sys.amat[j + this->fsi_sys.block_id[b]];
-            }
-        }
-    }
+    this->fsi_sys.adiag.assign(nodec * 10, 0.0);
+    this->fsi_sys.ExtractDiagonal(10);
 
-    NodeVarComm(diagonal, {0, nodec, 2 * nodec, 3 * nodec, 4 * nodec, 5 * nodec, 6 * nodec});
-
-    this->column_scale.assign(nodec * 10, 1.0);
-    std::vector<double> row_scale(nodec * 10, 1.0);
+    // Reuse nodal-mass activity mask.
+    this->column_scale.assign(nodec * 10, 0.0);
+    std::vector<double> row_scale(nodec * 10, 0.0);
 
     for (int n = 0; n < nodec; n++) {
         for (int d = 0; d < 7; d++) {
             const int i = n + d * nodec;
-            if (!this->fixed_dof[i]) { row_scale[i] = this->column_scale[i] = 1.0 / std::sqrt(std::abs(diagonal[i])); }
+            if (!this->fixed_dof[i]) { row_scale[i] = this->column_scale[i] = 1.0 / std::sqrt(std::abs(this->fsi_sys.adiag[i])); }
         }
         for (int d = 0; d < 3; d++) {
             const int i = n + (d + 7) * nodec;
             if (this->fixed_dof[i]) continue;
-            const double df = this->fixed_dof[n + d * nodec] ? 0.0 : 1.0 / std::abs(diagonal[n + d * nodec]);
-            const double ds = this->fixed_dof[n + (d + 4) * nodec] ? 0.0 : 1.0 / std::abs(diagonal[n + (d + 4) * nodec]);
+            const double df = this->column_scale[n + d * nodec] * this->column_scale[n + d * nodec];
+            const double ds = this->column_scale[n + (d + 4) * nodec] * this->column_scale[n + (d + 4) * nodec];
             const double af = this->fluid_.alpha_f, as = this->solid_.alpha_f;
             const double cf = this->fluid_.nb_para[0], cs = this->solid_.nb_para[0];
             this->column_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(af * af * df + as * as * ds));
@@ -138,7 +130,11 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
         }
     }
 
-    for (int n = 0; n < nodec * 10; n++) { this->fsi_sys.b_rhs[n] *= row_scale[n]; }
+    for (int n = 0; n < nodec * 10; n++) {
+        this->fsi_sys.b_rhs[n] *= row_scale[n];
+        // Scale previous physical increment.
+        this->fsi_sys.x_lhs[n] = this->fixed_dof[n] ? 0.0 : this->fsi_sys.x_lhs[n] / this->column_scale[n];
+    }
 }
 
 void MPMMPMMonolithicFSI::BCResidualSet(std::vector<double> &rr) {
@@ -226,6 +222,8 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_type", "ilu"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_levels", "1"},
+                                // Reject tiny pressure ILU pivots.
+                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_zeropivot", "1e-8"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
 

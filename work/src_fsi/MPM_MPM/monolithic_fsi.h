@@ -18,8 +18,8 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     CrsMat fsi_sys;
 
     std::vector<double> nlm_lump_local, nlm_lump;
-    std::vector<double> nlambda; // nodal multiplier force density
-    std::vector<char> fixed_dof; // constrained and inactive components
+    std::vector<double> nlambda;      // nodal multiplier force density
+    std::vector<char> fixed_dof;      // constrained and inactive components
     std::vector<double> column_scale; // linear increment scaling factors
 
     MPMMPMMonolithicFSI() {
@@ -29,10 +29,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
         this->solid_.rhs_start = 4;
         this->ode_order = 2;
         this->fsi_sys.ndof = 10;
-        this->fsi_sys.block_row = {0,0,0,0,0, 1,1,1,1,1, 2,2,2,2,2, 3,3,3,3,
-                                          4,4,4,4, 5,5,5,5, 6,6,6,6, 7,7,8,8,9,9};
-        this->fsi_sys.block_col = {0,1,2,3,7, 0,1,2,3,8, 0,1,2,3,9, 0,1,2,3,
-                                          4,5,6,7, 4,5,6,8, 4,5,6,9, 0,4,1,5,2,6};
+        this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
+                                   4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
+        this->fsi_sys.block_col = {0, 1, 2, 3, 7, 0, 1, 2, 3, 8, 0, 1, 2, 3, 9, 0, 1, 2, 3,
+                                   4, 5, 6, 7, 4, 5, 6, 8, 4, 5, 6, 9, 0, 4, 1, 5, 2, 6};
         this->fsi_sys.FEM_flag = false;
         this->fsi_sys.use_petsc = true;
         this->fsi_sys.use_schur_fieldsplit = true;
@@ -79,7 +79,8 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
     /**
      * @brief Apply residual constraints and solve for physical monolithic increments.
-     * @param NR_it Current Newton iteration used for preconditioner setup.
+     * @param NR_it Newton iteration controlling preconditioner setup and reuse of the previous physical increment as the initial
+     * guess.
      * @return Number of Krylov iterations used by the coupled linear solve.
      */
     int SolveSystem(int NR_it);
@@ -90,20 +91,18 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @param nvel_s Solid nodal velocity at the current endpoint iterate.
      * @param initial_norm Initial field residuals used for relative convergence.
      * @param NR_it Current Newton iteration.
-     * @param linear_iterations Accumulated Krylov iterations for this time step.
+     * @param linear_iterations Krylov iterations in the last coupled linear solve.
      * @return Whether all field residuals and the velocity jump meet tolerance.
      */
-    bool CheckNRConvergence(const std::vector<double> &nvel_f,
-                            const std::vector<double> &nvel_s,
-                            std::array<double, 4> &initial_norm,
-                            int NR_it, int linear_iterations);
+    bool CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
+                            std::array<double, 4> &initial_norm, int NR_it, int linear_iterations);
 
     void UpdateNRIncrement() override;
 
-    /** @brief Select active field components and apply physical boundary constraints. */
+    /** @brief Select active components using field-specific nodal-mass thresholds and physical boundary constraints. */
     void BuildActiveDOFs();
 
-    /** @brief Equilibrate field diagonals and multiplier couplings before the linear solve. */
+    /** @brief Scale the matrix, RHS and physical initial increment; fixed and inactive guesses are zero. */
     void ScaleSystem();
 
     /**
@@ -126,13 +125,13 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     void AssemblePetscMat(CrsMat &mat, int ndof) override;
 
     /**
-     * @brief Configure nested field and multiplier Schur preconditioning.
+     * @brief Configure nested fields, multipliers and the default pressure ASM/ILU preconditioner.
      * @param mat Coupled linear system being solved.
      * @param pc PETSc preconditioner for the coupled Krylov solver.
      */
     void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
 
-    /** @brief Release the fluid and solid response solvers. */
+    /** @brief Release the coupled PETSc solver and pressure preconditioner resources. */
     ~MPMMPMMonolithicFSI();
 };
 

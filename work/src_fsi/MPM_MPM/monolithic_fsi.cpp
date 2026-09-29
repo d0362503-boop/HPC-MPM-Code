@@ -205,16 +205,16 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
                 d < 7 ? this->fsi_sys.b_rhs[n + d * nodec] : nvel_s[n + (d - 7) * nodec] - nvel_f[n + (d - 7) * nodec];
             stats[field] += residual * residual;
             stats[field + 4] += 1.0;
-            if (d >= 7) {
-                jump_max[0] = std::max(jump_max[0], std::abs(residual));
-                jump_max[1] = std::max(jump_max[1], std::abs(this->solid_.ndispl[n + (d - 7) * nodec] -
-                                                             this->fluid_.ndispl[n + (d - 7) * nodec]));
-            }
+            // if (d >= 7) {
+            //     jump_max[0] = std::max(jump_max[0], std::abs(residual));
+            //     jump_max[1] = std::max(jump_max[1], std::abs(this->solid_.ndispl[n + (d - 7) * nodec] -
+            //                                                  this->fluid_.ndispl[n + (d - 7) * nodec]));
+            // }
         }
     }
 
     MPI_Allreduce(MPI_IN_PLACE, stats.data(), 8, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, jump_max.data(), 2, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    // MPI_Allreduce(MPI_IN_PLACE, jump_max.data(), 2, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // All four RMS residuals must be finite and satisfy their thresholds.
     // Fields 0..2: max(absolute_tol, 1e-4 * this step's initial RMS).

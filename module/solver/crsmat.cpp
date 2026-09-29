@@ -97,6 +97,7 @@ void CrsMat::ResetPetscSolver() {
 }
 
 void CrsMat::ExtractDiagonal(int ndof) {
+
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             if (i == this->matcolid[j]) {
@@ -155,6 +156,7 @@ void CrsMat::BuildActiveRowMask() {
 }
 
 void CrsMat::ComputeDiagonalInverseSqrt(int ndof) {
+
     int var_size = nodec * ndof;
     for (int n = 0; n < var_size; n++) {
         if (this->FEM_flag) {
@@ -168,6 +170,7 @@ void CrsMat::ComputeDiagonalInverseSqrt(int ndof) {
 }
 
 void CrsMat::ApplyDiagonalScaling() {
+
     for (int i = 0; i < nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
@@ -175,8 +178,7 @@ void CrsMat::ApplyDiagonalScaling() {
             for (int b = 0; b < this->num_block; b++) {
                 const int row_offset = nodec * this->block_row[b];
                 const int col_offset = nodec * this->block_col[b];
-                this->amat[j + this->block_id[b]] *=
-                    this->adiag[i + row_offset] * this->adiag[col + col_offset];
+                this->amat[j + this->block_id[b]] *= this->adiag[i + row_offset] * this->adiag[col + col_offset];
             }
         }
     }
@@ -493,9 +495,7 @@ void CrsMat::InitPetscSolver(int ndof) {
     return;
 }
 
-void CrsMat::AssemblePetscMat(int ndof) {
-    this->owner_->AssemblePetscMat(*this, ndof);
-}
+void CrsMat::AssemblePetscMat(int ndof) { this->owner_->AssemblePetscMat(*this, ndof); }
 
 void MaterialPoint::AssemblePetscMat(CrsMat &mat, int ndof) {
     MatZeroEntries(mat.petsc_mat);
@@ -611,8 +611,7 @@ int CrsMat::SolveWithPetsc(int ndof, int NR_it) {
 
     // Collective even when this rank has no fixed rows.
     MatZeroRowsColumns(this->petsc_mat, static_cast<PetscInt>(this->petsc_bc_gids.size()),
-                       this->petsc_bc_gids.empty() ? nullptr : this->petsc_bc_gids.data(), 1.0e0,
-                       this->petsc_x, this->petsc_b);
+                       this->petsc_bc_gids.empty() ? nullptr : this->petsc_bc_gids.data(), 1.0e0, this->petsc_x, this->petsc_b);
 
     Mat solve_mat = this->petsc_mat;
     if (!this->FEM_flag) {
