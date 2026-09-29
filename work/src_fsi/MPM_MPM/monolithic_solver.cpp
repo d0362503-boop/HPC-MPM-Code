@@ -22,7 +22,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
     // Allow large warm-start residuals.
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
-    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 100);
+    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 200);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
