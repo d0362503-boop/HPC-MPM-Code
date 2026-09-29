@@ -52,11 +52,14 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
         this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
         this->AssembleInterfaceSystem(nvel_f, nvel_s);
 
-        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
-
         linear_iterations = this->SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
+
+        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
+        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
+
+        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
     }
 
     return;
@@ -184,45 +187,72 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
 
     const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-10, 1.0e-8, 1.0e-8};
 
-    // stats[0]: fluid momentum residual [N].
-    // stats[1]: continuity/PSPG residual [m^3/s].
-    // stats[2]: solid momentum residual [N].
+    // Compute b - A*x in the scaled PETSc system.
+    Vec linear_residual, local_residual;
+    VecDuplicate(this->fsi_sys.petsc_b, &linear_residual);
+    MatMult(this->fsi_sys.petsc_mat, this->fsi_sys.petsc_x, linear_residual);
+    VecAYPX(linear_residual, -1.0, this->fsi_sys.petsc_b); // residual = b - A*x
+
+    // Gather residuals in the same local ordering as x_lhs.
+    VecDuplicate(this->fsi_sys.seq_x, &local_residual);
+    VecScatterBegin(this->fsi_sys.scatter_to_all, linear_residual, local_residual, INSERT_VALUES, SCATTER_FORWARD);
+    VecScatterEnd(this->fsi_sys.scatter_to_all, linear_residual, local_residual, INSERT_VALUES, SCATTER_FORWARD);
+    const PetscScalar *scaled_residual;
+    VecGetArrayRead(local_residual, &scaled_residual);
+
+    // stats[0]: linearized fluid residual [N].
+    // stats[1]: linearized continuity residual [m^3/s].
+    // stats[2]: linearized solid residual [N].
     // stats[3]: endpoint velocity difference [m/s].
     // stats[4..7]: corresponding active-component counts.
-    // Accumulate squares below, then convert to global RMS; field RHS is unscaled.
     std::array<double, 8> stats{};
-
-    // jump_max[0]: maximum velocity difference [m/s].
-    // jump_max[1]: maximum displacement-increment difference [m].
-    // Global componentwise maxima for diagnostics only; neither controls convergence.
-    std::array<double, 2> jump_max{};
 
     for (int n : this->fsi_sys.owned_natural_ids) {
         for (int d = 0; d < 10; d++) {
-            if (this->fixed_dof[n + d * nodec]) continue;
-            const int field = d < 3 ? 0 : (d == 3 ? 1 : (d < 7 ? 2 : 3));
-            const double residual =
-                d < 7 ? this->fsi_sys.b_rhs[n + d * nodec] : nvel_s[n + (d - 7) * nodec] - nvel_f[n + (d - 7) * nodec];
+            const int index = n + d * nodec;
+            if (this->fixed_dof[index]) continue;
+
+            int field;
+            if (d < 3) {
+                field = 0;
+            } // Fluid momentum
+            else if (d == 3) {
+                field = 1;
+            } // Fluid continuity
+            else if (d < 7) {
+                field = 2;
+            } // Solid momentum
+            else {
+                field = 3;
+            } // Interface velocity
+
+            double residual;
+            if (d < 7) {
+                // Undo row scaling; it equals column scaling for these seven fields.
+                const double row_scale = this->column_scale[index];
+                residual = scaled_residual[index] / row_scale;
+            } else {
+                const int velocity_index = n + (d - 7) * nodec;
+                residual = nvel_s[velocity_index] - nvel_f[velocity_index];
+            }
             stats[field] += residual * residual;
             stats[field + 4] += 1.0;
-            // if (d >= 7) {
-            //     jump_max[0] = std::max(jump_max[0], std::abs(residual));
-            //     jump_max[1] = std::max(jump_max[1], std::abs(this->solid_.ndispl[n + (d - 7) * nodec] -
-            //                                                  this->fluid_.ndispl[n + (d - 7) * nodec]));
-            // }
         }
     }
 
+    VecRestoreArrayRead(local_residual, &scaled_residual);
+    VecDestroy(&local_residual);
+    VecDestroy(&linear_residual);
+
     MPI_Allreduce(MPI_IN_PLACE, stats.data(), 8, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    // MPI_Allreduce(MPI_IN_PLACE, jump_max.data(), 2, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // All four RMS residuals must be finite and satisfy their thresholds.
-    // Fields 0..2: max(absolute_tol, 1e-4 * this step's initial RMS).
+    // Fields 0..2: max(absolute_tol, 1e-4 * NR0 post-solve residual RMS).
     // Field 3: n+1 velocity-difference RMS <= 1e-8 m/s, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         stats[field] = std::sqrt(stats[field] / std::max(1.0, stats[field + 4]));
-        if (NR_it == 0) { initial_norm[field] = stats[field]; }
+        if (NR_it == 0 && field < 3) { initial_norm[field] = stats[field]; }
         const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-4 * initial_norm[field]);
         converged = converged && stats[field] <= tolerance;
     }
@@ -237,8 +267,9 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
     }
 
     if (myrank == 0) {
-        std::cout << "Monolithic_NR: " << std::setw(15) << NR_it << std::scientific << std::setw(15) << stats[0] //
-                  << std::setw(15) << stats[1] << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
+        std::cout << "Monolithic_NR: " << std::setw(15) << NR_it << std::setw(15) << linear_iterations //
+                  << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]         //
+                  << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
     }
 
     if (NR_it == this->max_NR_it) {

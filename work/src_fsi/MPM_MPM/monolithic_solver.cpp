@@ -52,8 +52,8 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
     }
 
     MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    const double fluid_cut = 1.0e-3 * mass_stats[0] / mass_stats[1];
-    const double solid_cut = 1.0e-3 * mass_stats[2] / mass_stats[3];
+    const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
+    const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
 
     this->fixed_dof.assign(nodec * 10, 0);
     for (int n = 0; n < nodec; n++) {

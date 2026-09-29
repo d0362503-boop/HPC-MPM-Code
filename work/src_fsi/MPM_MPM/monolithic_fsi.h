@@ -86,13 +86,14 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     int SolveSystem(int NR_it);
 
     /**
-     * @brief Check field residuals and endpoint interface velocity continuity.
-     * @param nvel_f Fluid nodal velocity at the current endpoint iterate.
-     * @param nvel_s Solid nodal velocity at the current endpoint iterate.
-     * @param initial_norm Initial field residuals used for relative convergence.
+     * @brief Check PETSc b-A*increment in physical units and updated interface velocity continuity.
+     * @param nvel_f Fluid nodal velocity after applying the current Newton increment.
+     * @param nvel_s Solid nodal velocity after applying the current Newton increment.
+     * @param initial_norm Post-solve NR0 RMS norms of b-A*increment in physical units for the first three fields.
      * @param NR_it Current Newton iteration.
      * @param linear_iterations Krylov iterations in the last coupled linear solve.
      * @return Whether all field residuals and the velocity jump meet tolerance.
+     * @note The linear residual is not a reassembled nonlinear residual at the updated state.
      */
     bool CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
                             std::array<double, 4> &initial_norm, int NR_it, int linear_iterations);
