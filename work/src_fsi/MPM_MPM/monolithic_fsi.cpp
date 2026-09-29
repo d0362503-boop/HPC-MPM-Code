@@ -37,7 +37,6 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
     VectorAssign(nodec, this->fluid_.npres);
     VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
 
-    int linear_iterations = 0;
     for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
         VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
         VectorAssign(nodec * 10, this->fsi_sys.b_rhs);
@@ -52,14 +51,14 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
         this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
         this->AssembleInterfaceSystem(nvel_f, nvel_s);
 
-        linear_iterations = this->SolveSystem(NR_it);
+        int solver_it = this->SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
 
         this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
         this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
 
-        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, linear_iterations)) { break; }
+        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, solver_it)) { break; }
     }
 
     return;
@@ -183,7 +182,7 @@ void MPMMPMMonolithicFSI::UpdateNRIncrement() {
 }
 
 bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
-                                             std::array<double, 4> &initial_norm, int NR_it, int linear_iterations) {
+                                             std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
     const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-10, 1.0e-8, 1.0e-8};
 
@@ -213,18 +212,15 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
             if (this->fixed_dof[index]) continue;
 
             int field;
-            if (d < 3) {
+            if (d < 3) { // Fluid momentum
                 field = 0;
-            } // Fluid momentum
-            else if (d == 3) {
+            } else if (d == 3) { // Fluid continuity
                 field = 1;
-            } // Fluid continuity
-            else if (d < 7) {
+            } else if (d < 7) { // Solid momentum
                 field = 2;
-            } // Solid momentum
-            else {
+            } else { // Interface velocity
                 field = 3;
-            } // Interface velocity
+            }
 
             double residual;
             if (d < 7) {
@@ -259,16 +255,16 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
 
     if (converged) {
         if (myrank == 0) {
-            std::cout << "Monolithic_converge: " << std::setw(15) << NR_it << std::setw(15) << linear_iterations //
-                      << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]               //
+            std::cout << "Monolithic_converge: " << std::setw(15) << NR_it << std::setw(15) << solver_it //
+                      << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]       //
                       << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
         }
         return true;
     }
 
     if (myrank == 0) {
-        std::cout << "Monolithic_NR: " << std::setw(15) << NR_it << std::setw(15) << linear_iterations //
-                  << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]         //
+        std::cout << "Monolithic_NR: " << std::setw(15) << NR_it << std::setw(15) << solver_it //
+                  << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1] //
                   << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
     }
 
