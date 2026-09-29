@@ -164,21 +164,34 @@ class MaterialPoint {
      * Sets the weights in `integrator_` using its spectral radius and equation
      * order. Call NewmarkBetaParaSet() separately to refresh its displacement coefficients.
      */
-    void GeneralizedAlphaParaSet();
+    void GeneralizedAlphaParaSet() {
+
+        this->integrator_.GeneralizedAlphaParaSet();
+
+        return;
+    }
 
     /**
      * @brief Compute nodal acceleration from nodal velocity by inverting the
      *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
      * @return Vector of derived accelerations sized to `nodec * 3`.
      */
-    std::vector<double> ComputeNodeAccelFromVel() const;
+    std::vector<double> ComputeNodeAccelFromVel() const {
+
+        return this->integrator_.ComputeNodeAccelFromVel(this->nvel, this->nvel_old, this->naccel, dt);
+    }
 
     // --- Newmark-β part ---
 
     /**
      * @brief Refresh integrator displacement coefficients using the global time step.
      */
-    void NewmarkBetaParaSet();
+    void NewmarkBetaParaSet() {
+
+        this->integrator_.NewmarkBetaParaSet(dt);
+
+        return;
+    }
 
     /**
      * @brief Compute nodal velocity and acceleration from the nodal displacement
@@ -186,7 +199,12 @@ class MaterialPoint {
      * @param nvel_k   Output nodal velocity vector (size `nodec * 3`).
      * @param naccel_k Output nodal acceleration vector (size `nodec * 3`).
      */
-    void ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
+    void ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept {
+
+        this->integrator_.ComputeNodeVelAccelFromDispl(this->ndispl, this->nvel, this->naccel, nvel_k, naccel_k);
+
+        return;
+    }
     // ------------------------------
 
     // --- Newton-Raphson ---

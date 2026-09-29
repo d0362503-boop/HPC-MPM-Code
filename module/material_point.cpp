@@ -176,9 +176,8 @@ MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, //
         ddg[2][1] += dsfi2 * af_coeff * this->ndispl[nid + nwc];
         ddg[2][2] += dsfi3 * af_coeff * this->ndispl[nid + nwc];
     }
-    ++ddg[0][0];
-    ++ddg[1][1];
-    ++ddg[2][2];
+
+    for (int i = 0; i < 3; i++) { ++ddg[i][i]; }
 
     return ddg;
 }
