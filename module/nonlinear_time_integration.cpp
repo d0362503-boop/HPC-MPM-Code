@@ -8,64 +8,19 @@
 #include "module/mesh.h"
 
 void MaterialPoint::GeneralizedAlphaParaSet() {
-    double temp = 1.0e0 + this->spec_rad;
-    this->alpha_f = 1.0e0 / temp;
-
-    if (this->ode_order == 2) {
-        // --- for second order PDE (Solid) ---
-        this->alpha_m = (2.0e0 - this->spec_rad) / temp;
-    } else if (this->ode_order == 1) {
-        // --- for first order PDE (Fluid) ---
-        this->alpha_m = 0.5e0 * ((3.0e0 - this->spec_rad) / temp);
-    }
-
-    temp = 1.0e0 - this->alpha_f + this->alpha_m;
-    this->gamma_nb = temp - 0.5e0;
-    this->beta_nb = 0.25e0 * pow(temp, 2);
-
-    return;
+    this->integrator_.GeneralizedAlphaParaSet();
 }
 
-std::vector<double> MaterialPoint::ComputeNodeAccelFromVel() const noexcept {
-    double para1 = 1.0e0 / (this->gamma_nb * dt);
-    double para2 = (1.0e0 - this->gamma_nb) / this->gamma_nb;
-
-    std::vector<double> naccel_k(nodec * 3);
-    for (int n = 0; n < nodec * 3; n++) {
-        naccel_k[n] = para1 * (this->nvel[n] - this->nvel_old[n]) //
-                      - para2 * this->naccel[n];
-    }
-
-    return naccel_k;
+std::vector<double> MaterialPoint::ComputeNodeAccelFromVel() const {
+    return this->integrator_.ComputeNodeAccelFromVel(this->nvel, this->nvel_old, this->naccel, dt);
 }
 
 void MaterialPoint::NewmarkBetaParaSet() {
-
-    double gamma = this->gamma_nb;
-    double beta = this->beta_nb;
-
-    // ---- Newmark beta parameter ----
-    this->nb_para[0] = gamma / (beta * dt);
-    this->nb_para[1] = gamma / beta - 1.0e0;
-    this->nb_para[2] = dt / 2.0e0 * (gamma / beta - 2.0e0);
-    this->nb_para[3] = 1.0e0 / (beta * dt * dt);
-    this->nb_para[4] = 1.0e0 / (beta * dt);
-    this->nb_para[5] = 1.0e0 / (2.0e0 * beta) - 1.0e0;
-
-    return;
+    this->integrator_.NewmarkBetaParaSet(dt);
 }
 
 void MaterialPoint::ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept {
-    for (int n = 0; n < nodec * 3; n++) {
-        nvel_k[n] = this->nb_para[0] * this->ndispl[n] //
-                    - this->nb_para[1] * this->nvel[n] //
-                    - this->nb_para[2] * this->naccel[n];
-        naccel_k[n] = this->nb_para[3] * this->ndispl[n] //
-                      - this->nb_para[4] * this->nvel[n] //
-                      - this->nb_para[5] * this->naccel[n];
-    }
-
-    return;
+    this->integrator_.ComputeNodeVelAccelFromDispl(this->ndispl, this->nvel, this->naccel, nvel_k, naccel_k);
 }
 
 void MaterialPoint::CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k) {
@@ -84,8 +39,8 @@ void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::arra
         bool advected_outside = false;
         for (int i = 0; i < 3; i++) {
             if (this->solswitch == MapScheme::FLIP) {
-                this->vel[n][i] += dt * ((1.0e0 - this->gamma_nb) * accel_old[n][i] //
-                                         + this->gamma_nb * this->accel[n][i]);
+                this->vel[n][i] += dt * ((1.0e0 - this->integrator_.gamma_nb) * accel_old[n][i] //
+                                         + this->integrator_.gamma_nb * this->accel[n][i]);
             }
             advected_coord[i] = this->coord[n][i] + disp[n][i];
             this->coord[n][i] = advected_coord[i] + disp_corr[n][i];

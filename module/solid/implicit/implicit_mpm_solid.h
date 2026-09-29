@@ -19,14 +19,15 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;          // first target component index
 
+    /** @brief Initialize the three-component implicit solid system and its PETSc owner. */
     ImplicitSolidMPM() {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8};
         this->rhs_start = 0;
         this->NR_flag = true;
         this->do_dlb = false;
-        this->gamma_nb = 0.5e0;
-        this->beta_nb = 0.25e0;
-        this->ode_order = 2;
+        this->integrator_.gamma_nb = 0.5e0;
+        this->integrator_.beta_nb = 0.25e0;
+        this->integrator_.ode_order = 2;
         this->cm_.implicit_flag = true;
         this->SM_.ndof = 3;
         this->SM_.block_row = {0, 0, 0, 1, 1, 1, 2, 2, 2};
@@ -34,7 +35,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         this->SM_.use_petsc = true;
         this->SM_.use_schur_fieldsplit = false;
         this->SM_.FEM_flag = false;
-        this->SM_.amg_rebuild_freq = 1; // keep solid AMG alive across this 10-step window unless iterations deteriorate
+        this->SM_.amg_rebuild_freq = 1; // rebuild AMG each step
         this->SM_.owner_ = this;
     }
 
@@ -152,14 +153,14 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @param nj      Second local node index.
      * @param dsf     Shape-function gradients.
      * @param sts_af  Particle stress at intermediate time level.
-     * @return Tangent stiffness scalar contribution.
+     * @return Three-by-three material and geometric stiffness block before volume and alpha_f weighting.
      */
     std::array<std::array<double, 3>, 3> ComputeTangentModulus(int pid, int ni, int nj,
                                                                const std::vector<std::array<double, 3>> &dsf,
                                                                const std::array<double, 6> &sts_af);
 
     /**
-     * @brief Apply converged NR displacement increment to nodal displacements.
+     * @brief Add the current linear correction to the endpoint nodal displacement increment.
      */
     void UpdateNRIncrement() override;
 };

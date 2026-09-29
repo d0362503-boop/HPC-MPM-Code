@@ -62,7 +62,7 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
         for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
         for (int d = 7; d < 10; d++) {
-            this->fixed_dof[n + d * nodec] = !fluid_active || !solid_active || this->nlm_lump[n] < mtol;
+            this->fixed_dof[n + d * nodec] = !fluid_active || !solid_active || this->nlm_lump[n] <= 0.0e0;
         }
     }
 
@@ -113,8 +113,8 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
             if (this->fixed_dof[i]) continue;
             const double df = this->column_scale[n + d * nodec] * this->column_scale[n + d * nodec];
             const double ds = this->column_scale[n + (d + 4) * nodec] * this->column_scale[n + (d + 4) * nodec];
-            const double af = this->fluid_.alpha_f, as = this->solid_.alpha_f;
-            const double cf = this->fluid_.nb_para[0], cs = this->solid_.nb_para[0];
+            const double af = this->fluid_.integrator_.alpha_f, as = this->solid_.integrator_.alpha_f;
+            const double cf = this->fluid_.integrator_.nb_para[0], cs = this->solid_.integrator_.nb_para[0];
             this->column_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(af * af * df + as * as * ds));
             row_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(cf * cf * df + cs * cs * ds));
         }

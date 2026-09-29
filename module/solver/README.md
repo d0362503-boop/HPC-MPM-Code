@@ -76,10 +76,13 @@ row idn  →  columns [idn_min ... idn_max]  (inclusive)
 `matrow` stores row offsets, `matcolid` stores column indices, and `amat` stores the actual values in block-major order:
 
 ```cpp
-amat[j + block_id[row_var * ndof + col_var]]
+amat[j + block_id[b]]  // component pair: block_row[b], block_col[b]
 ```
 
-where `num_block = ndof * ndof`. For fluid (`ndof=4`) this means 16 scalar blocks per CSR entry; for solid (`ndof=3`) it is 9. This layout allows the assembly loop to fetch an entire dense `ndof×ndof` block with a single base offset.
+Standalone fluid (`ndof=4`) stores 16 scalar blocks; solid (`ndof=3`) stores 9.
+The monolithic MPM-MPM system has 10 components but stores only 37 selected blocks.
+Its `block_row` and `block_col` arrays are therefore essential: block indices cannot
+generally be inferred as `row_var * ndof + col_var`.
 
 ### 2.5 Active vs inactive nodes (MPM)
 
@@ -127,7 +130,7 @@ rebuild safe after a DLB repartition changes `nodec` and the ownership layout
 
 Shared control points are owned by a tie-break based on `aelemmin`.
 
-`interior_list` stores locally owned control points.
+`owned_natural_ids` stores locally owned control points; `ghost_natural_ids` stores ghosts.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
 
@@ -168,7 +171,9 @@ All reusable buffers (`petsc_cols_buf`, `petsc_block_vals_buf`) are pre-allocate
 
 `BuildCrsMat()` builds a **static** CSR graph based on the background control-point stencil (`±idimc` in each direction). This graph is fixed for the entire simulation.
 
-However, in MPM the particles move. When a particle crosses element boundaries, it can create **new coupling** between control points that were not connected in the initial static stencil. These new couplings appear as **new nonzero entries** during `MatAssemblyEnd()`.
+Particle motion changes which entries within this stencil receive contributions.
+PETSc preallocation can still require additional storage when assembled entries
+exceed its estimates; this is distinct from enlarging the local CSR stencil.
 
 By default, PETSc treats new nonzeros as a hard error:
 
@@ -182,9 +187,12 @@ The fix is:
 MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 ```
 
-This tells PETSc to dynamically `malloc` storage for unexpected nonzeros instead of aborting. There is a small performance penalty, but it is the only robust way to handle particle-driven sparsity changes without over-allocating the entire matrix.
+This permits PETSc to allocate additional storage instead of aborting when an
+insertion exceeds preallocation. It does not create missing entries in `matcolid`
+or make an out-of-stencil `FindIndex()` lookup valid.
 
-> **Tradeoff:** A more aggressive fix would be to enlarge the initial stencil in `BuildCrsMat()` to cover the maximum possible particle influence radius, but this would waste memory for the majority of rows that never see distant particles. The current dynamic-allow approach is simpler and memory-efficient.
+The CSR graph is rebuilt when DLB changes the mesh layout. A change to interpolation
+support must likewise be reflected in the graph, independently of PETSc's allocation option.
 
 #### Inactive-node elimination
 
@@ -464,7 +472,7 @@ So the remaining distinction between systems is mainly in the physics (DOF count
 - keep fluid and solid AMG independent
 - keep solid temporary arrays released after solve
 - use local solution scatter, not global `CreateToAll`
-- if mixed u-p problems show false convergence (very few or zero iterations), tighten `rtol`/`abstol` or add symmetric diagonal scaling before the PETSc solve
+- for poorly scaled mixed u-p linear systems, check KSP tolerances and scaling; separately verify the nonlinear residual at the updated state
 
 ### 10.2 Bad or abandoned directions
 
@@ -501,4 +509,22 @@ For the current 32-rank Turek benchmark:
 | FEM fluid rebuild freq | `20` |
 | Implicit-solid rebuild freq | `1` |
 
-If future work targets more speed, the next high-value direction is likely a cleaner blocked PETSc assembly path, but it must preserve the current `NS_iter` behavior and 32-rank stability.
+These recorded runs describe the historical partitioned MPM-FEM path. They do not
+validate the currently selected monolithic MPM-MPM driver or establish nonlinear accuracy.
+
+## Current Convergence Limitations
+
+`ComputePetscResidualStats()` evaluates the masked linear-system residual `b-A*x`
+after KSP. `CheckNRConvergence()` uses its norm and RMS, with the initial post-solve
+norm stored in `r0r`. This is not the nonlinear equilibrium residual reassembled
+at the updated solution. Tightening KSP tolerances cannot replace that check.
+
+The monolithic MPM-MPM driver has a separate monitor: three field residuals are
+also derived from `b-A*x`, with scaling undone, while the fourth measures the
+updated endpoint fluid-solid velocity difference. Interface continuity alone
+does not verify nonlinear momentum balance.
+
+`SolveWithPetsc()` logs negative KSP convergence reasons on rank zero, then still
+scatters the solution and returns the iteration count. It does not currently
+return a failure sentinel or automatically retry. Treat divergence logs as failed
+linear solves even if the surrounding time-step loop continues.

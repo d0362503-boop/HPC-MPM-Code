@@ -49,8 +49,9 @@ The projection consists of two steps:
 
 This directory is always built as part of `mpm_modules` through `module/solid/explicit/CMakeLists.txt`. It is consumed by:
 
-- `work/src_fsi/block_fsi.cpp` for the FSI coupling path.
 - `work/src_solid/explicit/main.cpp` for the standalone explicit-solid solver.
+
+The current MPM-FEM and MPM-MPM FSI drivers use `ImplicitSolidMPM` instead.
 
 ## Notes
 

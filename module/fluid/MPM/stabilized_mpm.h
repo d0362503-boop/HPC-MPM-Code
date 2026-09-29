@@ -31,9 +31,9 @@ class StabilizedMPM : public MaterialPoint {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->do_dlb = false;
-        this->gamma_nb = 1.0e0;
-        this->beta_nb = 0.5e0;
-        this->ode_order = 2;
+        this->integrator_.gamma_nb = 1.0e0;
+        this->integrator_.beta_nb = 0.5e0;
+        this->integrator_.ode_order = 2;
         this->NS_.ndof = 4;
         this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
         this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};

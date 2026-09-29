@@ -7,7 +7,7 @@ void MPMMPMMonolithicFSI::AssembleFluidSystem(const std::vector<double> &nvel_k,
 
     this->fluid_.AssembleSystem(this->fsi_sys, nvel_k, naccel_k);
 
-    const double af = this->fluid_.alpha_f;
+    const double af = this->fluid_.integrator_.alpha_f;
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);

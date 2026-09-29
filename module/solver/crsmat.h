@@ -70,6 +70,14 @@ class CrsMat {
      */
     void ResetPetscSolver();
 
+    /**
+     * @brief Locate a control-point pair in the local CSR row.
+     * @param nid Natural local control point receiving the equation contribution.
+     * @param njd Natural local control point supplying the coupled unknown.
+     * @param ncol In/out search offset within the row for successive ordered lookups.
+     * @return CSR entry index shared by all stored component blocks.
+     * @pre The requested column exists at or after the supplied search offset.
+     */
     inline int FindIndex(int nid, int njd, int &ncol) const {
         int cole = this->matrow[nid + 1] - 1;
         int cols = this->matrow[nid] + ncol;
@@ -124,9 +132,10 @@ class CrsMat {
     std::vector<double> MatVecMult(const std::vector<double> &xx);
 
     /**
-     * @brief Compute the PETSc residual norm and active-DOF count for convergence monitoring.
-     * @param res_norm  Output L2 norm of the residual.
+     * @brief Compute the masked linear-system residual b-A*x and active-DOF count.
+     * @param res_norm Output global L2 norm of the masked linear-system residual.
      * @param active_dof Output number of active degrees of freedom.
+     * @note Does not reassemble the nonlinear residual at the updated physical state.
      */
     void ComputePetscResidualStats(double &res_norm, double &active_dof);
 
@@ -137,14 +146,14 @@ class CrsMat {
     double ComputeNativeResidualNormSq();
 
     /**
-     * @brief Compute a reference residual used for Newton-Raphson convergence checks.
-     * @return Reference residual value.
+     * @brief Compute the current linear-system residual norm used by the NR monitor.
+     * @return Global residual norm; PETSc uses the active mask and native code overlap weights.
      */
     double ComputeRefResidual();
 
     /**
-     * @brief Compute the absolute residual used for Newton-Raphson convergence checks.
-     * @return Absolute residual value.
+     * @brief Normalize the current linear-system residual by the active-DOF count.
+     * @return Residual RMS, or zero when no active degrees of freedom are counted.
      */
     double ComputeAbsResidual();
 
@@ -152,12 +161,14 @@ class CrsMat {
     void BuildActiveRowMask();
 
     /**
-     * @brief Check whether the Newton–Raphson iteration has converged.
+     * @brief Apply the current NR stopping thresholds to linear-system residuals.
      * @param NR_it     Current Newton–Raphson iteration index.
      * @param NR_it_max Maximum allowed Newton–Raphson iterations.
      * @param solver_it Linear solver iteration count for the current NR step.
-     * @param r0r       Squared residual ratio (updated in-place).
-     * @return True if converged, false otherwise.
+     * @param r0r Initial post-solve residual norm, initialized on iteration zero.
+     * @return True when the current stopping thresholds pass, false to continue.
+     * @warning These checks do not establish nonlinear equilibrium at the updated
+     * state. Failure at the maximum iteration calls MPI_Abort.
      */
     bool CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r);
 
@@ -224,10 +235,21 @@ class CrsMat {
      */
     void CheckOwnershipMetadata() const;
 
+    /**
+     * @brief Convert a mesh control point to its PETSc-local block index.
+     * @param natural_id Natural local control-point index, including ghosts.
+     * @return Owned-first block position in the local-to-global mapping.
+     */
     inline PetscInt NaturalNodeToPetscLocalBlock(int natural_id) const {
         return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id]);
     }
 
+    /**
+     * @brief Convert a control-point component to its PETSc-local scalar index.
+     * @param natural_id Natural local control-point index, including ghosts.
+     * @param var Physical field component in the system's component ordering.
+     * @return Component-major index into the scalar local-to-global mapping.
+     */
     inline PetscInt NaturalNodeVarToPetscLocalScalar(int natural_id, int var) const {
         return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id] + var * nodec);
     }
@@ -272,7 +294,9 @@ class CrsMat {
      * @brief Solve the linear system with PETSc and scatter the solution back to `x_lhs`.
      * @param ndof Degrees of freedom per node.
      * @param NR_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
-     * @return Number of KSP iterations, or -1 on failure.
+     * @return Number of KSP iterations, including when KSP reports divergence.
+     * @warning A negative KSP convergence reason is logged on rank zero; the
+     * solution is still scattered and no failure sentinel is returned.
      */
     int SolveWithPetsc(int ndof, int NR_it = -1);
 

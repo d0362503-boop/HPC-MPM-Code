@@ -2,9 +2,10 @@
 
 ## Overview
 
-This directory implements the **implicit Material Point Method (MPM) solid mechanics solver** for large-deformation hyperelastic/elastoplastic problems.  It uses a **Newmark-β / generalized-α time integrator** and solves the resulting nonlinear system with **Newton–Raphson (NR) iteration**.
+This directory implements the **implicit Material Point Method (MPM) solid mechanics solver** with the currently available rigid, linear-elastic and hyperelastic material models. It uses a **Newmark-β / generalized-α time integrator** and **Newton–Raphson (NR) iteration**.
 
-Unlike the explicit MPM counterpart, this solver assembles and factorizes a sparse tangent-stiffness matrix every NR iteration.
+Each NR iteration assembles a sparse tangent system and solves it with PETSc KSP
+or the native iterative solver. This is not a direct factorization of the full tangent matrix.
 
 | Matrix  | DOF         | Purpose                        |
 | ------- | ----------- | ------------------------------ |
@@ -30,7 +31,8 @@ SolidMaterialPointBase
             └── SM_ : CrsMat  (ndof = 3, owner_ = this, FEM_flag = false)
 ```
 
-`ImplicitSolidMPM` exposes the standard solver driver hooks and keeps the Newton–Raphson internals private.
+`ImplicitSolidMPM` exposes the driver hooks and assembly helpers publicly, allowing
+the monolithic FSI coordinator to assemble into a shared system.
 
 ### Public interface
 
@@ -39,7 +41,7 @@ SolidMaterialPointBase
 - `Node2Particle()` — G2P transfer and particle kinematic update.
 - `SolveSolid()` — driver for one implicit time step.
 
-### Private helpers / overrides
+### Assembly helpers / overrides
 
 The following overrides are invoked polymorphically through the `MaterialPoint` base class or called internally by `SolveSolid`:
 
@@ -64,7 +66,11 @@ ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);  // predictor
 CommitNodalKinematics(nvel_k, naccel_k);          // commit converged state
 ```
 
-Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set via `GeneralizedAlphaParaSet` / `NewmarkBetaParaSet` in the base class.
+Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`, `nb_para`) are stored once
+in `MaterialPoint::integrator_`, a `GeneralizedAlphaIntegrator` member. The base
+class setup and kinematic methods forward to this member. The integrator accepts
+the time step and arrays explicitly and does not depend on global mesh state,
+MPI, or PETSc. Particle and nodal commits remain in `MaterialPoint`.
 
 ### 2. Newton–Raphson Loop (`SolveSolid`)
 
@@ -72,13 +78,13 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set via `Generalize
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
     ComputeNodeVelAccelFromDispl(...);     // predictor step
-    AssembleSystem(naccel_k, nvel_k, stress_k);
-    iter = SolveSystem(SM_, NR_it);         // PETSc or native linear solve
+    AssembleSystem(SM_, naccel_k, nvel_k, stress_k);
+    iter = SM_.SolveSystem(NR_it);           // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
     if CheckNRConvergence() break;
 ```
 
-- `NR_flag = true` → nonlinear elasticity (up to 1000 NR iterations)
+- `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
 - `NR_flag = false` → linear elasticity (0 NR iterations, single linear solve)
 
 ### 3. System Assembly (`AssembleSystem`)
@@ -86,19 +92,32 @@ for NR_it = 0 .. iter_max
 For each particle inside each element:
 
 1. **Shape function & gradient** (`MakeSF`)
-2. **Deformation-gradient update** (`UpdateDefGrad`) — `F^{n+1} = (I + ∆u) · F^n`
-3. **Constitutive model update** (`UpdateConstitutiveModel`) — stress `S` and tangent modulus `C`
-4. **Implicit gradient correction** (`ImplicitDsfCorr`) — background-grid correction for MPM
-5. **Stress interpolation** to the `α_f` time level: `σ_af = α_f · σ_k + (1-α_f) · σ_n`
+2. **Trial deformation-gradient update** (`UpdateDefGrad`) using `alpha_f`:
+   `F_trial = (I + alpha_f * grad(Delta u)) * F_n`, with gradients in the step-reference configuration.
+3. **Volume and constitutive update** from the trial determinant and deformation gradient.
+4. **Implicit gradient correction** (`ImplicitDsfCorr`) for the deformed configuration.
+5. **Stress evaluation**: `sts_af = stress_k[pid]` uses the constitutive result at
+   the trial configuration directly; there is no separate linear blend of endpoint stresses.
 
 Then, for each node pair `(ni, nj)`:
 
-- **Mass matrix** (lumped): `M = γ · sf · mass`
+- **Inertial tangent** (lumped): `alpha_m * sf * mass / (beta_nb * dt^2)` in the base solid path.
 - **Tangent stiffness** `K_mat = ∇N · C · ∇N^T` via `ComputeTangentModulus`
   - For nonlinear problems adds the **geometric stiffness** term `σ_af ⊗ I`
 - **Internal / external force vectors**: `f_int = -∇N · σ_af · vol`, `f_ext = sf · (mass · g + trac)`
 
 The assembled matrix is stored in `SM_.amat`, RHS in `SM_.b_rhs`.
+
+The stiffness contribution is multiplied by `alpha_f * vol`. Inertia in the RHS
+uses `alpha_m * a_trial + (1-alpha_m) * a_n`. `Node2Particle()` later evaluates
+the endpoint deformation gradient with coefficient 1 and commits particle state.
+Assembly writes the member determinant and volume even while deformation-gradient
+and stress outputs are temporary; these members are not isolated trial-state storage.
+
+The current `CrsMat::CheckNRConvergence()` monitors the post-solve linear residual
+`b-A*Delta u`, not a reassembled nonlinear residual at the updated displacement.
+Passing this monitor alone does not establish nonlinear equilibrium. See the
+[solver limitations](../../solver/README.md#current-convergence-limitations).
 
 ### 4. Tangent Modulus (`ComputeTangentModulus`)
 
@@ -133,7 +152,7 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 - **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; BC logic injected through `owner_` virtuals. `SM_.ndof = 3` configures the generic solver for 3-DOF solid mechanics.
 - **`MaterialPoint`** (`module/material_point.h`) — base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, and the virtual BC hooks.
 - **`SolidMaterialPointBase`** (`module/solid/solid_material_point.h`) — intermediate base providing constitutive-model interface (`UpdateConstitutiveModel`).
-- **Solvers** (`module/solver/solver.cpp`) — `GPBiCGSafe` called on `SM_`; residual callbacks dispatched through `SM_.owner_->BCResidualSet(rr)`.
+- **Solvers** — `SM_.SolveSystem()` dispatches to PETSc or native `GPBiCGAR`; residual callbacks use `SM_.owner_->BCResidualSet(rr)`.
 
 ---
 

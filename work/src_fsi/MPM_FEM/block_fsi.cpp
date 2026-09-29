@@ -273,7 +273,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
     NodeVarComm(this->added_mass, 0);
 
     // --- Transfet variables to (n+α_f) time interlevel ---
-    const double af = this->fluid_.alpha_f;
+    const double af = this->fluid_.integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
 
     std::vector<double> nvel_af(nodec * 3), npres_af(nodec);
@@ -362,7 +362,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
 double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
 
     double emd = MaterialPoint::ComputeNRLumpedMassMat(pid, sfi);
-    emd += this->nb_para[3] * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
+    emd += this->integrator_.nb_para[3] * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
 
     return emd;
 }

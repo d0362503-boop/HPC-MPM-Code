@@ -22,12 +22,13 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     std::vector<char> fixed_dof;      // constrained and inactive components
     std::vector<double> column_scale; // linear increment scaling factors
 
+    /** @brief Configure ten coupled components and the 37 stored fluid-solid-multiplier blocks. */
     MPMMPMMonolithicFSI() {
         this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
         this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
         this->fluid_.rhs_start = 0;
         this->solid_.rhs_start = 4;
-        this->ode_order = 2;
+        this->integrator_.ode_order = 2;
         this->fsi_sys.ndof = 10;
         this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
                                    4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
@@ -92,6 +93,8 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @param NR_it Newton iteration controlling preconditioner setup and reuse of the previous physical increment as the initial
      * guess.
      * @return Number of Krylov iterations used by the coupled linear solve.
+     * @note KSP divergence is currently logged by CrsMat but does not stop this
+     * routine from rescaling and returning the computed increment.
      */
     int SolveSystem(int NR_it);
 

@@ -267,7 +267,7 @@ void MPMMPMFSIGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->fluid_.spec_rad >> this->solid_.spec_rad;
+    infile >> dt >> mtol >> this->fluid_.integrator_.spec_rad >> this->solid_.integrator_.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');

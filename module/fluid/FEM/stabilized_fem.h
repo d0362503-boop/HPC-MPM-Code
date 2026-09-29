@@ -36,7 +36,7 @@ class StabilizedFEM : public MaterialPoint {
     void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
 
     StabilizedFEM() {
-        this->ode_order = 1;
+        this->integrator_.ode_order = 1;
         this->NS_.ndof = 4;
         this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
         this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};

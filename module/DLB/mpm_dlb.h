@@ -14,6 +14,11 @@ struct Region {
     std::array<int, 3> elem_max;
 };
 
+/**
+ * @brief Collect and print the maximum and minimum particle loads across MPI ranks.
+ * @param num Number of particles currently stored on this rank.
+ * @note Collective; prints a ratio of zero when the minimum particle count is zero.
+ */
 void OuputDLBParticleRatio(int num);
 
 /**
@@ -31,6 +36,8 @@ const std::vector<Region> &CurrentRegions();
  * @brief Compute the uniform local particle sampling interval for DLB.
  * @param local_npts Number of material points currently stored on this MPI rank.
  * @return Positive index interval used to sample local material-point coordinates.
+ * @note Collective. Uses a global target of 256 samples per rank and a minimum
+ * sampling rate of 1e-4; integer strides make the realized count approximate.
  */
 int ComputeSampleSkip(std::size_t local_npts);
 

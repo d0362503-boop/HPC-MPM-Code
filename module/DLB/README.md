@@ -25,7 +25,7 @@ the change incremental.
 
 | File                     | Role                                                                                                |
 | ------------------------ | --------------------------------------------------------------------------------------------------- |
-| `module/DLB/mpm_dlb.h`   | `Region` struct + the six public functions                                                          |
+| `module/DLB/mpm_dlb.h`   | `Region`, sampling, region update, and diagnostic interfaces                                         |
 | `module/DLB/mpm_dlb.cpp` | implementation; owns the single `g_current_regions` instance                                        |
 | `module/mpi_data.cpp`    | `MaterialPoint::{DetermineParticleRank, DetermineDLBParticleRank, RebalanceDLBParticles, ApplyDLB}` |
 | `module/bc.cpp`          | `BoundaryCondition::{CaptureGlobal*, RebuildLocal*}` — BC persistence across repartitions           |
@@ -75,7 +75,7 @@ BuildMesh(); BuildControlPoint();
 ComputeNodalVol(); RebuildBC();   // 6. partition-dependent data
 ```
 
-The physics class then rebuilds its solver system (stage 8, in the overrides).
+The physics class then rebuilds its solver system after these six stages.
 
 ## 5. Region Model and Invariants
 
@@ -101,18 +101,20 @@ struct Region { std::array<int,3> elem_min, elem_max; };  // inclusive, global e
 
 ## 6. Sampling
 
-Goal: ~`kSamplesPerRank` (128) coordinate samples per rank, proportional to local load.
+The sampling-rate target is `kSamplesPerRank = 256` times the rank count globally,
+distributed approximately in proportion to each rank's particle count. The minimum
+rate and integer stride can increase the actual sample count.
 
 ```cpp
 // ComputeSampleSkip
-sample_rate   = max(kMinSampleRate /*1e-4*/, 128 * nprocs / global_count)  // MPI_Allreduce
+sample_rate   = max(kMinSampleRate /*1e-4*/, 256 * nprocs / global_count)  // MPI_Allreduce
 target        = ceil(local_count * sample_rate)
 skip          = max(1, local_count / target)
 ```
 
-`SelectSamples` then takes every `skip`-th particle — deterministic, O(num), and
-density-faithful because every particle is equally likely to be sampled regardless of
-rank. `GatherSamplesToRoot` packs `(x,y,z)` into a flat double array and uses
+`SelectSamples` then takes every `skip`-th particle. This is deterministic strided
+sampling, not random sampling; particle ordering can bias the sample distribution.
+`GatherSamplesToRoot` packs `(x,y,z)` into a flat double array and uses
 `MPI_Gather`/`MPI_Gatherv`; only the root keeps the global sample set.
 
 ## 7. Repartitioning: Recursive Coordinate Bisection
@@ -252,7 +254,7 @@ re-evaluates boundary-cell fill under the new partition.
 - **Cost:** owner search is O(num × nprocs) per DLB; acceptable at `iout` cadence. If
   it ever shows up in profiles, build an element→owner lookup table once per
   repartition for O(1) per particle.
-- **Balance quality** is limited by the sample count (≈128/rank) and the
+- **Balance quality** is limited by the sampling target (256 per rank on average), particle ordering, and the
   element-granular cuts; expect approximate, not exact, load balance.
 - **Fixed topology:** `nxyr` cannot change at runtime, and `nprocs` must always equal
   the partition topology stored in `griddata`.

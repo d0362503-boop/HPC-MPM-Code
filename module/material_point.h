@@ -7,6 +7,7 @@
 
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/generalized_alpha_integrator.h"
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -155,13 +156,13 @@ class MaterialPoint {
     // --- For Implicit MPM ---
     // --- Nonlinear time integration part ---
     // --- Generalized-α part ---
-    int ode_order;
-    double spec_rad = 1.0e0, alpha_f = 1.0e0, alpha_m = 1.0e0;
+    GeneralizedAlphaIntegrator integrator_; // time integration state
 
     /**
-     * @brief Set Generalized-α time-integration parameters from `spec_rad`.
+     * @brief Delegate generalized-alpha weight setup to the owned integrator.
      *
-     * Populates `alpha_f`, `alpha_m`, and related Newmark-β parameters in `nb_para`.
+     * Sets the weights in `integrator_` using its spectral radius and equation
+     * order. Call NewmarkBetaParaSet() separately to refresh its displacement coefficients.
      */
     void GeneralizedAlphaParaSet();
 
@@ -170,14 +171,12 @@ class MaterialPoint {
      *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
      * @return Vector of derived accelerations sized to `nodec * 3`.
      */
-    std::vector<double> ComputeNodeAccelFromVel() const noexcept;
+    std::vector<double> ComputeNodeAccelFromVel() const;
 
     // --- Newmark-β part ---
-    double gamma_nb, beta_nb;
-    std::array<double, 6> nb_para{};
 
     /**
-     * @brief Set Newmark-β time-integration parameters (`gamma_nb`, `beta_nb`).
+     * @brief Refresh integrator displacement coefficients using the global time step.
      */
     void NewmarkBetaParaSet();
 
@@ -221,7 +220,7 @@ class MaterialPoint {
     // ------------------------------------------
 
     virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
-        double emd = this->nb_para[3] * sfi * this->mass[pid];
+        double emd = this->integrator_.nb_para[3] * sfi * this->mass[pid];
 
         return emd;
     }
@@ -258,8 +257,12 @@ class MaterialPoint {
      * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
      *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
      * @param accel_old Particle acceleration from the previous step.
-     * @param disp      Nodal displacement increment applied to particle coordinates.
-     * @param disp_corr Optional particle-shifting correction displacement.
+     * @param disp Particle displacement increments interpolated from control points.
+     * @param disp_corr Per-particle shifting displacements; supply zeros to disable shifting.
+     * @pre All three arrays contain at least `num` entries.
+     * @warning Despite the empty default argument, the current implementation indexes
+     * `disp_corr` unconditionally. Empty corrections are unsafe when `num > 0`.
+     * Shifting-induced domain crossings are currently not rejected here.
      */
     void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                           const std::vector<std::array<double, 3>> &disp,
@@ -393,16 +396,6 @@ class MaterialPoint {
     void CalPointUnitNormal(std::vector<std::array<double, 3>> &particle_normal, std::vector<double> &surface_weight);
 
     /**
-     * @brief Project a particle-shifting displacement into the common interface and wall tangent space.
-     * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
-     * @param interface_normal Unit material-interface normal interpolated at the material point.
-     * @param surface_particle Whether the material-interface constraint is active at the material point.
-     * @param disp_corr Particle-shifting displacement replaced by its constrained value.
-     */
-    void ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &interface_normal,
-                                  bool surface_particle, std::array<double, 3> &disp_corr) const;
-
-    /**
      * @brief Compute the incremental deformation gradient at a material point.
      * @param nc        Node IDs of the element supporting the material point.
      * @param nenode    Number of nodes in the element.
@@ -413,6 +406,16 @@ class MaterialPoint {
     virtual std::array<std::array<double, 3>, 3>
     ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, double af_coeff,
                         const std::vector<std::array<double, 3>> &dsf) const noexcept;
+
+    /**
+     * @brief Project a particle-shifting displacement into the common interface and wall tangent space.
+     * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
+     * @param interface_normal Unit material-interface normal interpolated at the material point.
+     * @param surface_particle Whether the material-interface constraint is active at the material point.
+     * @param disp_corr Particle-shifting displacement replaced by its constrained value.
+     */
+    void ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &interface_normal,
+                                  bool surface_particle, std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.

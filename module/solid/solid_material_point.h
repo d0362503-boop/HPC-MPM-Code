@@ -26,8 +26,8 @@ class SolidMaterialPointBase : public MaterialPoint {
     void RebuildBC() override;
 
     /**
-     * @brief Read solid point data (coordinates, material IDs, velocities, etc.) from input stream.
-     * @param inflie Input file stream .
+     * @brief Read the solid particle count, coordinate block and attribute block.
+     * @param inflie Stream positioned at count, coordinates, then id/matid/surf_point/mass/vol0 rows.
      */
     void InputPointData(std::ifstream &inflie) override;
 
@@ -66,11 +66,21 @@ class SolidMaterialPointBase : public MaterialPoint {
     void MigrateParticleData() override;
 
     // --- Stress computation ---
+    /**
+     * @brief Compute the mean normal Cauchy stress of a particle.
+     * @param pid Particle whose current stress is sampled.
+     * @return One third of the stress trace, with the stored stress sign convention.
+     */
     double ComputeMeanStress(int pid) const noexcept {
         double mean_stress = (this->stress[pid][0] + this->stress[pid][1] + this->stress[pid][2]) / 3.0e0;
         return mean_stress;
     }
 
+    /**
+     * @brief Compute the von Mises equivalent stress of a particle.
+     * @param pid Particle whose current Cauchy stress is sampled.
+     * @return Nonnegative equivalent stress in the same units as the stored stress.
+     */
     double ComputeVMStress(int pid) const noexcept {
         double VM_stress =
             std::sqrt(0.5e0 * (pow((this->stress[pid][0] - this->stress[pid][1]), 2)   //
@@ -81,6 +91,14 @@ class SolidMaterialPointBase : public MaterialPoint {
     }
     // -------------------------------
 
+    /**
+     * @brief Compute a particle's internal-force contribution to one control point.
+     * @param ni Local supporting control-point index in the gradient array.
+     * @param pid Particle supplying the current integration volume.
+     * @param dsf Shape gradients in the stress evaluation configuration.
+     * @param stress Cauchy stress in xx, yy, zz, yz, xz, xy order.
+     * @return Three momentum residual contributions from minus volume times stress times gradient.
+     */
     std::array<double, 3> ComputeInternalForce(int ni, int pid, const std::vector<std::array<double, 3>> &dsf,
                                                const std::array<double, 6> &stress) const noexcept {
         double dsfi1 = dsf[ni][0];
@@ -95,6 +113,12 @@ class SolidMaterialPointBase : public MaterialPoint {
         return nfint;
     }
 
+    /**
+     * @brief Map particle body and applied forces to one control point.
+     * @param pid Particle supplying mass and applied traction-force components.
+     * @param sfi Shape-function weight at the receiving control point.
+     * @return Weighted body force plus applied force in the three momentum components.
+     */
     virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept {
         double fx = bb[0] * facl;
         double fy = bb[1] * facl;
@@ -116,8 +140,10 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @param ncm             Node IDs of the element supporting the particle.
      * @param sf              Shape-function values.
      * @param dsf             Shape-function gradients.
-     * @param delta_def_grad  Output incremental deformation-gradient tensor for each node.
-     * @param def_grad        Output total deformation-gradient tensor for each node.
+     * @param delta_def_grad Output incremental deformation-gradient array; entry `pid` is updated.
+     * @param def_grad Output total deformation-gradient array; entry `pid` is updated.
+     * @note Forms F_trial = delta_F * F_n and writes the member `det_def_grad[pid]`.
+     * Passing separate output arrays does not isolate this determinant from the trial state.
      */
     void UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm, const std::vector<double> &sf,
                        const std::vector<std::array<double, 3>> &dsf,
@@ -163,6 +189,7 @@ class SolidMaterialPointBase : public MaterialPoint {
         return;
     }
 
+    /** @brief Advance the solid nodal solve using the selected explicit or implicit method. */
     virtual void SolveSolid() = 0;
 
     /**

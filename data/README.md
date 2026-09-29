@@ -88,8 +88,9 @@ Each generator writes:
 - VTK HDF5 files for visualization: `grid.vtkhdf` (mesh) and
   `sp.vtkhdf` / `wp.vtkhdf` (solid / fluid particles where applicable)
 
-Each solid particle record contains: coordinates, `id`, `matid`,
-`surf_point`, `mass`, `vol0`.
+Each solid particle section contains the particle count, all coordinate triplets,
+then one `id matid surf_point mass vol0` row per particle. The coordinates and
+attributes occupy separate blocks; readers must preserve this ordering.
 
 No legacy `.vtk`, `.vtu`, `.pvtu`, or `.pvd` output is maintained in `data/`.
 

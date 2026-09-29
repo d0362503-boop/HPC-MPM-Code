@@ -6,16 +6,17 @@ Supported solver modes:
 
 - `FLUID` — MPM or FEM fluid solver
 - `SOLID` — explicit or implicit MPM solid solver
-- `FSI` — partitioned strong-coupling fluid–solid interaction
+- `FSI` — partitioned MPM–FEM or monolithic MPM–MPM fluid–solid interaction
 
 ## Features
 
 - C++17 with MPI parallelism
 - Dynamic load balancing (DLB) for fluid MPM via particle-coordinate sampling (`module/DLB/`)
 - PETSc-backed sparse linear algebra
+- Generalized-alpha/Newmark parameters and kinematics in `GeneralizedAlphaIntegrator`, owned by each `MaterialPoint`
 - Fluid: FEM or MPM
 - Solid: explicit or implicit MPM
-- Partitioned FSI with block iterations
+- Partitioned MPM–FEM FSI and monolithic MPM–MPM FSI with interface multipliers
 - CMake-based build with bundled PETSc/HDF5 bootstrap
 - Standalone input generators and partitioners under `data/`
 - VTK HDF5 output (`*.vtkhdf`)
@@ -25,7 +26,8 @@ Supported solver modes:
 ```bash
 cmake -S . -B build
 cmake --build build -j8
-mpirun -np 4 ./build/MPM
+cd build
+mpirun -np 4 ./MPM
 ```
 
 The CMake binary directory **must** be named `build`; anything else is rejected.
@@ -110,7 +112,7 @@ cmake --build build --target makinput_fsi_mpm_fem makdivide_fsi_mpm_fem -j8
 
 ## Build Examples
 
-Current MPM--FEM FSI build:
+Current MPM--MPM FSI build (selected in `work/src_fsi/CMakeLists.txt`):
 
 ```bash
 cmake -S . -B build
@@ -140,7 +142,8 @@ cmake --build build --target makinput_fluid -j8
 ## Running the Solver
 
 ```bash
-mpirun -np 4 ./build/MPM
+cd build
+mpirun -np 4 ./MPM
 ```
 
 At runtime the solver reads an orchestration file, conventionally `file.dat`, with four lines:
@@ -151,6 +154,11 @@ At runtime the solver reads an orchestration file, conventionally `file.dat`, wi
 4. Output file prefix
 
 Per-rank input files follow the prefix with the rank number, e.g. `griddata0.txt`, `pointdata0.txt`.
+
+`file.dat` is read from the `build/` working directory. Its paths should refer to
+generated files under `build/`, such as `./data/divide/...` and `./res/...`, not
+source-tree paths under `../data/`. The MPI process count must match the partition
+topology, and the input mesh dimensions must match the generated partition data.
 
 A convenience script is available at `build/run.sh`:
 
@@ -194,15 +202,9 @@ cd build/data/divide/fluid
 
 The partitioner writes rank-split data under `myrank_data/`.
 
-For solid cases, generated and partitioned `pointdata*.txt` records store each
-particle as:
-
-1. coordinate triplet
-2. `id`
-3. `matid`
-4. `surf_point`
-5. `mass`
-6. `vol0`
+For solid cases, each particle section stores a count, then all coordinate
+triplets, then one `id matid surf_point mass vol0` row per particle. Coordinates
+and attributes are separate blocks, not interleaved particle records.
 
 ## Output
 

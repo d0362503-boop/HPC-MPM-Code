@@ -8,7 +8,7 @@ void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &nvel_k,
 
     this->solid_.AssembleSystem(this->fsi_sys, naccel_k, nvel_k, stress_k);
 
-    const double af = this->solid_.alpha_f;
+    const double af = this->solid_.integrator_.alpha_f;
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);

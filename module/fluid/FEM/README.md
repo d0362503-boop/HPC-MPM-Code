@@ -22,7 +22,9 @@ The solver uses a **SUPG/PSPG stabilized formulation** with **generalized-α tim
 | `phase_field.cpp`  | Phase-field initialization, volume-fraction projection (`Particle2NodePhi`), material-property blending (`SetPFDomain`), liquid-volume calculation (`CalLiquidVol`) |
 | `fluid_fem_data_io.cpp` | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshDataVTKHDF`), VTK nodal interpolation (`Cp2NodeVTK`) |
 
-> **Note:** Fluid-specific boundary-condition overrides (`BuildPetscBCList`, `BCResidualSet`) are **declared** in `stabilized_fem.h` but **implemented** in `work/src_fsi/bc_setting.cpp` alongside the solid BC logic.
+> **Note:** Default boundary-condition methods are implemented inline in
+> `stabilized_fem.h`. `FSIFluid` extends them with interface constraints in
+> `work/src_fsi/MPM_FEM/bc_setting.cpp`.
 
 ---
 
@@ -35,17 +37,19 @@ MaterialPoint  (base)
             └── PF_  : CrsMat  (ndof = 1, owner_ = this)
 ```
 
-`StabilizedFEM` **declares** virtual BC hooks that the generic `CrsMat` calls back via the `owner_` pointer.  The hooks are `protected` so that `FSIFluid` can extend them; their default implementations live in `stabilized_fem.h` (for `BCSet`) and `work/src_fsi/bc_setting.cpp` (for `BuildPetscBCList` / `BCResidualSet`, shared with the solid BC logic):
+`CrsMat` calls the protected virtual BC hooks through `owner_`. Their defaults
+live in `stabilized_fem.h`; `FSIFluid` calls these defaults before adding its
+interface constraints.
 
 ### `BuildPetscBCList(CrsMat& mat)`
-Collects all Dirichlet/essential boundary-condition global IDs for the PETSc `MatZeroRows` pass:
+Collects Dirichlet boundary-condition global IDs for the PETSc `MatZeroRowsColumns` pass:
 - `ubc`, `vbc`, `wbc`, `pbc` — standard velocity/pressure BCs
 - `fsi_intf` — FSI interface constraints (applied to u, v, w)
 
 ### `BCResidualSet(std::vector<double>& rr)`
 Zeroes out constrained degrees of freedom in a residual / RHS vector after a matrix-vector product:
-- `fsi_intf` on u, v, w
-- `wbc` on u, v, w
+- `ubc`, `vbc`, `wbc` on their corresponding velocity components
+- `fsi_intf` on u, v, w in the FSI override
 - `pbc` on p
 
 These overrides replace the former free-function `BCResidualSet` that contained a hard-coded `if (ndof == 4) … else …` branch, achieving full polymorphic decoupling between `CrsMat` and fluid-specific logic.
@@ -126,7 +130,7 @@ npres_old  ← npres
 
 ## Integration with the Rest of the Codebase
 
-- **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; fluid-specific BC logic is injected through the virtual overrides declared here but implemented in `work/src_fsi/bc_setting.cpp`, so `crsmat.cpp` does **not** include `stabilized_fem.h`.
+- **`CrsMat`** (`module/solver/`) — sparse-matrix wrapper; default BC methods live in `stabilized_fem.h`, with coupled overrides in `work/src_fsi/MPM_FEM/bc_setting.cpp`.
 - **`MaterialPoint`** (`module/material_point.h`) — base class providing the `BuildPetscBCList` and `BCResidualSet` virtual hooks.
 - **Solvers** (`module/solver/solver.cpp`) — generic GPBiCG* routines call `mat.MatVecMult(xx)` and `mat.owner_->BCResidualSet(rr)` without knowing whether the matrix belongs to fluid or solid physics.
 
@@ -135,5 +139,5 @@ npres_old  ← npres
 ## Coding Style Notes
 
 - Trailing underscore for class members (`owner_`, `NS_`, `PF_`).
-- The class lives in namespace `stabilizedfem`; in the FSI driver it is subclassed as `FSIFluid` in `work/src_fsi/monolithic_fsi.h`.
+- The class lives in namespace `stabilizedfem`; the partitioned FSI driver defines `FSIFluid` in `work/src_fsi/MPM_FEM/block_fsi.h`.
 - `using namespace stabilizedfem;` appears in `.cpp` files only.

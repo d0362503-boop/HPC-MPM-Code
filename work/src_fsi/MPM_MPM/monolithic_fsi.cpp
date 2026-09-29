@@ -71,8 +71,8 @@ void MPMMPMMonolithicFSI::AssembleInterfaceSystem(const std::vector<double> &nve
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);
         const double lm = this->nlm_lump_local[n];
-        const double nb_para_f = this->fluid_.nb_para[0];
-        const double nb_para_s = this->solid_.nb_para[0];
+        const double nb_para_f = this->fluid_.integrator_.nb_para[0];
+        const double nb_para_s = this->solid_.integrator_.nb_para[0];
         this->fsi_sys.amat[ida + this->fsi_sys.block_id[31]] -= nb_para_f * lm;
         this->fsi_sys.amat[ida + this->fsi_sys.block_id[33]] -= nb_para_f * lm;
         this->fsi_sys.amat[ida + this->fsi_sys.block_id[35]] -= nb_para_f * lm;

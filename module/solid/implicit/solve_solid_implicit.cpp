@@ -123,9 +123,9 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
 
     const std::vector<int> offsets = this->RHSOffsets();
 
-    const double af = this->alpha_f;
+    const double af = this->integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
-    const double am = this->alpha_m;
+    const double am = this->integrator_.alpha_m;
     const double am0 = 1.0e0 - am;
 
     int nenode;
@@ -142,7 +142,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
             std::array<double, 3> xyp = this->coord[pid];
             MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
-            this->UpdateDefGrad(pid, nenode, this->alpha_f, ncm, sf, dsf, delta_def_grad, def_grad_NR);
+            this->UpdateDefGrad(pid, nenode, this->integrator_.alpha_f, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 
             this->UpdateVolume(pid, this->det_def_grad[pid]);
 

@@ -187,7 +187,7 @@ void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
                                     std::vector<std::array<double, 3>> &dsf) const noexcept {
 
     std::array<std::array<double, 3>, 3> def_grad{};
-    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->alpha_f, dsf);
+    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->integrator_.alpha_f, dsf);
 
     std::array<std::array<double, 3>, 3> def_grad_inv;
     def_grad_inv = InvMat3(def_grad);

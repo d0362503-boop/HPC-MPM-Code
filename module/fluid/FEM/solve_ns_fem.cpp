@@ -55,8 +55,8 @@ std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
     std::vector<double> adv_vel(nodec * 3);
     for (int n = 0; n < nodec * 3; n++) {
         // --- Generalized-alpha prediciton ---
-        adv_vel[n] = (1.0e0 + this->alpha_f) * this->nvel_old[n] //
-                     - this->alpha_f * this->nvel_older[n];
+        adv_vel[n] = (1.0e0 + this->integrator_.alpha_f) * this->nvel_old[n] //
+                     - this->integrator_.alpha_f * this->nvel_older[n];
     }
 
     return adv_vel;
@@ -163,8 +163,8 @@ void StabilizedFEM::AssembleSystem(const std::vector<double> &adv_vel) {
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;
 
-    const double am = this->alpha_m / this->gamma_nb;
-    const double af = this->alpha_f;
+    const double am = this->integrator_.alpha_m / this->integrator_.gamma_nb;
+    const double af = this->integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
     const double am0 = 1.0e0 - am;
 

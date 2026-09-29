@@ -75,6 +75,11 @@ See `module/DLB/README.md` for the full pipeline and its invariants.
 
 ### 1. Newmark-β / Generalized-α predictor
 
+Time-integration parameters belong to `MaterialPoint::integrator_`
+(`GeneralizedAlphaIntegrator`). Existing kinematic helper methods forward the
+particle object's nodal arrays to this independent component; particle commits
+and FLIP updates remain in `MaterialPoint`.
+
 At the start of each NR iteration the nodal displacement increment `ndispl` is used to predict velocity and acceleration:
 
 ```cpp
@@ -96,6 +101,10 @@ for NR_it = 0 .. iter_max
 ```
 
 `CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise. PETSc divergence is reported by the KSP reason; it does not automatically switch solvers.
+
+The current NR stopping monitor uses the post-solve linear residual rather than
+reassembling nonlinear equilibrium at the updated state. See the
+[solver limitations](../../solver/README.md#current-convergence-limitations).
 
 ## Numerical Method
 
@@ -158,7 +167,7 @@ Set `NS_.use_petsc = false` to fall back to the native solver.
 3. Interpolate pressure, displacement, acceleration, and velocity back to particles (scheme-aware).
 4. Recompute APIC `inv_Dmat` if needed.
 5. Compute a particle-shifting correction (`PairwiseRepulsivePST` is currently active; `DeltaCorrectionPST` is available but commented out in `Node2Particle`).
-6. Commit particle kinematics (`CommitImplicitParticleKinematics`), which updates FLIP velocity, advects positions, and optionally applies the shifting correction while rejecting shifts that cross the domain boundary.
+6. Commit particle kinematics (`CommitImplicitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
 
 ## Particle Shifting
 
@@ -189,7 +198,7 @@ Inflow generation follows the same three-layer dispatch as before (`InflowMeshis
 
 - `module/solver/crsmat.h`: generic sparse-matrix wrapper; BC hooks injected through virtual overrides declared in `stabilized_mpm.h`.
 - `module/map_and_interpolate.*`: PIC/FLIP/TPIC/APIC transfer logic.
-- `module/material_point.h`: base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`, `SolveSystem`, and the virtual BC/inflow hooks.
+- `module/material_point.h`: base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`, and the virtual BC/inflow hooks. Linear solve dispatch belongs to `CrsMat::SolveSystem`.
 - `module/nonlinear_time_integration.cpp`: shared Newmark-β / generalized-α helpers.
 - `module/particle_shifting.cpp`: shared particle-shifting implementations.
 - `module/mpi_data.h`: particle migration and overlap-node communication.
