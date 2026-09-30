@@ -1,5 +1,6 @@
 #pragma once
 
+#include "module/generalized_alpha_integrator.h"
 #include <fstream>
 #include <iostream>
 #include <string>
