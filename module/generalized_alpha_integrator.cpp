@@ -13,11 +13,13 @@ void GeneralizedAlphaIntegrator::GeneralizedAlphaParaSet() {
 
     double temp = 1.0e0 + this->spec_rad;
     this->alpha_f = 1.0e0 / temp;
+
     if (this->ode_order == 2) {
         this->alpha_m = (2.0e0 - this->spec_rad) / temp;
     } else if (this->ode_order == 1) {
         this->alpha_m = 0.5e0 * ((3.0e0 - this->spec_rad) / temp);
     }
+
     temp = 1.0e0 - this->alpha_f + this->alpha_m;
     this->gamma_nb = temp - 0.5e0;
     this->beta_nb = 0.25e0 * std::pow(temp, 2);

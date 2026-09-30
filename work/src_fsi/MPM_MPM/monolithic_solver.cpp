@@ -14,11 +14,11 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
     double active_dof = 0.0e0;
     for (int n = 0; n < nodec; n++) {
-        if (this->nlm_lump[n] > mtol) active_dof = 1.0e0;
+        if (this->nlm_lump[n] > 0.0e0) active_dof = 1.0e0;
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    double ref_tol = (active_dof > 0.0e0) ? 1.0e-7 : 1.0e-10;
+    double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
     // Allow large warm-start residuals.
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
@@ -39,26 +39,26 @@ MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); 
 
 void MPMMPMMonolithicFSI::BuildActiveDOFs() {
 
-    double mass_stats[4]{};
-    for (int n = 0; n < nodec; n++) {
-        if (this->fluid_.nmass[n] > mtol) {
-            mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
-            mass_stats[1] += dbc[n];
-        }
-        if (this->solid_.nmass[n] > mtol) {
-            mass_stats[2] += this->solid_.nmass[n] * dbc[n];
-            mass_stats[3] += dbc[n];
-        }
-    }
+    // double mass_stats[4]{};
+    // for (int n = 0; n < nodec; n++) {
+    //     if (this->fluid_.nmass[n] > mtol) {
+    //         mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
+    //         mass_stats[1] += dbc[n];
+    //     }
+    //     if (this->solid_.nmass[n] > mtol) {
+    //         mass_stats[2] += this->solid_.nmass[n] * dbc[n];
+    //         mass_stats[3] += dbc[n];
+    //     }
+    // }
 
-    MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    const double fluid_cut = 1.0e-5 * mass_stats[0] / mass_stats[1];
-    const double solid_cut = 1.0e-5 * mass_stats[2] / mass_stats[3];
+    // MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    // const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
+    // const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
 
     this->fixed_dof.assign(nodec * 10, 0);
     for (int n = 0; n < nodec; n++) {
-        const bool fluid_active = this->fluid_.nmass[n] > fluid_cut;
-        const bool solid_active = this->solid_.nmass[n] > solid_cut;
+        const bool fluid_active = this->fluid_.nmass[n] > mtol; // fluid_cut;
+        const bool solid_active = this->solid_.nmass[n] > mtol; // solid_cut;
         for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
         for (int d = 7; d < 10; d++) {
