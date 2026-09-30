@@ -102,6 +102,18 @@ class MaterialPoint {
     }
 
     /**
+     * @brief Zero out a vector at constrained Dirichlet DOFs (typical for displacement/residual).
+     * @param ndispl Vector to be zeroed in-place at constrained DOFs.
+     */
+    virtual void ApplyDisplacementBC(std::vector<double> &ndispl) {
+        this->ubc.BCSetDispl(nuc, ndispl, this->integrator_, this->nvel, this->naccel);
+        this->vbc.BCSetDispl(nvc, ndispl, this->integrator_, this->nvel, this->naccel);
+        this->wbc.BCSetDispl(nwc, ndispl, this->integrator_, this->nvel, this->naccel);
+
+        return;
+    }
+
+    /**
      * @brief Divide a nodal vector by a nodal weight with a small-weight cutoff.
      * @param result    Output vector (zero-initialized and overwritten in-place).
      * @param numerator Nodal vector to divide.

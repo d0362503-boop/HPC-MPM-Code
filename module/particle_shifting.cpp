@@ -149,7 +149,8 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
         for (int i = 0; i < isb; ++i) {
             bool intersects_peer = true;
             for (int d = 0; d < 3; ++d) {
-                if (this->coord[ip][d] + support <= peer_min[i][d] || this->coord[ip][d] - support >= peer_max[i][d]) {
+                if (this->coord[ip][d] + support <= peer_min[i][d] || //
+                    this->coord[ip][d] - support >= peer_max[i][d]) {
                     intersects_peer = false;
                     break;
                 }

@@ -25,7 +25,7 @@ class StabilizedMPM : public MaterialPoint {
     // Navier-Stokes system matrix
     CrsMat NS_;
     std::vector<int> blocks; // target scalar block indices
-    int rhs_start;          // first target component index
+    int rhs_start;           // first target component index
 
     StabilizedMPM() {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
@@ -80,8 +80,8 @@ class StabilizedMPM : public MaterialPoint {
      * @return Current control-point offsets for x, y, z momentum and pressure.
      */
     std::vector<int> RHSOffsets() const {
-        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1),
-                nodec * (this->rhs_start + 2), nodec * (this->rhs_start + 3)};
+        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2),
+                nodec * (this->rhs_start + 3)};
     }
 
     /**
@@ -154,9 +154,7 @@ class StabilizedMPM : public MaterialPoint {
 
     /** @brief Apply Dirichlet displacement increments for NR iteration. */
     void BCNRSet() override {
-        this->ubc.BCSetDt(nuc, this->ndispl);
-        this->vbc.BCSetDt(nvc, this->ndispl);
-        this->wbc.BCSetDt(nwc, this->ndispl);
+        this->ApplyDisplacementBC(this->ndispl);
         this->pbc.BCSetVal(0, this->npres);
 
         return;

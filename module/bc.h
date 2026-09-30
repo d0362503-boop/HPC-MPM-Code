@@ -47,7 +47,8 @@ class BoundaryCondition {
      * @param nn       Offset into `variable` for the component being constrained.
      * @param variable Vector to be modified in-place.
      */
-    void BCSetDt(int nn, std::vector<double> &variable);
+    void BCSetDispl(int nn, std::vector<double> &variable, GeneralizedAlphaIntegrator &integrator,
+                    const std::vector<double> &nvel, const std::vector<double> &naccel);
 
     /**
      * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.

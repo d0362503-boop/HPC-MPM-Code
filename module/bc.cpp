@@ -1,7 +1,9 @@
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/generalized_alpha_integrator.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -72,12 +74,19 @@ void BoundaryCondition::BCSetZero(int nn, std::vector<double> &variable) {
     return;
 }
 
-void BoundaryCondition::BCSetDt(int nn, std::vector<double> &variable) {
+void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, GeneralizedAlphaIntegrator &integrator,
+                                   const std::vector<double> &nvel, const std::vector<double> &naccel) {
+
+    double beta = integrator.beta_nb;
+    double gamma = integrator.gamma_nb;
+    double coeff = beta / gamma;
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = this->fbc[i] * dt * facl;
+            variable[n] = facl * ((coeff * dt) * this->fbc[i] +    //
+                                  (1.0e0 - coeff) * dt * nvel[n] + //
+                                  (0.5e0 - coeff) * dt * dt * naccel[n]);
         }
     }
 

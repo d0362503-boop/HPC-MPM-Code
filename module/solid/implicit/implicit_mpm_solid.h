@@ -17,7 +17,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
   public:
     CrsMat SM_;
     std::vector<int> blocks; // target scalar block indices
-    int rhs_start;          // first target component index
+    int rhs_start;           // first target component index
 
     /** @brief Initialize the three-component implicit solid system and its PETSc owner. */
     ImplicitSolidMPM() {
@@ -95,12 +95,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Apply Dirichlet displacement increments for current NR iteration.
      */
     void BCNRSet() override {
-        this->ubc.BCSetDt(nuc, this->ndispl);
-        this->vbc.BCSetDt(nvc, this->ndispl);
-        this->wbc.BCSetDt(nwc, this->ndispl);
-        this->rigid_bc.BCSetDt(nuc, this->ndispl);
-        this->rigid_bc.BCSetDt(nvc, this->ndispl);
-        this->rigid_bc.BCSetDt(nwc, this->ndispl);
+        this->ApplyDisplacementBC(this->ndispl);
+        this->rigid_bc.BCSetDispl(nuc, this->ndispl, this->integrator_, this->nvel, this->naccel);
+        this->rigid_bc.BCSetDispl(nvc, this->ndispl, this->integrator_, this->nvel, this->naccel);
+        this->rigid_bc.BCSetDispl(nwc, this->ndispl, this->integrator_, this->nvel, this->naccel);
 
         return;
     };
@@ -143,7 +141,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @param stress_k  Particle stress state for tangent assembly.
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                const std::vector<double> &nvel_k,   //
+                                const std::vector<double> &nvel_k,                //
                                 std::vector<std::array<double, 6>> &stress_k);
 
     /**
