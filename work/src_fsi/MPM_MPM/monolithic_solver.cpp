@@ -42,12 +42,12 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
     double mass_stats[4]{};
     for (int n = 0; n < nodec; n++) {
         if (this->fluid_.nmass[n] > mtol) {
-            mass_stats[0] += this->fluid_.nmass[n];
-            mass_stats[1] += 1.0;
+            mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
+            mass_stats[1] += dbc[n];
         }
         if (this->solid_.nmass[n] > mtol) {
-            mass_stats[2] += this->solid_.nmass[n];
-            mass_stats[3] += 1.0;
+            mass_stats[2] += this->solid_.nmass[n] * dbc[n];
+            mass_stats[3] += dbc[n];
         }
     }
 
