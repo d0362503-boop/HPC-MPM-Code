@@ -18,7 +18,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
+    double ref_tol = (active_dof > 0.0e0) ? 1.0e-7 : 1.0e-10;
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
     // Allow large warm-start residuals.
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
@@ -40,7 +40,7 @@ MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); 
 void MPMMPMMonolithicFSI::BuildActiveDOFs() {
 
     double mass_stats[4]{};
-    for (int n : this->fsi_sys.owned_natural_ids) {
+    for (int n = 0; n < nodec; n++) {
         if (this->fluid_.nmass[n] > mtol) {
             mass_stats[0] += this->fluid_.nmass[n];
             mass_stats[1] += 1.0;
@@ -52,8 +52,8 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
     }
 
     MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
-    const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
+    const double fluid_cut = 1.0e-5 * mass_stats[0] / mass_stats[1];
+    const double solid_cut = 1.0e-5 * mass_stats[2] / mass_stats[3];
 
     this->fixed_dof.assign(nodec * 10, 0);
     for (int n = 0; n < nodec; n++) {
