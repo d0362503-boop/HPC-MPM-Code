@@ -27,7 +27,8 @@ class StabilizedFEM : public MaterialPoint {
     CrsMat NS_;
     // Phase-field system matrix
     CrsMat PF_;
-
+    std::vector<int> blocks; // target scalar block indices
+    int rhs_start;           // first target component index
     /**
      * @brief Configure Schur field splitting for NS and BoomerAMG for other systems.
      * @param mat Fluid or phase-field linear system being configured.
@@ -36,6 +37,8 @@ class StabilizedFEM : public MaterialPoint {
     void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
 
     StabilizedFEM() {
+        this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+        this->rhs_start = 0;
         this->integrator_.ode_order = 1;
         this->NS_.ndof = 4;
         this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};

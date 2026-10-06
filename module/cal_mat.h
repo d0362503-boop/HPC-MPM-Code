@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <utility>
 
 /**
  * @brief Return the sign of a scalar value.
@@ -15,17 +16,45 @@
 template <typename T> T Sign(T val) { return (T(0) < val) - (val < T(0)); }
 
 /**
- * @brief Compute the Euclidean norm of a 3-component vector.
- * @param vec Input vector.
- * @return L2 norm of `vec`.
+ * @brief Compute the scalar product of two three-component physical vectors.
+ * @param a First physical vector.
+ * @param b Second physical vector.
+ * @return Scalar product in the corresponding physical units.
+ */
+template <typename T> double DotVec3(const std::array<T, 3> &a, const std::array<T, 3> &b) {
+    double product = 0.0;
+    for (int d = 0; d < 3; ++d) { product += a[d] * b[d]; }
+
+    return product;
+}
+
+/**
+ * @brief Compute the Euclidean norm of a three-component physical vector.
+ * @param vec Physical vector whose magnitude is required.
+ * @return Vector magnitude in the same physical units.
  */
 template <typename T> double NormVec3(const std::array<T, 3> &vec) {
+    return std::sqrt(DotVec3(vec, vec));
+}
 
-    double norm_vec = 0.0e0;
-    for (int n = 0; n < 3; n++) { norm_vec += vec[n] * vec[n]; }
-    norm_vec = std::sqrt(norm_vec);
+/**
+ * @brief Subtract physical positions or vectors component by component.
+ * @param a Position or vector being reduced.
+ * @param b Position or vector being subtracted.
+ * @return Relative position or vector.
+ */
+template <typename T> std::array<T, 3> DifferenceVec3(const std::array<T, 3> &a, const std::array<T, 3> &b) {
+    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+}
 
-    return norm_vec;
+/**
+ * @brief Compute the vector product of two three-component physical vectors.
+ * @param a First physical vector or edge.
+ * @param b Second physical vector or edge.
+ * @return Oriented vector; its magnitude is twice the triangle area for two edges.
+ */
+template <typename T> std::array<T, 3> CrossVec3(const std::array<T, 3> &a, const std::array<T, 3> &b) {
+    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
 }
 
 /**
@@ -34,11 +63,7 @@ template <typename T> double NormVec3(const std::array<T, 3> &vec) {
  * @return Trace of `mat`.
  */
 template <typename T> double TraceMat3(const std::array<std::array<T, 3>, 3> &mat) {
-
-    double tr_mat = 0.0e0;
-    for (int i = 0; i < 3; i++) { tr_mat += mat[i][i]; }
-
-    return tr_mat;
+    return double(mat[0][0]) + double(mat[1][1]) + double(mat[2][2]);
 }
 
 /**
@@ -47,37 +72,29 @@ template <typename T> double TraceMat3(const std::array<std::array<T, 3>, 3> &ma
  * @return Determinant of `mat`.
  */
 template <typename T> double DetMat3(const std::array<std::array<T, 3>, 3> &mat) {
-
-    double mat_det = mat[0][0] * (mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1]) +
-                     mat[0][1] * (mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) +
-                     mat[0][2] * (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]);
-
-    return mat_det;
+    return mat[0][0] * (mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1]) +
+           mat[0][1] * (mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) +
+           mat[0][2] * (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]);
 }
 
 /**
  * @brief Compute the inverse of a 3x3 matrix.
  * @param mat Input matrix.
  * @return Inverse of `mat`.
- * @throws Floating-point division by zero if the determinant is zero.
+ * @note Requires a nonzero determinant.
  */
 template <typename T> std::array<std::array<double, 3>, 3> InvMat3(const std::array<std::array<T, 3>, 3> &mat) {
+    const double inv_det = 1.0 / DetMat3(mat);
 
-    double det = DetMat3(mat);
-    det = 1.0e0 / det;
-
-    std::array<std::array<double, 3>, 3> mat_inv;
-    mat_inv[0][0] = (mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1]) * det;
-    mat_inv[0][1] = (mat[0][2] * mat[2][1] - mat[0][1] * mat[2][2]) * det;
-    mat_inv[0][2] = (mat[0][1] * mat[1][2] - mat[0][2] * mat[1][1]) * det;
-    mat_inv[1][0] = (mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) * det;
-    mat_inv[1][1] = (mat[0][0] * mat[2][2] - mat[0][2] * mat[2][0]) * det;
-    mat_inv[1][2] = (mat[0][2] * mat[1][0] - mat[0][0] * mat[1][2]) * det;
-    mat_inv[2][0] = (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]) * det;
-    mat_inv[2][1] = (mat[0][1] * mat[2][0] - mat[0][0] * mat[2][1]) * det;
-    mat_inv[2][2] = (mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0]) * det;
-
-    return mat_inv;
+    return {{{(mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1]) * inv_det,
+              (mat[0][2] * mat[2][1] - mat[0][1] * mat[2][2]) * inv_det,
+              (mat[0][1] * mat[1][2] - mat[0][2] * mat[1][1]) * inv_det},
+             {(mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) * inv_det,
+              (mat[0][0] * mat[2][2] - mat[0][2] * mat[2][0]) * inv_det,
+              (mat[0][2] * mat[1][0] - mat[0][0] * mat[1][2]) * inv_det},
+             {(mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]) * inv_det,
+              (mat[0][1] * mat[2][0] - mat[0][0] * mat[2][1]) * inv_det,
+              (mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0]) * inv_det}}};
 }
 
 /**
@@ -85,10 +102,7 @@ template <typename T> std::array<std::array<double, 3>, 3> InvMat3(const std::ar
  * @param mat Input/output matrix.
  */
 template <typename T> void TransMat3(std::array<std::array<T, 3>, 3> &mat) {
-
-    for (int i = 0; i < 3; i++) {
-        for (int j = i + 1; j < 3; j++) { std::swap(mat[i][j], mat[j][i]); }
-    }
-
-    return;
+    std::swap(mat[0][1], mat[1][0]);
+    std::swap(mat[0][2], mat[2][0]);
+    std::swap(mat[1][2], mat[2][1]);
 }

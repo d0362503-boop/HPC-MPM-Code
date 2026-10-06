@@ -4,11 +4,13 @@
 #include <iostream>
 #include <mpi.h>
 #include <numeric>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include "module/cal_mat.h"
 #include "module/dataset.h"
+#include "module/interface_sdf.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
@@ -16,6 +18,35 @@
 #include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 
 using namespace mpm_mpm_monolithic_fsi;
+
+template <size_t vertex_count>
+std::vector<std::array<std::array<double, 3>, vertex_count>>
+MPMMPMMonolithicFSI::GatherInterfaceGeometry(const std::vector<std::array<std::array<double, 3>, vertex_count>> &local_geometry)
+    const {
+    std::vector<double> packed;
+    for (const auto &element : local_geometry) {
+        for (const auto &vertex : element) { packed.insert(packed.end(), vertex.begin(), vertex.end()); }
+    }
+
+    const int local_count = packed.size();
+    std::vector<int> counts(nprocs), offsets(nprocs);
+    MPI_Allgather(&local_count, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    for (int rank = 1; rank < nprocs; ++rank) { offsets[rank] = offsets[rank - 1] + counts[rank - 1]; }
+
+    std::vector<double> gathered(offsets.back() + counts.back());
+    MPI_Allgatherv(packed.data(), local_count, MPI_DOUBLE, gathered.data(), counts.data(), offsets.data(), MPI_DOUBLE,
+                   MPI_COMM_WORLD);
+
+    std::vector<std::array<std::array<double, 3>, vertex_count>> geometry(gathered.size() / (3 * vertex_count));
+    size_t index = 0;
+    for (auto &element : geometry) {
+        for (auto &vertex : element) {
+            for (double &coordinate : vertex) { coordinate = gathered[index++]; }
+        }
+    }
+
+    return geometry;
+}
 
 void MPMMPMMonolithicFSI::SolveFSISystem() {
 
@@ -49,42 +80,36 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
 
         this->AssembleFluidSystem(nvel_f, naccel_f);
         this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
-        this->AssembleInterfaceSystem(nvel_f, nvel_s);
+        this->AssembleInterfaceSystem();
 
         int solver_it = this->SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
 
-        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
-        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
-
-        if (this->CheckNRConvergence(nvel_f, nvel_s, initial_norm, NR_it, solver_it)) { break; }
+        if (this->CheckNRConvergence(initial_norm, NR_it, solver_it)) { break; }
     }
 
     return;
 }
 
-void MPMMPMMonolithicFSI::AssembleInterfaceSystem(const std::vector<double> &nvel_f, //
-                                                  const std::vector<double> &nvel_s) {
+void MPMMPMMonolithicFSI::AssembleInterfaceSystem() {
 
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);
         const double lm = this->nlm_lump_local[n];
-        const double nb_para_f = this->fluid_.integrator_.nb_para[0];
-        const double nb_para_s = this->solid_.integrator_.nb_para[0];
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[31]] -= nb_para_f * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[33]] -= nb_para_f * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[35]] -= nb_para_f * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[32]] += nb_para_s * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[34]] += nb_para_s * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[36]] += nb_para_s * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[31]] -= lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[33]] -= lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[35]] -= lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[32]] += lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[34]] += lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[36]] += lm;
     }
 
     for (int n = 0; n < nodec; n++) {
-        this->fsi_sys.b_rhs[n + nodec * 7] = this->nlm_lump[n] * (nvel_f[n + nuc] - nvel_s[n + nuc]);
-        this->fsi_sys.b_rhs[n + nodec * 8] = this->nlm_lump[n] * (nvel_f[n + nvc] - nvel_s[n + nvc]);
-        this->fsi_sys.b_rhs[n + nodec * 9] = this->nlm_lump[n] * (nvel_f[n + nwc] - nvel_s[n + nwc]);
+        this->fsi_sys.b_rhs[n + nodec * 7] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nuc] - this->solid_.ndispl[n + nuc]);
+        this->fsi_sys.b_rhs[n + nodec * 8] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nvc] - this->solid_.ndispl[n + nvc]);
+        this->fsi_sys.b_rhs[n + nodec * 9] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nwc] - this->solid_.ndispl[n + nwc]);
     }
 
     return;
@@ -103,10 +128,14 @@ void MPMMPMMonolithicFSI::AddLagrangeMultiplierToRHS(double af_coeff, const std:
 
 void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 
-    std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
+    std::vector<std::array<std::array<double, 3>, 3>> surface = this->BuildSolidInterface();
+    std::vector<std::array<std::array<double, 3>, 2>> fluid_domains = this->BuildFluidDomains();
+    interface_geometry::InterfaceSDF interface(std::move(surface), std::move(fluid_domains));
 
-    double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
+    std::array<std::array<double, 3>, 6> quadrature_offset;
+    GaussianDistribution(quadrature_offset);
+
+    const double quadrature_volume = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
 
     int nenode;
     std::vector<int> ncm;
@@ -117,55 +146,222 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
     for (int m = 0; m < nelem; m++) {
         const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
-        std::array<double, 3> xye, xyp;
-        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
+        std::array<double, 3> cell_center, xyg;
+        for (int d = 0; d < 3; d++) { cell_center[d] = xymin[d] + dxy[d] * (double(ijk[d]) + 0.5); }
+
         for (int iz = 0; iz < npxye[2]; iz++) {
-            xyp[2] = xye[2] + dec2p[iz][2];
+            xyg[2] = cell_center[2] + quadrature_offset[iz][2];
             for (int iy = 0; iy < npxye[1]; iy++) {
-                xyp[1] = xye[1] + dec2p[iy][1];
+                xyg[1] = cell_center[1] + quadrature_offset[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
-                    xyp[0] = xye[0] + dec2p[ix][0];
-                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    xyg[0] = cell_center[0] + quadrature_offset[ix][0];
+                    const double area_density = interface.AreaDensity(xyg);
+                    if (area_density == 0.0) continue;
 
-                    double phi_f = 0.0e0, phi_s = 0.0e0;
-                    std::array<double, 3> grad_phi_f{}, grad_phi_s{};
-                    for (int ni = 0; ni < nenode; ni++) {
-                        int nid = ncm[ni];
-                        double sfi = sf[ni];
-                        double dsfi1 = dsf[ni][0];
-                        double dsfi2 = dsf[ni][1];
-                        double dsfi3 = dsf[ni][2];
-                        phi_f += sfi * this->fluid_.nphi[nid];
-                        phi_s += sfi * this->solid_.nphi[nid];
-                        grad_phi_f[0] += dsfi1 * this->fluid_.nphi[nid];
-                        grad_phi_f[1] += dsfi2 * this->fluid_.nphi[nid];
-                        grad_phi_f[2] += dsfi3 * this->fluid_.nphi[nid];
-                        grad_phi_s[0] += dsfi1 * this->solid_.nphi[nid];
-                        grad_phi_s[1] += dsfi2 * this->solid_.nphi[nid];
-                        grad_phi_s[2] += dsfi3 * this->solid_.nphi[nid];
-                    }
-                    std::array<double, 3> grad_phi;
-                    for (int i = 0; i < 3; i++) { grad_phi[i] = phi_s * grad_phi_f[i] - phi_f * grad_phi_s[i]; }
-                    double norm_grad_phi = NormVec3(grad_phi);
+                    MakeSF(m, xyg, idimc, xynodec, ncm, nenode, sf, dsf);
 
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
-                        double sfi = sf[ni];
-                        this->nlm_lump_local[nid] += sfi * volp * norm_grad_phi;
+                        this->nlm_lump_local[nid] += sf[ni] * quadrature_volume * area_density;
                     }
                 }
             }
         }
     }
 
-    VectorAssign(nodec, this->nlm_lump);
     this->nlm_lump = this->nlm_lump_local;
 
     NodeVarComm(this->nlm_lump, 0);
 
     return;
+}
+
+void MPMMPMMonolithicFSI::OutputInterfaceBalance() const {
+    std::array<double, 7> balance{};
+    for (int n = 0; n < nodec; ++n) {
+        const double area = this->nlm_lump_local[n];
+        balance[0] += area;
+        for (int d = 0; d < 3; ++d) {
+            const double traction_force = area * this->nlambda[n + d * nodec];
+            balance[1 + d] += this->fluid_.integrator_.alpha_f * traction_force;
+            balance[4 + d] -= this->solid_.integrator_.alpha_f * traction_force;
+        }
+    }
+    MPI_Allreduce(MPI_IN_PLACE, balance.data(), balance.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    if (myrank == 0) {
+        std::ostringstream message;
+        message << std::scientific << std::setprecision(9) << "Interface_balance: " << istep;
+        for (double value : balance) { message << ' ' << value; }
+        std::cout << message.str() << '\n';
+    }
+}
+
+std::array<double, 3> MPMMPMMonolithicFSI::ContourIntersection(const std::array<std::array<double, 3>, 4> &vertices,
+                                                               const std::array<double, 4> &level, int i, int j) const {
+
+    const double fraction = level[i] / (level[i] - level[j]);
+    std::array<double, 3> point;
+    for (int d = 0; d < 3; d++) { point[d] = vertices[i][d] + fraction * (vertices[j][d] - vertices[i][d]); }
+
+    return point;
+}
+
+void MPMMPMMonolithicFSI::AppendInterfaceTriangle(std::array<std::array<double, 3>, 3> triangle,
+                                                  const std::array<double, 3> &outward,
+                                                  std::vector<std::array<std::array<double, 3>, 3>> &surface) const {
+
+    const std::array<double, 3> normal =
+        CrossVec3(DifferenceVec3(triangle[1], triangle[0]), DifferenceVec3(triangle[2], triangle[0]));
+
+    // A contour through a vertex can produce a zero-area triangle.
+    if (DotVec3(normal, normal) == 0.0) return;
+    if (DotVec3(normal, outward) < 0.0) { std::swap(triangle[1], triangle[2]); }
+
+    surface.push_back(triangle);
+
+    return;
+}
+
+void MPMMPMMonolithicFSI::AppendSolidContour(const std::array<std::array<double, 3>, 4> &vertices,
+                                             const std::array<double, 4> &level,
+                                             std::vector<std::array<std::array<double, 3>, 3>> &surface) const {
+
+    std::vector<int> inside, outside;
+    for (int i = 0; i < 4; i++) {
+        if (level[i] < 0.0) {
+            inside.push_back(i);
+        } else {
+            outside.push_back(i);
+        }
+    }
+    if (inside.empty() || outside.empty()) return;
+
+    std::array<double, 3> outward{};
+    for (int d = 0; d < 3; d++) {
+        for (int i : outside) { outward[d] += vertices[i][d] / outside.size(); }
+        for (int i : inside) { outward[d] -= vertices[i][d] / inside.size(); }
+    }
+
+    if (inside.size() == 3) { inside.swap(outside); }
+
+    if (inside.size() == 1) {
+        std::array<std::array<double, 3>, 3> triangle;
+        for (int i = 0; i < 3; i++) { triangle[i] = this->ContourIntersection(vertices, level, inside[0], outside[i]); }
+
+        this->AppendInterfaceTriangle(triangle, outward, surface);
+    } else {
+        const std::array<double, 3> ac = this->ContourIntersection(vertices, level, inside[0], outside[0]);
+        const std::array<double, 3> ad = this->ContourIntersection(vertices, level, inside[0], outside[1]);
+        const std::array<double, 3> bc = this->ContourIntersection(vertices, level, inside[1], outside[0]);
+        const std::array<double, 3> bd = this->ContourIntersection(vertices, level, inside[1], outside[1]);
+
+        this->AppendInterfaceTriangle({ac, ad, bc}, outward, surface);
+        this->AppendInterfaceTriangle({ad, bd, bc}, outward, surface);
+    }
+
+    return;
+}
+
+std::vector<std::array<std::array<double, 3>, 3>> MPMMPMMonolithicFSI::BuildSolidInterface() const {
+
+    // Consistent tetrahedral subdivision across cell faces.
+    const std::array<std::array<int, 4>, 6> tetrahedra{
+        {{0, 1, 3, 7}, {0, 3, 2, 7}, {0, 2, 6, 7}, {0, 6, 4, 7}, {0, 4, 5, 7}, {0, 5, 1, 7}}};
+    std::vector<std::array<std::array<double, 3>, 3>> surface;
+    int nenode;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
+
+    const int nx = npxye[0] + 1, ny = npxye[1] + 1, nz = npxye[2] + 1;
+    std::vector<std::array<double, 3>> vertices(nx * ny * nz);
+    std::vector<double> level(vertices.size());
+
+    for (int m = 0; m < nelem; m++) {
+        double minimum_phi = 1.0, maximum_phi = 0.0;
+        for (int nid : ncc[m]) {
+            minimum_phi = std::min(minimum_phi, this->solid_.nphi[nid]);
+            maximum_phi = std::max(maximum_phi, this->solid_.nphi[nid]);
+        }
+        if (minimum_phi >= 0.5 || maximum_phi <= 0.5) continue;
+
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
+        for (int k = 0; k < nz; k++) {
+            for (int j = 0; j < ny; j++) {
+                for (int i = 0; i < nx; i++) {
+                    const int vertex_id = i + nx * (j + ny * k);
+                    const std::array<int, 3> offset{i, j, k};
+                    std::array<double, 3> &xyg = vertices[vertex_id];
+                    for (int d = 0; d < 3; d++) { xyg[d] = xymin[d] + dxy[d] * (ijk[d] + double(offset[d]) / npxye[d]); }
+
+                    MakeSF(m, xyg, idimc, xynodec, ncm, nenode, sf, dsf);
+
+                    level[vertex_id] = 0.5;
+                    for (int ni = 0; ni < nenode; ni++) {
+                        int nid = ncm[ni];
+                        level[vertex_id] -= sf[ni] * this->solid_.nphi[nid];
+                    }
+                }
+            }
+        }
+
+        for (int k = 0; k < npxye[2]; k++) {
+            for (int j = 0; j < npxye[1]; j++) {
+                for (int i = 0; i < npxye[0]; i++) {
+                    std::array<int, 8> cube;
+                    for (int corner = 0; corner < 8; corner++) {
+                        cube[corner] = i + (corner & 1) + nx * (j + ((corner >> 1) & 1) + ny * (k + (corner >> 2)));
+                    }
+
+                    for (const std::array<int, 4> &tetrahedron : tetrahedra) {
+                        std::array<std::array<double, 3>, 4> positions;
+                        std::array<double, 4> values;
+                        for (int corner = 0; corner < 4; corner++) {
+                            const int vertex_id = cube[tetrahedron[corner]];
+                            positions[corner] = vertices[vertex_id];
+                            values[corner] = level[vertex_id];
+                        }
+
+                        this->AppendSolidContour(positions, values, surface);
+                    }
+                }
+            }
+        }
+    }
+
+    return this->GatherInterfaceGeometry(surface);
+}
+
+std::vector<std::array<std::array<double, 3>, 2>> MPMMPMMonolithicFSI::BuildFluidDomains() const {
+
+    std::vector<std::array<std::array<double, 3>, 2>> domains;
+    const double reference_volume = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
+
+    for (int cell = 0; cell < nelem; ++cell) {
+        double solid_support = 0.0;
+        for (int node_id : ncc[cell]) { solid_support = std::max(solid_support, this->solid_.nphi[node_id]); }
+        if (solid_support == 0.0) continue;
+
+        int pid = this->fluid_.idepf[cell];
+        while (pid != -1) {
+            const double volume_scale = std::cbrt(this->fluid_.vol[pid] / reference_volume);
+            std::array<std::array<double, 3>, 2> domain;
+
+            // ponytail: preserve volume and grid aspect ratio; fluid domain deformation is not tracked.
+            for (int d = 0; d < 3; ++d) {
+                const double half_width = 0.5 * dxy[d] / npxye[d] * volume_scale;
+                domain[0][d] = this->fluid_.coord[pid][d] - half_width;
+                domain[1][d] = this->fluid_.coord[pid][d] + half_width;
+            }
+
+            domains.push_back(domain);
+
+            pid = this->fluid_.idp2p[pid];
+        }
+    }
+
+    return this->GatherInterfaceGeometry(domains);
 }
 
 void MPMMPMMonolithicFSI::UpdateNRIncrement() {
@@ -181,8 +377,7 @@ void MPMMPMMonolithicFSI::UpdateNRIncrement() {
     return;
 }
 
-bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
-                                             std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
+bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
     const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-10, 1.0e-8, 1.0e-8};
 
@@ -202,7 +397,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
     // stats[0]: linearized fluid residual [N].
     // stats[1]: linearized continuity residual [m^3/s].
     // stats[2]: linearized solid residual [N].
-    // stats[3]: endpoint velocity difference [m/s].
+    // stats[3]: displacement increment difference [m].
     // stats[4..7]: corresponding active-component counts.
     std::array<double, 8> stats{};
 
@@ -218,7 +413,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
                 field = 1;
             } else if (d < 7) { // Solid momentum
                 field = 2;
-            } else { // Interface velocity
+            } else { // Interface displacement
                 field = 3;
             }
 
@@ -228,8 +423,8 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
                 const double row_scale = this->column_scale[index];
                 residual = scaled_residual[index] / row_scale;
             } else {
-                const int velocity_index = n + (d - 7) * nodec;
-                residual = nvel_s[velocity_index] - nvel_f[velocity_index];
+                const int displacement_index = n + (d - 7) * nodec;
+                residual = this->solid_.ndispl[displacement_index] - this->fluid_.ndispl[displacement_index];
             }
             stats[field] += residual * residual;
             stats[field + 4] += 1.0;
@@ -244,7 +439,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(const std::vector<double> &nvel_f, 
 
     // All four RMS residuals must be finite and satisfy their thresholds.
     // Fields 0..2: max(absolute_tol, 1e-4 * NR0 post-solve residual RMS).
-    // Field 3: n+1 velocity-difference RMS <= 1e-8 m/s, without interface weights.
+    // Field 3: displacement-increment RMS <= 1e-8 m, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         stats[field] = std::sqrt(stats[field] / std::max(1.0, stats[field + 4]));

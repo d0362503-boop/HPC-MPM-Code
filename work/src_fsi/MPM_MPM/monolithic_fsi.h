@@ -49,8 +49,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     void DataInput();
 
-    /** @brief Integrate the paired fluid-solid phase gradient into common nodal interface-area weights. */
+    /** @brief Integrate the wet solid-surface distance delta into lumped nodal interface-area weights. */
     void LumpedLagrangeMultiplier();
+
+    /** @brief Report wet interface area and generalized-alpha interface forces, counting each element contribution once. */
+    void OutputInterfaceBalance() const;
 
     /**
      * @brief Add interface multiplier forces to the fluid or solid momentum RHS.
@@ -78,20 +81,17 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
                              std::vector<std::array<double, 6>> &stress_k);
 
     /**
-     * @brief Assemble the weighted interface velocity constraint and its displacement coupling blocks.
-     * @param nvel_f Fluid nodal velocity at the current endpoint iterate.
-     * @param nvel_s Solid nodal velocity at the current endpoint iterate.
+     * @brief Constrain the fluid and solid nodal displacement increments to agree on the wet interface.
+     * @note Uses the current time-step ndispl fields, not accumulated particle coordinates.
      */
-    void AssembleInterfaceSystem(const std::vector<double> &nvel_f, //
-                                 const std::vector<double> &nvel_s);
+    void AssembleInterfaceSystem();
 
-    /** @brief Solve the endpoint velocity constraint and check endpoint velocity continuity. */
+    /** @brief Solve the coupled fields with interface displacement-increment continuity. */
     void SolveFSISystem();
 
     /**
      * @brief Apply residual constraints and solve for physical monolithic increments.
-     * @param NR_it Newton iteration controlling preconditioner setup and reuse of the previous physical increment as the initial
-     * guess.
+     * @param NR_it Newton iteration controlling preconditioner setup; each correction starts from zero.
      * @return Number of Krylov iterations used by the coupled linear solve.
      * @note KSP divergence is currently logged by CrsMat but does not stop this
      * routine from rescaling and returning the computed increment.
@@ -99,17 +99,14 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     int SolveSystem(int NR_it);
 
     /**
-     * @brief Check PETSc b-A*increment in physical units and updated interface velocity continuity.
-     * @param nvel_f Fluid nodal velocity after applying the current Newton increment.
-     * @param nvel_s Solid nodal velocity after applying the current Newton increment.
+     * @brief Check PETSc b-A*increment in physical units and updated interface displacement-increment continuity.
      * @param initial_norm Post-solve NR0 RMS norms of b-A*increment in physical units for the first three fields.
      * @param NR_it Current Newton iteration.
      * @param solver_it Krylov iterations in the last coupled linear solve.
      * @return Whether all field residuals meet tolerance.
      * @note The linear residual is not a reassembled nonlinear residual at the updated state.
      */
-    bool CheckNRConvergence(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s,
-                            std::array<double, 4> &initial_norm, int NR_it, int solver_it);
+    bool CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it);
 
     /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
     void UpdateNRIncrement() override;
@@ -148,6 +145,57 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
     /** @brief Release the coupled PETSc solver and pressure preconditioner resources. */
     ~MPMMPMMonolithicFSI();
+
+  private:
+    /**
+     * @brief Exchange current interface geometry across MPI ranks.
+     * @param local_geometry Rank-local solid triangles or nearby fluid particle-domain bounds.
+     * @return Physical geometry available to all ranks in the current configuration.
+     */
+    template <size_t vertex_count>
+    std::vector<std::array<std::array<double, 3>, vertex_count>>
+    GatherInterfaceGeometry(const std::vector<std::array<std::array<double, 3>, vertex_count>> &local_geometry) const;
+
+    /**
+     * @brief Locate the zero contour on a tetrahedron edge by linear interpolation.
+     * @param vertices Physical tetrahedron vertices in the current configuration.
+     * @param level Signed phase values at the vertices: negative inside the solid.
+     * @param i Index of the edge's first vertex.
+     * @param j Index of the edge's second vertex.
+     * @return Physical position where the interpolated phase value is zero.
+     */
+    std::array<double, 3> ContourIntersection(const std::array<std::array<double, 3>, 4> &vertices,
+                                            const std::array<double, 4> &level, int i, int j) const;
+
+    /**
+     * @brief Orient a nonzero-area contour triangle toward the exterior and append it.
+     * @param triangle Physical vertices of the reconstructed solid contour.
+     * @param outward Direction from the tetrahedron's inside vertices to its outside vertices.
+     * @param surface Boundary triangles receiving the oriented contour.
+     */
+    void AppendInterfaceTriangle(std::array<std::array<double, 3>, 3> triangle, const std::array<double, 3> &outward,
+                                 std::vector<std::array<std::array<double, 3>, 3>> &surface) const;
+
+    /**
+     * @brief Extract the solid zero contour inside one tetrahedron.
+     * @param vertices Physical tetrahedron vertices sampled from the current background cell.
+     * @param level Signed phase values: negative inside the solid, positive outside.
+     * @param surface Boundary triangles receiving the outward-oriented contour.
+     */
+    void AppendSolidContour(const std::array<std::array<double, 3>, 4> &vertices, const std::array<double, 4> &level,
+                            std::vector<std::array<std::array<double, 3>, 3>> &surface) const;
+
+    /**
+     * @brief Reconstruct the current solid phi=0.5 boundary and exchange it across MPI ranks.
+     * @return Globally available, outward-oriented triangles in physical coordinates.
+     */
+    std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface() const;
+
+    /**
+     * @brief Reconstruct and exchange finite fluid domains near the solid interface.
+     * @return Globally available particle-box bounds in the current physical configuration.
+     */
+    std::vector<std::array<std::array<double, 3>, 2>> BuildFluidDomains() const;
 };
 
 } // namespace mpm_mpm_monolithic_fsi

@@ -10,6 +10,8 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     this->BCResidualSet(this->fsi_sys.b_rhs);
     std::vector<double> residual = this->fsi_sys.b_rhs;
 
+    // Solve a new correction.
+    VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
     double active_dof = 0.0e0;
@@ -20,7 +22,6 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
-    // Allow large warm-start residuals.
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
     KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 100);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
@@ -114,9 +115,8 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
             const double df = this->column_scale[n + d * nodec] * this->column_scale[n + d * nodec];
             const double ds = this->column_scale[n + (d + 4) * nodec] * this->column_scale[n + (d + 4) * nodec];
             const double af = this->fluid_.integrator_.alpha_f, as = this->solid_.integrator_.alpha_f;
-            const double cf = this->fluid_.integrator_.nb_para[0], cs = this->solid_.integrator_.nb_para[0];
             this->column_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(af * af * df + as * as * ds));
-            row_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(cf * cf * df + cs * cs * ds));
+            row_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(df + ds));
         }
     }
 

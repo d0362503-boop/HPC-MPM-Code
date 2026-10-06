@@ -3,9 +3,9 @@ res/
 vtk/
 external/
 NUL/
+docs/
 .vscode
 .agents
-
 
 # Compiled objects and binaries
 *.o
