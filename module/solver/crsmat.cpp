@@ -145,10 +145,7 @@ void CrsMat::BuildActiveRowMask() {
     std::vector<int> local_row_active(nodec, 0);
     for (int nid = 0; nid < nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > mtol ? 1 : 0; }
 
-    // Synchronize the active indicator across overlap control points so that a
-    // shared row is active if any overlapping rank marks it active.
-    // This prevents owner-rank false negatives that can pin partition seams.
-    NodeVarComm(local_row_active, 0);
+     NodeVarComm(local_row_active, 0);
 
     for (int nid = 0; nid < nodec; ++nid) { this->active_row_mask[nid] = (local_row_active[nid] > 0) ? 1 : 0; }
 

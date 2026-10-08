@@ -163,7 +163,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm
 
     // All four RMS residuals must be finite and satisfy their thresholds.
     // Fields 0..2: max(absolute_tol, 1e-4 * initial nonlinear residual RMS).
-    // Field 3: displacement-increment RMS <= 1e-8 m, without interface weights.
+    // Field 3: displacement-increment RMS <= 1e-10 m, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         if (NR_it == 0 && field < 3) { initial_norm[field] = stats[field]; }
