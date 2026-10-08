@@ -155,7 +155,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @return RMS fluid momentum [N], continuity [m^3/s], solid momentum [N] and unweighted interface displacement [m] residuals.
      * @note Requires initialized PETSc row ownership and an unscaled, overlap-synchronized RHS.
      */
-    std::array<double, 4> ComputeNRResidualNorms() const;
+    std::array<double, 4> ComputeNRResidualNorms();
 
     /**
      * @brief Check the updated nonlinear RHS and direct solid-fluid displacement-increment continuity.

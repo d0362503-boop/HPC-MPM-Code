@@ -113,7 +113,9 @@ void MPMMPMMonolithicFSI::UpdateNRIncrement() {
     return;
 }
 
-std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() const {
+std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
+
+    this->BCResidualSet(this->fsi_sys.b_rhs);
 
     // stats[0]: fluid momentum residual [N].
     // stats[1]: continuity residual [m^3/s].
