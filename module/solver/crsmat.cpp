@@ -123,27 +123,27 @@ void CrsMat::BuildActiveRowMask() {
     this->active_row_mask.assign(nodec, 1);
     if (this->FEM_flag) return;
 
-    constexpr PetscReal active_mass_cutoff_ratio = 1.0e-4;
+    // constexpr PetscReal active_mass_cutoff_ratio = 1.0e-4;
 
-    PetscReal local_mass_sum = 0.0e0;
-    PetscInt local_positive_mass_count = 0;
-    for (int i = 0; i < this->local_node; ++i) {
-        const PetscReal mass = this->owner_->nmass[this->owned_natural_ids[i]];
-        if (mass > mtol) {
-            local_mass_sum += mass;
-            ++local_positive_mass_count;
-        }
-    }
-    PetscReal global_mass_sum = 0.0e0;
-    PetscInt global_positive_mass_count = 0;
-    MPI_Allreduce(&local_mass_sum, &global_mass_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&local_positive_mass_count, &global_positive_mass_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    // PetscReal local_mass_sum = 0.0e0;
+    // PetscInt local_positive_mass_count = 0;
+    // for (int i = 0; i < this->local_node; ++i) {
+    //     const PetscReal mass = this->owner_->nmass[this->owned_natural_ids[i]];
+    //     if (mass > mtol) {
+    //         local_mass_sum += mass;
+    //         ++local_positive_mass_count;
+    //     }
+    // }
+    // PetscReal global_mass_sum = 0.0e0;
+    // PetscInt global_positive_mass_count = 0;
+    // MPI_Allreduce(&local_mass_sum, &global_mass_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    // MPI_Allreduce(&local_positive_mass_count, &global_positive_mass_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    const PetscReal mass_mean = global_mass_sum / static_cast<PetscReal>(global_positive_mass_count);
-    const PetscReal mass_cutoff = active_mass_cutoff_ratio * mass_mean;
+    // const PetscReal mass_mean = global_mass_sum / static_cast<PetscReal>(global_positive_mass_count);
+    // const PetscReal mass_cutoff = active_mass_cutoff_ratio * mass_mean;
 
     std::vector<int> local_row_active(nodec, 0);
-    for (int nid = 0; nid < nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > mass_cutoff ? 1 : 0; }
+    for (int nid = 0; nid < nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > mtol ? 1 : 0; }
 
     // Synchronize the active indicator across overlap control points so that a
     // shared row is active if any overlapping rank marks it active.

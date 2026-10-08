@@ -1,11 +1,17 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+#include <map>
 #include <vector>
 
 #include "module/bc.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
+
+namespace interface_geometry {
+class InterfaceSDF;
+}
 
 namespace mpm_mpm_monolithic_fsi {
 
@@ -52,9 +58,6 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     /** @brief Integrate the wet solid-surface distance delta into lumped nodal interface-area weights. */
     void LumpedLagrangeMultiplier();
 
-    /** @brief Report wet interface area and generalized-alpha interface forces, counting each element contribution once. */
-    void OutputInterfaceBalance() const;
-
     /**
      * @brief Add interface multiplier forces to the fluid or solid momentum RHS.
      * @param af_coeff Signed generalized-alpha force weight: positive for fluid and negative for solid.
@@ -90,6 +93,16 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     void SolveFSISystem();
 
     /**
+     * @brief Move fluid centres on the inside of the final solid phi=0.5 surface directly to that surface.
+     * @note Call after both Node2Particle updates and solid MoveParticle, before fluid MoveParticle. Reuses the solid contour
+     * and finite-triangle distance routines with an updated temporary phase field. Projection is normal
+     * to a triangle interior, or to its nearest edge/vertex. Queries use the existing one-grid-spacing
+     * surface band and nearest-triangle sign. Velocity, acceleration, TPIC state, pressure, mass and volume are preserved.
+     * This is geometric remapping, not a physical contact-force or momentum correction.
+     */
+    void CorrectFluidPenetration();
+
+    /**
      * @brief Apply residual constraints and solve for physical monolithic increments.
      * @param NR_it Newton iteration controlling preconditioner setup; each correction starts from zero.
      * @return Number of Krylov iterations used by the coupled linear solve.
@@ -97,16 +110,6 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * routine from rescaling and returning the computed increment.
      */
     int SolveSystem(int NR_it);
-
-    /**
-     * @brief Check PETSc b-A*increment in physical units and updated interface displacement-increment continuity.
-     * @param initial_norm Post-solve NR0 RMS norms of b-A*increment in physical units for the first three fields.
-     * @param NR_it Current Newton iteration.
-     * @param solver_it Krylov iterations in the last coupled linear solve.
-     * @return Whether all field residuals meet tolerance.
-     * @note The linear residual is not a reassembled nonlinear residual at the updated state.
-     */
-    bool CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it);
 
     /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
     void UpdateNRIncrement() override;
@@ -148,6 +151,23 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
   private:
     /**
+     * @brief Measure the nonlinear field RHS and direct interface displacement difference on globally owned active components.
+     * @return RMS fluid momentum [N], continuity [m^3/s], solid momentum [N] and unweighted interface displacement [m] residuals.
+     * @note Requires initialized PETSc row ownership and an unscaled, overlap-synchronized RHS.
+     */
+    std::array<double, 4> ComputeNRResidualNorms() const;
+
+    /**
+     * @brief Check the updated nonlinear RHS and direct solid-fluid displacement-increment continuity.
+     * @param initial_norm Initial RMS residuals saved on iteration zero and used as relative references for the first three
+     * fields.
+     * @param NR_it Current Newton iteration.
+     * @param solver_it Krylov iterations in the last coupled linear solve.
+     * @return Whether all field residuals meet tolerance.
+     * @note Call after reassembly, before row scaling. The interface test uses solid_.ndispl-fluid_.ndispl without area weights.
+     */
+    bool CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it);
+    /**
      * @brief Exchange current interface geometry across MPI ranks.
      * @param local_geometry Rank-local solid triangles or nearby fluid particle-domain bounds.
      * @return Physical geometry available to all ranks in the current configuration.
@@ -165,7 +185,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @return Physical position where the interpolated phase value is zero.
      */
     std::array<double, 3> ContourIntersection(const std::array<std::array<double, 3>, 4> &vertices,
-                                            const std::array<double, 4> &level, int i, int j) const;
+                                              const std::array<double, 4> &level, int i, int j) const;
 
     /**
      * @brief Orient a nonzero-area contour triangle toward the exterior and append it.
@@ -187,15 +207,36 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
     /**
      * @brief Reconstruct the current solid phi=0.5 boundary and exchange it across MPI ranks.
+     * @param solid_phi Control-point solid volume fraction in the configuration to reconstruct.
      * @return Globally available, outward-oriented triangles in physical coordinates.
      */
-    std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface() const;
+    std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface(const std::vector<double> &solid_phi) const;
 
     /**
      * @brief Reconstruct and exchange finite fluid domains near the solid interface.
      * @return Globally available particle-box bounds in the current physical configuration.
      */
     std::vector<std::array<std::array<double, 3>, 2>> BuildFluidDomains() const;
+
+    /**
+     * @brief Index finite fluid boxes within the existing contact activation band.
+     * @param domains Current volume-equivalent fluid particle boxes in physical coordinates.
+     * @return Spatial bins covering each box expanded by 1.5 background-grid spacings.
+     */
+    std::map<std::array<int, 3>, std::vector<std::size_t>>
+    IndexFluidDomains(const std::vector<std::array<std::array<double, 3>, 2>> &domains) const;
+
+    /**
+     * @brief Evaluate wet-interface area density chi_w * delta_epsilon(d_s).
+     * @param point Current volume quadrature position.
+     * @param interface Indexed solid surface in the current configuration.
+     * @param domains Current volume-equivalent fluid particle boxes.
+     * @param bins Candidate fluid boxes in the grid-scaled contact band.
+     * @return Interface area per volume [1/m], zero outside the band or on dry surfaces.
+     */
+    double WetInterfaceAreaDensity(const std::array<double, 3> &point, const interface_geometry::InterfaceSDF &interface,
+                                   const std::vector<std::array<std::array<double, 3>, 2>> &domains,
+                                   const std::map<std::array<int, 3>, std::vector<std::size_t>> &bins) const;
 };
 
 } // namespace mpm_mpm_monolithic_fsi

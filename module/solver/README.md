@@ -79,32 +79,41 @@ row idn  →  columns [idn_min ... idn_max]  (inclusive)
 amat[j + block_id[b]]  // component pair: block_row[b], block_col[b]
 ```
 
-Standalone fluid (`ndof=4`) stores 16 scalar blocks; solid (`ndof=3`) stores 9.
-The monolithic MPM-MPM system has 10 components but stores only 37 selected blocks.
-Its `block_row` and `block_col` arrays are therefore essential: block indices cannot
-generally be inferred as `row_var * ndof + col_var`.
+Fluid (`ndof=4`) stores 16 scalar blocks; solid (`ndof=3`) stores 9.
+For matrices storing only selected component pairs, `block_row` and `block_col`
+define the layout. Block indices cannot generally be inferred as
+`row_var * ndof + col_var`.
 
 ### 2.5 Active vs inactive nodes (MPM)
 
-In MPM, a control point is called *inactive* when it carries negligible nodal mass. This is detected at solve time by `BuildActiveRowMask()`: it computes the global mean of the positive nodal masses (`nmass > mtol`, owned nodes only, `MPI_Allreduce` of sum and count) and marks a node active only when
+In the generic MPM PETSc assembly path, `BuildActiveRowMask()` marks a control
+point active when its owning material's nodal mass satisfies
 
 ```cpp
-nmass[nid] > 1.0e-5 * mass_mean
+owner_->nmass[nid] > mtol
 ```
 
-The relative threshold is scale-invariant across cases, unlike an absolute cutoff such as `mtol`.
+`mtol` is an absolute nodal-mass threshold in the case's mass units. A mass equal
+to or below it produces an inactive local indicator. The previous global mean
+mass and relative cutoff calculations are commented out; they no longer run,
+and their two `MPI_Allreduce` calls are no longer required. FEM control points
+remain active without a mass test.
 
-**Critical invariant for parallel PETSc solves:** the active/inactive decision must be synchronized across overlap control points before assembly skips rows or inserts owned-row identity blocks. A shared control point is considered active if *any* overlapping rank marks it active. `BuildActiveRowMask()` implements this by computing a local integer indicator, calling `NodeVarComm(..., 0)` to accumulate indicators on shared nodes, and rebuilding `active_row_mask` from the synchronized result. Since `nmass` itself is already `NodeVarComm`-synchronized during `Particle2Node()`, shared nodes carry identical values on all ranks, so the indicator exchange is a safeguard rather than the primary consistency mechanism.
+The function first evaluates the mass test on all `nodec` control points,
+including ghosts. It then calls `NodeVarComm(local_row_active, 0)` to add the
+integer indicators across overlaps and sets `active_row_mask[nid]` from whether
+the synchronized sum is positive. A shared control point is therefore active
+if any overlapping rank marks it active. This is an OR decision; the indicator
+is not multiplied by `dbc` or averaged.
 
-This prevents owner-rank false negatives: a rank that happens to own a shared node but holds only a small mass share would otherwise mark the row inactive and identity-fill it, producing an artificial Dirichlet-like wall along partition boundaries.
+Assembly and elimination use this synchronized mask, preventing a shared row
+from being assembled as active on one rank and eliminated as inactive on its
+owner. Nodal mass is also synchronized by the phase's P2G transfer.
 
-During assembly:
-- inactive nodes are skipped in the first pass
-- locally-owned inactive nodes receive an identity block in a second pass to keep the matrix well-conditioned
-
-The current criterion is the third revision: it replaces the intermediate matrix-row-content check (absolute CSR row sum below `mtol`) and the original absolute `nmass < mtol` heuristic, both of which required absolute-threshold tuning. See Section 3.4 for details.
-
-> **Do not** classify active rows from purely rank-local data (mass or `amat` content) and immediately apply identity fill on owned rows. In overlapping decompositions this misclassifies shared rows whose physical contributions are split across ranks.
+Inactive block rows are skipped during assembly. After RHS and initial-guess
+assembly, `SolveWithPetsc()` eliminates inactive non-Dirichlet rows and columns
+with a unit diagonal and zero RHS. Physical boundary constraints are handled
+separately. See Section 3.4 for the elimination and residual-mask details.
 
 ---
 
@@ -509,20 +518,16 @@ For the current 32-rank Turek benchmark:
 | FEM fluid rebuild freq | `20` |
 | Implicit-solid rebuild freq | `1` |
 
-These recorded runs describe the historical partitioned MPM-FEM path. They do not
-validate the currently selected monolithic MPM-MPM driver or establish nonlinear accuracy.
+These recorded runs are historical benchmarks; they do not establish nonlinear accuracy.
 
 ## Current Convergence Limitations
 
-`ComputePetscResidualStats()` evaluates the masked linear-system residual `b-A*x`
-after KSP. `CheckNRConvergence()` uses its norm and RMS, with the initial post-solve
+`CrsMat::ComputePetscResidualStats()` evaluates the masked linear-system residual `b-A*x`
+after KSP. `CrsMat::CheckNRConvergence()` uses its norm and RMS, with the initial post-solve
 norm stored in `r0r`. This is not the nonlinear equilibrium residual reassembled
-at the updated solution. Tightening KSP tolerances cannot replace that check.
-
-The monolithic MPM-MPM driver has a separate monitor: three field residuals are
-also derived from `b-A*x`, with scaling undone, while the fourth measures the
-updated endpoint fluid-solid velocity difference. Interface continuity alone
-does not verify nonlinear momentum balance.
+at the updated solution. This limitation applies to drivers using the generic
+`CrsMat` convergence monitor. Tightening KSP tolerances cannot replace a
+nonlinear residual check.
 
 `SolveWithPetsc()` logs negative KSP convergence reasons on rank zero, then still
 scatters the solution and returns the iteration count. It does not currently

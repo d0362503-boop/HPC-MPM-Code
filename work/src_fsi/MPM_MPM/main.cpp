@@ -83,6 +83,8 @@ int main(int argc, char *argv[]) {
 
             fsi.solid_.MoveParticle();
 
+            fsi.CorrectFluidPenetration();
+
             fsi.fluid_.MoveParticle();
 
             if (istep % iout == 0) {

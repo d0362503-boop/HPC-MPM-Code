@@ -1,15 +1,15 @@
 <sp.solswitch, rstflag, nlstep>  !Impact
 TPIC  2  1
 <ista, iend, iout>
-1  2000  5
+1  1000  5
 <dt, mtol, wfem.spec_rad, sp.spec_rad>
-1.0e-3  1.0e-12  0.25e0  0.25e0
+1.0e-3  1.0e-10  0.5e0  0.5e0
 <xymin>
 0.0e0  0.0e0  0.0e0
 <xymax>
-0.584e0  0.002e0  0.4e0
+0.584e0  0.002e0  0.5e0
 <xyelem>
-292  1  200
+292  1  250
 <idimc>  ! ---- Open-form B-Spline order ----
 2  1  2
 <npxye>

@@ -100,6 +100,10 @@ Initialization and finalization are shared through `InitializeSimulation()` and 
 For FSI, `work/src_fsi/CMakeLists.txt` selects either `MPM_FEM` or `MPM_MPM`.
 `work/src_solid/CMakeLists.txt` similarly selects `explicit` or `implicit`.
 
+The [MPM-MPM FSI guide](work/src_fsi/MPM_MPM/README.md) describes the coupled
+Newton loop, interface activation, and particle penetration correction. Its
+nonlinear convergence check is separate from the standalone `CrsMat` monitor.
+
 ### Selecting data tools
 
 `data/generate/CMakeLists.txt` and `data/divide/CMakeLists.txt` configure all

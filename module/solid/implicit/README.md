@@ -31,8 +31,7 @@ SolidMaterialPointBase
             └── SM_ : CrsMat  (ndof = 3, owner_ = this, FEM_flag = false)
 ```
 
-`ImplicitSolidMPM` exposes the driver hooks and assembly helpers publicly, allowing
-the monolithic FSI coordinator to assemble into a shared system.
+`ImplicitSolidMPM` exposes its time-step entry points and assembly helpers publicly.
 
 ### Public interface
 
