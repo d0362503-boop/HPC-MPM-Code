@@ -418,7 +418,7 @@ std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
     return rr;
 }
 
-void CrsMat::ComputeResidualNormsq(double &ref_tol, double &abs_tol) {
+void CrsMat::ComputeResidualNormSq(double &ref_tol, double &abs_tol) {
 
     const int var_size = int(this->x_lhs.size());
 
@@ -463,10 +463,10 @@ bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double 
 
     double rkr, rtr_abs;
     if (NR_it == 0) {
-        this->ComputeResidualNormsq(r0r, rtr_abs);
+        this->ComputeResidualNormSq(r0r, rtr_abs);
         rkr = r0r;
     } else {
-        this->ComputeResidualNormsq(rkr, rtr_abs);
+        this->ComputeResidualNormSq(rkr, rtr_abs);
     }
     double rtr_ref = (r0r > 1.0e-30) ? (rkr / r0r) : 0.0e0;
 

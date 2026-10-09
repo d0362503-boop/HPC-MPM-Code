@@ -217,7 +217,7 @@ to every inactive non-Dirichlet DOF. Their initial guess is zero, so PETSc sets 
 
 #### Residual consistency for inactive MPM nodes
 
-`ComputeResidualNormsq()` reads the freshly assembled native `b_rhs` for both
+`ComputeResidualNormSq()` reads the freshly assembled native `b_rhs` for both
 PETSc and native solves; it does not evaluate the linear residual `b-A*x`.
 It zeroes constrained RHS entries through `BCResidualSet()` and applies the same
 callback to an all-ones vector to identify free DOFs. Fixed DOFs are excluded

@@ -140,7 +140,7 @@ class CrsMat {
      * excluded from both norms and the count through BCResidualSet(). Both
      * outputs are zero when no free active DOFs are counted.
      */
-    void ComputeResidualNormsq(double &ref_tol, double &abs_tol);
+    void ComputeResidualNormSq(double &ref_tol, double &abs_tol);
 
     /** @brief Mark low-mass MPM rows inactive. */
     void BuildActiveRowMask();
