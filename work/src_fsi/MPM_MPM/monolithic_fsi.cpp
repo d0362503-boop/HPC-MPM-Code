@@ -117,10 +117,10 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
     this->BCResidualSet(this->fsi_sys.b_rhs);
 
-    // stats[0]: fluid momentum residual [N].
-    // stats[1]: continuity residual [m^3/s].
-    // stats[2]: solid momentum residual [N].
-    // stats[3]: displacement increment difference [m].
+    // stats[0]: fluid momentum residual
+    // stats[1]: fluid continuity residual
+    // stats[2]: solid momentum residual
+    // stats[3]: displacement increment difference
     // stats[4..7]: corresponding active-component counts.
     std::array<double, 8> stats{};
 
@@ -160,17 +160,16 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
 bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-8, 1.0e-10, 1.0e-8, 1.0e-10};
+    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-12, 1.0e-10, 1.0e-10};
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
-    // All four RMS residuals must be finite and satisfy their thresholds.
     // Fields 0..2: max(absolute_tol, 1e-4 * initial nonlinear residual RMS).
     // Field 3: displacement-increment RMS <= 1e-10 m, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         if (NR_it == 0 && field < 3) { initial_norm[field] = stats[field]; }
         const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-4 * initial_norm[field]);
-        converged = converged && std::isfinite(stats[field]) && std::isfinite(initial_norm[field]) && stats[field] <= tolerance;
+        converged = converged && stats[field] <= tolerance;
     }
 
     if (converged) {

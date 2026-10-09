@@ -78,9 +78,9 @@ for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
     ComputeNodeVelAccelFromDispl(...);     // predictor step
     AssembleSystem(SM_, naccel_k, nvel_k, stress_k);
+    if NR_flag && CheckNRConvergence() break; // check current physical RHS
     iter = SM_.SolveSystem(NR_it);           // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
-    if CheckNRConvergence() break;
 ```
 
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
@@ -113,9 +113,11 @@ the endpoint deformation gradient with coefficient 1 and commits particle state.
 Assembly writes the member determinant and volume even while deformation-gradient
 and stress outputs are temporary; these members are not isolated trial-state storage.
 
-The current `CrsMat::CheckNRConvergence()` monitors the post-solve linear residual
-`b-A*Delta u`, not a reassembled nonlinear residual at the updated displacement.
-Passing this monitor alone does not establish nonlinear equilibrium. See the
+For nonlinear solves, `CrsMat::CheckNRConvergence()` checks the assembled `b_rhs`
+before solving. After an increment, the next pass reassembles at the updated
+displacement; each pass assembles only once. Iteration zero saves the reference
+norm. Linear solves bypass this check and perform one solve. For norm and
+threshold caveats, see the
 [solver limitations](../../solver/README.md#current-convergence-limitations).
 
 ### 4. Tangent Modulus (`ComputeTangentModulus`)

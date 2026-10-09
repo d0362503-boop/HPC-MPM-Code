@@ -217,28 +217,24 @@ to every inactive non-Dirichlet DOF. Their initial guess is zero, so PETSc sets 
 
 #### Residual consistency for inactive MPM nodes
 
-For the PETSc path, the Newton residual monitor must follow the **same active/inactive rule**
-as the matrix assembly.
+`ComputeResidualNormsq()` reads the freshly assembled native `b_rhs` for both
+PETSc and native solves; it does not evaluate the linear residual `b-A*x`.
+It zeroes constrained RHS entries through `BCResidualSet()` and applies the same
+callback to an all-ones vector to identify free DOFs. Fixed DOFs are excluded
+from both the squared residual sum and the DOF count, independently of residual values.
 
-Current implementation (`ComputePetscResidualStats`):
+The native layout is component-blocked: entry `n` belongs to node `n % nodec`.
+MPM includes free entries whose nodal mass exceeds `mtol`; FEM includes all free entries.
+Over these entries, MPI sums `rtr = sum(b_rhs[n]^2 * dbc[n])` and
+`active_dof = sum(dbc[n])`. The outputs are `sqrt(rtr)` and
+`sqrt(rtr / active_dof)`, or both zero if no DOFs are counted.
+Despite their parameter names (`ref_tol`, `abs_tol`), these are measured norms,
+not tolerances. The RMS denominator counts only free active DOFs.
 
-- `AssemblePetscMat()` calls `BuildActiveRowMask()` at the start of each assembly,
-  then skips node block rows where `!FEM_flag && active_row_mask[i] == 0`
-- inactive non-Dirichlet rows and columns are eliminated after RHS/initial-guess assembly
-- `ComputeRefResidual()` and `ComputeAbsResidual()` now use `ComputePetscResidualStats()` for
-  the PETSc path, which:
-  1. Computes the residual vector via `MatMult(petsc_mat, petsc_x, residual)` and
-     `VecAYPX(residual, -1.0, petsc_b)` (i.e. `r = b - A·x`)
-  2. Builds a PETSc `active_mask` vector that zeros out inactive DOFs
-  3. Applies the mask with `VecPointwiseMult` and computes the L2 norm via `VecNorm`
-  4. Returns the active DOF count via `VecSum`
-
-This replaces the older hand-rolled `MatVecMult` + `dbc`-weighted loop. The new path uses the
-same PETSc operator that KSP sees, eliminating operator inconsistency between the solver and
-the convergence monitor. `ComputeAbsResidual` normalizes by `sqrt(active_dof)` (unweighted RMS).
-
-> **Note:** The native (non-PETSc) path still uses the original `adiag`-based filter and
-> `dbc`-weighted norm. The two paths are intentionally kept independent.
+PETSc matrix assembly separately uses `BuildActiveRowMask()`, which synchronizes
+the mass-based indicator across shared nodes. The RHS monitor tests local nodal
+mass directly and does not consume that mask; consistency relies on synchronized
+nodal masses. It does not depend on a previous PETSc assembly or solve.
 
 ---
 
@@ -522,12 +518,21 @@ These recorded runs are historical benchmarks; they do not establish nonlinear a
 
 ## Current Convergence Limitations
 
-`CrsMat::ComputePetscResidualStats()` evaluates the masked linear-system residual `b-A*x`
-after KSP. `CrsMat::CheckNRConvergence()` uses its norm and RMS, with the initial post-solve
-norm stored in `r0r`. This is not the nonlinear equilibrium residual reassembled
-at the updated solution. This limitation applies to drivers using the generic
-`CrsMat` convergence monitor. Tightening KSP tolerances cannot replace a
-nonlinear residual check.
+`CrsMat::CheckNRConvergence()` must follow physical RHS assembly at the current
+iterate, before the next linear solve. Iteration zero stores the initial L2 norm
+in `r0r`; subsequent iterations compare the newly assembled norm `rkr` to it.
+The relative value is `rkr/r0r` when `r0r > 1e-30`, otherwise zero.
+The current acceptance rule is:
+
+```cpp
+rtr_ref < 1e-8 || r0r < 1e-10 || rtr_abs < 1e-12
+```
+
+The initial-norm branch can accept iteration zero without a linear solve.
+Absolute thresholds depend on units, mesh and model scale. Mixed fluid momentum and
+continuity entries are combined without field scaling. These limitations matter
+when interpreting convergence; a small norm is not by itself an accuracy study.
+Failure to meet the criteria at the iteration limit calls `MPI_Abort`.
 
 `SolveWithPetsc()` logs negative KSP convergence reasons on rank zero, then still
 scatters the solution and returns the iteration count. It does not currently

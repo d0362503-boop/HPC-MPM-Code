@@ -20,10 +20,10 @@ class CrsMat {
     // false → MPM path (inactive nodes are skipped and later identity-filled).
     bool FEM_flag = true;
 
-    int ndof;        // degrees of freedom per node (fluid=4, solid=3)
-    int num_block = 0; // stored scalar block count
+    int ndof;                              // degrees of freedom per node (fluid=4, solid=3)
+    int num_block = 0;                     // stored scalar block count
     std::vector<int> block_row, block_col; // component indices per block
-    int nmata, nmat; // total scalar entries in amat, and CSR entry count
+    int nmata, nmat;                       // total scalar entries in amat, and CSR entry count
     int local_node, ghost_node;
 
     // Natural-order ownership metadata and PETSc-local numbering.
@@ -132,43 +132,30 @@ class CrsMat {
     std::vector<double> MatVecMult(const std::vector<double> &xx);
 
     /**
-     * @brief Compute the masked linear-system residual b-A*x and active-DOF count.
-     * @param res_norm Output global L2 norm of the masked linear-system residual.
-     * @param active_dof Output number of active degrees of freedom.
-     * @note Does not reassemble the nonlinear residual at the updated physical state.
+     * @brief Compute global L2 and RMS norms of the assembled physical RHS.
+     * @param ref_tol Output overlap-weighted L2 norm of the current equilibrium residual.
+     * @param abs_tol Output residual RMS over counted DOFs; not a stopping tolerance.
+     * @note Zeros constrained entries of b_rhs in place. MPM counts all components
+     * at nodes with nmass > mtol; FEM has no mass filter. Constrained DOFs are
+     * excluded from both norms and the count through BCResidualSet(). Both
+     * outputs are zero when no free active DOFs are counted.
      */
-    void ComputePetscResidualStats(double &res_norm, double &active_dof);
-
-    /**
-     * @brief Compute the squared L2 norm of the native (unscaled) residual.
-     * @return Global r^T r weighted by overlap ownership.
-     */
-    double ComputeNativeResidualNormSq();
-
-    /**
-     * @brief Compute the current linear-system residual norm used by the NR monitor.
-     * @return Global residual norm; PETSc uses the active mask and native code overlap weights.
-     */
-    double ComputeRefResidual();
-
-    /**
-     * @brief Normalize the current linear-system residual by the active-DOF count.
-     * @return Residual RMS, or zero when no active degrees of freedom are counted.
-     */
-    double ComputeAbsResidual();
+    void ComputeResidualNormsq(double &ref_tol, double &abs_tol);
 
     /** @brief Mark low-mass MPM rows inactive. */
     void BuildActiveRowMask();
 
     /**
-     * @brief Apply the current NR stopping thresholds to linear-system residuals.
+     * @brief Check NR convergence using the freshly assembled physical RHS.
      * @param NR_it     Current Newton–Raphson iteration index.
      * @param NR_it_max Maximum allowed Newton–Raphson iterations.
-     * @param solver_it Linear solver iteration count for the current NR step.
-     * @param r0r Initial post-solve residual norm, initialized on iteration zero.
+     * @param solver_it Iteration count of the preceding linear solve, or zero initially.
+     * @param r0r Initial RHS L2 norm, saved on iteration zero and retained as reference.
      * @return True when the current stopping thresholds pass, false to continue.
-     * @warning These checks do not establish nonlinear equilibrium at the updated
-     * state. Failure at the maximum iteration calls MPI_Abort.
+     * @note Call after assembling at the current iterate and before solving its
+     * correction. This function does not reassemble the residual or compute b-A*x.
+     * @warning Failure at the maximum iteration calls MPI_Abort. Absolute thresholds
+     * depend on residual units and scale; the initial-norm criterion can accept iteration zero.
      */
     bool CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r);
 

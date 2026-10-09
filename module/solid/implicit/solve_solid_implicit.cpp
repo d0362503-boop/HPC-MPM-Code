@@ -84,6 +84,7 @@ void ImplicitSolidMPM::SolveSolid() {
     VectorAssign(nodec * 3, this->ndispl);    // ---- Reset displacement ----
     VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
     double r0r = 0.0e0;
+    int iter = 0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
 
         this->BCNRSet();
@@ -94,18 +95,15 @@ void ImplicitSolidMPM::SolveSolid() {
         VectorAssign(nodec * 3, this->SM_.b_rhs);
         this->AssembleSystem(this->SM_, naccel_k, nvel_k, stress_k);
 
-        int iter = this->SM_.SolveSystem(NR_it);
-
-        this->UpdateNRIncrement();
-
         if (!NR_flag) { // --- Linear not need Newton Raphson ---
-            if (myrank == 0) {
-                std::cout << "Solid_converge:" << std::setw(10) << NR_it //
-                          << std::setw(10) << iter << "\n";
-            }
+            if (myrank == 0) { std::cout << "Solid converge:" << std::setw(10) << NR_it << std::setw(10) << iter << "\n"; }
         } else { // --- Nonlinear need Newton Raphson ---
             if (this->SM_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
         }
+
+        iter = this->SM_.SolveSystem(NR_it);
+
+        this->UpdateNRIncrement();
     }
 
     // --- Memory clear ---

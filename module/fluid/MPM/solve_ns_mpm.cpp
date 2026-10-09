@@ -62,6 +62,7 @@ void StabilizedMPM::SolveNS() {
     VectorAssign(nodec, this->npres);
     VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
     double r0r = 0.0e0;
+    int iter = 0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
 
         this->BCNRSet();
@@ -72,11 +73,11 @@ void StabilizedMPM::SolveNS() {
         VectorAssign(nodec * 4, this->NS_.b_rhs);
         this->AssembleSystem(this->NS_, nvel_k, naccel_k);
 
-        int iter = this->NS_.SolveSystem(NR_it);
+        if (this->NS_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
+
+        iter = this->NS_.SolveSystem(NR_it);
 
         this->UpdateNRIncrement();
-
-        if (this->NS_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
     }
 
     // --- Memory clear ---

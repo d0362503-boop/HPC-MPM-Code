@@ -95,15 +95,16 @@ for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet displacement/pressure values
     ComputeNodeVelAccelFromDispl(...);     // predictor
     AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
+    if CheckNRConvergence(...) break;       // check current physical RHS
     iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
-    if CheckNRConvergence(...) break;
 ```
 
 `CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise. PETSc divergence is reported by the KSP reason; it does not automatically switch solvers.
 
-The current NR stopping monitor uses the post-solve linear residual rather than
-reassembling nonlinear equilibrium at the updated state. See the
+The NR monitor checks the assembled `b_rhs` before solving. After an increment,
+the next pass reassembles at the updated state; each pass assembles only once.
+Iteration zero saves the reference norm. For normalization and threshold caveats, see the
 [solver limitations](../../solver/README.md#current-convergence-limitations).
 
 ## Numerical Method
