@@ -206,9 +206,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
                             std::vector<std::array<std::array<double, 3>, 3>> &surface) const;
 
     /**
-     * @brief Reconstruct the current solid phi=0.5 boundary and exchange it across MPI ranks.
+     * @brief Interpolate solid phi to mesh vertices and reconstruct its phi=0.5 boundary without subcell sampling.
      * @param solid_phi Control-point solid volume fraction in the configuration to reconstruct.
      * @return Globally available, outward-oriented triangles in physical coordinates.
+     * @note Uses xyn and nc for geometry only; field variables remain on control points.
      */
     std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface(const std::vector<double> &solid_phi) const;
 

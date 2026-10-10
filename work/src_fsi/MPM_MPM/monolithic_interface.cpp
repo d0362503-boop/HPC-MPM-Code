@@ -113,68 +113,51 @@ void MPMMPMMonolithicFSI::AppendSolidContour(const std::array<std::array<double,
 std::vector<std::array<std::array<double, 3>, 3>>
 MPMMPMMonolithicFSI::BuildSolidInterface(const std::vector<double> &solid_phi) const {
 
-    // Consistent tetrahedral subdivision across cell faces.
+    // Tetrahedra follow the nc corner order.
     const std::array<std::array<int, 4>, 6> tetrahedra{
-        {{0, 1, 3, 7}, {0, 3, 2, 7}, {0, 2, 6, 7}, {0, 6, 4, 7}, {0, 4, 5, 7}, {0, 5, 1, 7}}};
+        {{0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6}, {0, 7, 4, 6}, {0, 4, 5, 6}, {0, 5, 1, 6}}};
     std::vector<std::array<std::array<double, 3>, 3>> surface;
+    std::vector<double> node_phi(node, 0.0e0);
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    const int nx = npxye[0] + 1, ny = npxye[1] + 1, nz = npxye[2] + 1;
-    std::vector<std::array<double, 3>> vertices(nx * ny * nz);
-    std::vector<double> level(vertices.size());
+    for (int m = 0; m < nelem; m++) {
+        for (int n = 0; n < 8; n++) {
+            const int id = nc[m][n];
+            MakeSF(m, xyn[id], idimc, xynodec, ncm, nenode, sf, dsf);
+
+            // Interpolate relative to the contour.
+            node_phi[id] = 0.0e0;
+            for (int ni = 0; ni < nenode; ni++) {
+                const int nid = ncm[ni];
+                const double sfi = sf[ni];
+                node_phi[id] += sfi * (solid_phi[nid] - 0.5);
+            }
+            node_phi[id] += 0.5;
+        }
+    }
 
     for (int m = 0; m < nelem; m++) {
         double minimum_phi = 1.0, maximum_phi = 0.0;
-        for (int nid : ncc[m]) {
-            minimum_phi = std::min(minimum_phi, solid_phi[nid]);
-            maximum_phi = std::max(maximum_phi, solid_phi[nid]);
+        for (int id : nc[m]) {
+            minimum_phi = std::min(minimum_phi, node_phi[id]);
+            maximum_phi = std::max(maximum_phi, node_phi[id]);
         }
-        if (minimum_phi >= 0.5 || maximum_phi <= 0.5) continue;
+        if (minimum_phi > 0.5 || maximum_phi <= 0.5) continue;
 
-        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
-        for (int k = 0; k < nz; k++) {
-            for (int j = 0; j < ny; j++) {
-                for (int i = 0; i < nx; i++) {
-                    const int vertex_id = i + nx * (j + ny * k);
-                    const std::array<int, 3> offset{i, j, k};
-                    std::array<double, 3> &xyg = vertices[vertex_id];
-                    for (int d = 0; d < 3; d++) { xyg[d] = xymin[d] + dxy[d] * (ijk[d] + double(offset[d]) / npxye[d]); }
-
-                    MakeSF(m, xyg, idimc, xynodec, ncm, nenode, sf, dsf);
-
-                    level[vertex_id] = 0.5;
-                    for (int ni = 0; ni < nenode; ni++) {
-                        int nid = ncm[ni];
-                        level[vertex_id] -= sf[ni] * solid_phi[nid];
-                    }
-                }
+        for (const std::array<int, 4> &tetrahedron : tetrahedra) {
+            std::array<std::array<double, 3>, 4> positions;
+            std::array<double, 4> level;
+            for (int corner = 0; corner < 4; corner++) {
+                const int id = nc[m][tetrahedron[corner]];
+                positions[corner] = xyn[id];
+                level[corner] = 0.5 - node_phi[id];
             }
-        }
 
-        for (int k = 0; k < npxye[2]; k++) {
-            for (int j = 0; j < npxye[1]; j++) {
-                for (int i = 0; i < npxye[0]; i++) {
-                    std::array<int, 8> cube;
-                    for (int corner = 0; corner < 8; corner++) {
-                        cube[corner] = i + (corner & 1) + nx * (j + ((corner >> 1) & 1) + ny * (k + (corner >> 2)));
-                    }
-
-                    for (const std::array<int, 4> &tetrahedron : tetrahedra) {
-                        std::array<std::array<double, 3>, 4> positions;
-                        std::array<double, 4> values;
-                        for (int corner = 0; corner < 4; corner++) {
-                            const int vertex_id = cube[tetrahedron[corner]];
-                            positions[corner] = vertices[vertex_id];
-                            values[corner] = level[vertex_id];
-                        }
-
-                        this->AppendSolidContour(positions, values, surface);
-                    }
-                }
-            }
+            this->AppendSolidContour(positions, level, surface);
         }
     }
 

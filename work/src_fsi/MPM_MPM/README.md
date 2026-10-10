@@ -71,9 +71,15 @@ the trial deformation gradient.
 
 ## Interface activation
 
-`BuildSolidInterface(solid_phi)` reconstructs the `phi = 0.5` surface by sampling
-the supplied nodal phase field, subdividing cells into tetrahedra, and exchanging
-outward-oriented triangles across MPI ranks. `LumpedLagrangeMultiplier()` uses
+`BuildSolidInterface(solid_phi)` interpolates the supplied control-point phase
+field to the existing mesh vertices, using the scalar interpolation from
+`Cp2NodeVTK()` without its display cutoffs. Each `nc` hexahedron is split into
+six tetrahedra around its `0--6` body diagonal; no extra subcell vertices are
+generated. The extracted `phi = 0.5` triangles are oriented outward and exchanged
+across MPI ranks. Evaluating the interpolation as `0.5 + sum(N * (phi - 0.5))`
+preserves the constant contour level at partition faces without snapping values.
+Mesh vertices are used for geometry only; the coupled fields
+and interface-area weights remain on control points. `LumpedLagrangeMultiplier()` uses
 the step-start `solid_.nphi` and nearby volume-equivalent fluid boxes to integrate
 wet-interface area into `nlm_lump_local`; `NodeVarComm` produces `nlm_lump`.
 Local weights assemble matrix contributions, and synchronized weights enter

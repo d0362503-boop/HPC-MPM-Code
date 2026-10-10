@@ -83,9 +83,9 @@ void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, Genera
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = facl * coeff * dt * this->fbc[i] + //
-                          (1.0e0 - coeff) * dt * nvel[n] +   //
-                          (0.5e0 - coeff) * dt * dt * naccel[n];
+            variable[n] = facl * coeff * dt * this->fbc[i] //
+                          + (1.0e0 - coeff) * dt * nvel[n] //
+                          + (0.5e0 - coeff) * dt * dt * naccel[n];
         }
     }
 
