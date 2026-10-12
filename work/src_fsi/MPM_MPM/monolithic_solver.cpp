@@ -23,7 +23,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
-    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 100);
+    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 200);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
@@ -210,16 +210,12 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_precondition", "selfp"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_type", "asm"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_asm_overlap", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_type", "ilu"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_levels", "1"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_type", "asm"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_asm_overlap", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_type", "ilu"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_levels", "1"},
                                 // Reject tiny pressure ILU pivots.
@@ -234,13 +230,8 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_num_levels", "1"},
                                 {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_eu_level", "1"},
 
-                                {"-fsi_fieldsplit_lambda_ksp_type", "gmres"},
-                                {"-fsi_fieldsplit_lambda_ksp_rtol", "0.02"},
-                                {"-fsi_fieldsplit_lambda_ksp_max_it", "20"},
-                                {"-fsi_fieldsplit_lambda_ksp_gmres_restart", "20"},
+                                {"-fsi_fieldsplit_lambda_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_lambda_pc_type", "asm"},
-                                {"-fsi_fieldsplit_lambda_pc_asm_overlap", "1"},
-                                {"-fsi_fieldsplit_lambda_sub_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_lambda_sub_pc_type", "ilu"},
                                 {"-fsi_fieldsplit_lambda_sub_pc_factor_levels", "1"},
                                 {"-fsi_fieldsplit_lambda_sub_pc_factor_shift_type", "nonzero"},
