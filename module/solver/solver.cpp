@@ -15,10 +15,10 @@ int CrsMat::SolveSystem(int NR_it) {
 
     int iter;
     if (this->use_petsc) {
-        this->AssemblePetscMat(this->ndof);
-        iter = this->SolveWithPetsc(this->ndof, NR_it);
+        this->AssemblePetscMat();
+        iter = this->SolveWithPetsc(NR_it);
     } else {
-        this->BuildDiagonalPreconditioner(this->ndof);
+        this->BuildDiagonalPreconditioner();
         iter = GPBiCGAR(*this);
     }
 

@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 
         BuildControlPoint();
 
-        fsi.fsi_sys.BuildCrsMat(37);
+        fsi.fsi_sys.BuildCrsMat(MPMMPMMonolithicFSI::kStoredBlocks);
 
         ComputeNodalVol();
 
@@ -55,11 +55,16 @@ int main(int argc, char *argv[]) {
         for (istep = ista; istep <= iend; istep++) {
             // -----------------------------------------------
             real_time = dt * double(istep);
-            // if (real_time < 2.0e0) {
-            //     facl = (1.0e0 - std::cos(M_PI * real_time / 2.0e0)) / 2.0e0;
+            // double s_t;
+            // if (real_time < 0.51e0) {
+            //     s_t = std::pow(real_time, 2) / (2.0e0 * 0.51e0);
             // } else {
-            //     facl = 1.0e0;
+            //     s_t = real_time - 0.51e0 / 2.0e0;
             // }
+            double theta = M_PI / 45.0e0 * std::sin(2.0e0 * M_PI / 1.211e0 * real_time);
+            bb[0] = -9.81e0 * std::sin(theta);
+            bb[2] = -9.81e0 * std::cos(theta);
+
             if (istep <= nlstep) {
                 facl = dlstep * double(istep);
             } else {

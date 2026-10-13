@@ -101,8 +101,22 @@ For FSI, `work/src_fsi/CMakeLists.txt` selects either `MPM_FEM` or `MPM_MPM`.
 `work/src_solid/CMakeLists.txt` similarly selects `explicit` or `implicit`.
 
 The [MPM-MPM FSI guide](work/src_fsi/MPM_MPM/README.md) describes the coupled
-Newton loop, interface activation, and particle penetration correction. Its
-nonlinear convergence check is separate from the standalone `CrsMat` monitor.
+Newton loop, interface activation, particle correction, and the optimized
+solver strategy. Its nonlinear check is separate from the standalone
+`CrsMat` monitor.
+
+### Current linear-solver strategy
+
+| Change | Current behavior | Guide |
+|--------|------------------|-------|
+| One component count | Physics constructors set `CrsMat::ndof` once; matrix helpers and assembly callbacks read it | [Shared solver](module/solver/README.md) |
+| MPM equation compression | Pure fluid, implicit solid and FSI retain full `nodec * ndof` assembly/vectors; `CrsMat` compresses the solve and fills the full solution back | [Shared solver](module/solver/README.md) |
+| Solid preconditioning | FGMRES with ASM overlap 1 and local PREONLY/ILU(1), nonzero shift `1e-3` | [Implicit solid](module/solid/implicit/README.md) |
+| Coupled FSI preconditioning | Fluid / [solid + lambda] Schur grouping; the coupled inner FGMRES uses PETSc's assembled `selfp` Pmat | [FSI strategy](work/src_fsi/MPM_MPM/README.md) |
+| Logging and launch settings | Successful inner KSP reports and test timing diagnostics are disabled; future FSI launches use the source relative-mass rule | [FSI configuration](work/src_fsi/MPM_MPM/README.md) |
+
+FSI uses the source relative-mass activation rule in future launches. Launch
+options apply to new processes; editing a command does not change a running job.
 
 ### Selecting data tools
 
@@ -171,16 +185,23 @@ cd build
 sh run.sh [NP]
 ```
 
-`NP` resolves in this order:
+`NP` must be supplied as an argument (`sh run.sh 61`) or through the `NP`
+environment variable. The current cluster script has no automatic `nproc` default.
 
-1. Command-line argument: `sh run.sh 16`
-2. Environment variable: `NP=8 sh run.sh`
-3. Default: all logical CPUs (`nproc`)
+The script samples current CPU activity and chooses one logical CPU from each
+apparently idle physical core, avoiding its busy hardware-thread siblings. It
+launches `MPM` with `mpirun --cpu-list ... --bind-to cpu-list:ordered` under
+`nohup`/`setsid`. Selection is a load snapshot rather than a scheduler reservation;
+another job can subsequently move onto those cores.
 
-It launches `./MPM` with `mpirun` under `nohup` in the background (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`) and redirects output to:
+Output goes to:
 
 - `stdout/out_<PID>_<NP>.log`
 - `stderr/err_<PID>_<NP>.log`
+
+The launcher prints only the process count, background PID, stdout path and
+stderr path. It inherits `PETSC_OPTIONS`; it does not add
+`-fsi_mass_activity_absolute` itself. Check the installed script on another host.
 
 `build/run.sh` is gitignored; copy it elsewhere if you want to version a customized version.
 

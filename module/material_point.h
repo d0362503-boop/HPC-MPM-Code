@@ -230,9 +230,8 @@ class MaterialPoint {
     /**
      * @brief Assemble field CSR values into the distributed matrix.
      * @param mat Target linear system with local element contributions.
-     * @param ndof Number of field components per control point.
      */
-    virtual void AssemblePetscMat(CrsMat &mat, int ndof);
+    virtual void AssemblePetscMat(CrsMat &mat);
 
     /**
      * @brief Configure the default BoomerAMG preconditioner.

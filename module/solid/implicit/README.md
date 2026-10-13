@@ -49,6 +49,7 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 - `BCNRSet()` — sets Dirichlet values for the current NR iteration.
 - `UpdateNRIncrement()` — applies the converged Newton correction `SM_.x_lhs` to `ndispl`.
 - `AssembleSystem(...)` — assembles the tangent matrix `SM_.amat` and residual `SM_.b_rhs`.
+- `ConfigurePreconditioner(CrsMat &mat, PC pc)` — selects standalone solid ASM/ILU(1).
 - `ComputeTangentModulus(...)` — computes the 3×3 nodal stiffness block from the material tangent and stress state.
 
 ---
@@ -79,6 +80,7 @@ for NR_it = 0 .. iter_max
     ComputeNodeVelAccelFromDispl(...);     // predictor step
     AssembleSystem(SM_, naccel_k, nvel_k, stress_k);
     if NR_flag && CheckNRConvergence() break; // check current physical RHS
+    zero SM_.x_lhs;                         // new correction starts from zero
     iter = SM_.SolveSystem(NR_it);           // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
 ```
@@ -86,7 +88,26 @@ for NR_it = 0 .. iter_max
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
 - `NR_flag = false` → linear elasticity (0 NR iterations, single linear solve)
 
-### 3. System Assembly (`AssembleSystem`)
+### 3. Linear solver and compression (2026-10-13)
+
+The standalone PETSc configuration is FGMRES, restart 200, with ASM overlap 1.
+Local sub-solvers apply PREONLY + ILU(1), nonzero shift `1e-3`, through the
+`-solid_field_sub_*` options.
+Standalone outer defaults are `rtol=1e-10`, `atol=1e-15` and `max_it=1000`;
+FSI's inner solid `rtol=0.1/max_it=100` describes a different solver.
+
+`SM_.ndof=3` is assigned in the constructor. Assembly and `x_lhs` remain
+`nodec * SM_.ndof`. `CrsMat` removes exact zero-increment identity equations
+after BC elimination, solves the compact system from zero and recovers the full
+owned/ghost vector. Generic single-phase node activation remains `nmass > mtol`;
+it is independent of FSI's relative-mass rule.
+
+No standalone FSI-style `ConfigureReducedPreconditioner()` is needed:
+the solid override chooses its physical PC and `CrsMat` supplies compression
+and solution recovery. Full CSR/assembly storage is still allocated. See the
+[shared solver guide](../../solver/README.md) for interfaces and rebuild policy.
+
+### 4. System Assembly (`AssembleSystem`)
 
 For each particle inside each element:
 
@@ -120,7 +141,7 @@ norm. Linear solves bypass this check and perform one solve. For norm and
 threshold caveats, see the
 [solver limitations](../../solver/README.md#current-convergence-limitations).
 
-### 4. Tangent Modulus (`ComputeTangentModulus`)
+### 5. Tangent Modulus (`ComputeTangentModulus`)
 
 Computes the 3×3 nodal stiffness block from the 4th-order material tangent `C` (stored in `cm_.stif_mat`) and the current stress state:
 
@@ -130,7 +151,7 @@ K_ij = Σ_k,l  dsf[k][ni] · C[i][k][j][l] · dsf[l][nj]
 
 If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 
-### 5. Variable Transfer (`var_trans_solid_implicit.cpp`)
+### 6. Variable Transfer (`var_trans_solid_implicit.cpp`)
 
 #### `Particle2Node`
 

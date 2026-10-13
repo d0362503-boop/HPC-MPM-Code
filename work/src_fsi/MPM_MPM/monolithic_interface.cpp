@@ -305,40 +305,6 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
     return;
 }
 
-void MPMMPMMonolithicFSI::AssembleInterfaceSystem() {
-
-    for (int n = 0; n < nodec; n++) {
-        int ncol = 0;
-        int ida = this->fsi_sys.FindIndex(n, n, ncol);
-        const double lm = this->nlm_lump_local[n];
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[31]] -= lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[33]] -= lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[35]] -= lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[32]] += lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[34]] += lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[36]] += lm;
-    }
-
-    for (int n = 0; n < nodec; n++) {
-        this->fsi_sys.b_rhs[n + nodec * 7] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nuc] - this->solid_.ndispl[n + nuc]);
-        this->fsi_sys.b_rhs[n + nodec * 8] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nvc] - this->solid_.ndispl[n + nvc]);
-        this->fsi_sys.b_rhs[n + nodec * 9] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nwc] - this->solid_.ndispl[n + nwc]);
-    }
-
-    return;
-}
-
-void MPMMPMMonolithicFSI::AddLagrangeMultiplierToRHS(double af_coeff, const std::vector<int> &offsets) {
-
-    for (int n = 0; n < nodec; n++) {
-        this->fsi_sys.b_rhs[n + offsets[0]] += af_coeff * this->nlm_lump[n] * this->nlambda[n + nuc];
-        this->fsi_sys.b_rhs[n + offsets[1]] += af_coeff * this->nlm_lump[n] * this->nlambda[n + nvc];
-        this->fsi_sys.b_rhs[n + offsets[2]] += af_coeff * this->nlm_lump[n] * this->nlambda[n + nwc];
-    }
-
-    return;
-}
-
 void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
 
     int nenode;

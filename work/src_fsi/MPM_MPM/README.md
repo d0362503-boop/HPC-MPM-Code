@@ -4,26 +4,189 @@
 PETSc system. The ten components are fluid displacement (3), fluid pressure (1),
 solid displacement (3), and interface multipliers (3), stored in 37 scalar blocks.
 
+## Current solver strategy
+
+| Layer | Implementation |
+|-------|----------------|
+| Native matrix interface | One `CrsMat::ndof` member; full `nodec * ndof` vectors and original component numbering |
+| MPM linear solve | `CrsMat` removes exact zero-increment identity equations, solves the compact system and restores the full owned/ghost solution |
+| Newton correction | Zero initial guess; physical RHS preserved before scaling and restored after solving |
+| Root preconditioner | Lower Schur split: fluid / [solid + lambda] |
+| Coupled preconditioning | PCKSP inner FGMRES acts on PETSc's assembled `selfp` Pmat, retaining solid/lambda coupling |
+| Solid block | FGMRES, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1), nonzero shift `1e-3` |
+| Mass activation | Each phase uses `1e-4` times its mean effective nodal mass; wet-interface and physical constraints determine active multiplier components |
+
+```text
+Outer FGMRES: fluid / [solid + lambda], lower Schur split
+  fluid: FGMRES, velocity / pressure Schur split
+    velocity, pressure: PREONLY + ASM / ILU(1)
+  [solid + lambda]: PREONLY + PCKSP
+    inner FGMRES acts on the assembled selfp Pmat
+    solid / lambda: lower Schur split
+      solid: FGMRES + ASM overlap 1 / local PREONLY + ILU(1)
+      lambda: PREONLY + ASM overlap 1 / local PREONLY + ILU(1)
+```
+
+The root `selfp` matrix uses the fluid diagonal inverse to approximate
+elimination. The inner split retains the solid operator and its multiplier
+coupling inside that approximation. The outer FGMRES solves the full coupled
+equations. PETSc constructs the Schur preconditioning matrices; no custom
+`BuildInterfaceSchur` implementation or global direct solver is used.
+
+## Launch configuration and logging
+
+The Slosh input block in `build/data/generate/fsi/MPM_MPM/input.txt` is:
+
+```text
+<sp.solswitch, rstflag, nlstep>
+TPIC  2  1
+<ista, iend, iout>
+1  5000  10
+<dt, mtol, wp.spec_rad, sp.spec_rad>
+1.0e-3  1.0e-12  0.5e0  0.5e0
+```
+
+`rstflag=2` reads original partitioned particle inputs and writes restart
+output. The 61-rank partition topology must match the MPI count.
+
+The following future-launch configuration uses the source relative-mass rule;
+`-fsi_mass_activity_absolute` is omitted. It retains the other selected solver
+and failure-reporting options. Run it only when starting a new job, after
+checking that no target job is already active. Launch options do not change a
+process that is already running.
+
+```sh
+cd /home/ps/HPC-MPM-Code/build
+export PETSC_OPTIONS="-fsi_ksp_gmres_restart 500 \
+-fsi_fieldsplit_fluid_ksp_max_it 500 \
+-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_gmres_restart 200 \
+-fsi_fieldsplit_fluid_ksp_converged_reason ::failed \
+-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_converged_reason ::failed \
+-fsi_fieldsplit_coupled_ksp_ksp_converged_reason ::failed \
+-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_ksp_converged_reason ::failed"
+sh run.sh 61
+```
+
+Newton records are `Monolithic_NR` and `Monolithic_converge`. The command uses
+`::failed` viewers for inner KSP failures and does not enable successful KSP
+reports. Outer KSP divergence and Newton failure messages remain.
+The current driver also has startup/final summaries and rank-zero
+`OutputMessage(iview, istep)` every 100 steps.
+
+The Slosh gravity law is `real_time=dt*istep`,
+`theta=(pi/45)*sin(2*pi*real_time/1.211)` in radians,
+`gx=-9.81*sin(theta)` and `gz=-9.81*cos(theta)`.
+Material and gravity parameters remain separate from preconditioner settings.
+
 ## Source responsibilities
 
 | File | Responsibility |
 |------|----------------|
 | `main.cpp` | Time-step order, transfers, migration, output, and restart |
 | `datain_para.cpp` | Coupled case parameters and phase input |
-| `monolithic_fsi.cpp` | Newton loop, fluid/solid assembly wrappers, increments, and convergence |
-| `monolithic_interface.cpp` | Solid contour, wet-interface weights, multiplier assembly, and correction |
-| `monolithic_solver.cpp` | Active components, boundary constraints, scaling, and PETSc field split |
+| `monolithic_fsi.cpp` | Coupled lifecycle, Newton loop, increments, and convergence |
+| `monolithic_assembly.cpp` | Fluid, solid, and multiplier contributions; 37-block PETSc insertion |
+| `monolithic_interface.cpp` | Solid contour, wet-interface weights, and particle correction |
+| `monolithic_solver.cpp` | Active components, boundary constraints, scaling, and linear correction |
+| `monolithic_preconditioner.cpp` | Physical field splits and PETSc Schur preconditioner configuration |
 | `monolithic_fsi.h` | Class declarations and function documentation |
 | `../../../module/interface_sdf.h` / `.cpp` | Indexed finite-triangle distance queries |
 
-The former `fluid_mat.cpp` and `solid_mat.cpp` assembly wrappers live in
-`monolithic_fsi.cpp`. `InterfaceSDF` accepts oriented triangles and bin spacing;
-fluid particle domains and wet-interface logic belong to the FSI coordinator.
-Its header declares the interface, and its `.cpp` implements the geometry.
+The class header exposes driver operations and the physics callbacks used by
+`CrsMat`. Assembly, scaling, convergence and geometry helpers are private.
+`fsi_sys.ndof` is the single coupled dimension (10); `kStoredBlocks` defines its 37 stored blocks;
+the constructor configures it in `monolithic_fsi.cpp`. `InterfaceSDF` accepts
+oriented triangles and bin spacing; wet-interface activation remains in FSI.
 
 CMake collects this directory's `.cpp` files automatically. After adding or
 removing one, run `cmake -S . -B build` from the repository root, then build the
 existing `build/` directory.
+
+## Linear-system boundary
+
+The FSI coordinator assembles with the original control points and ten components.
+Native RHS and correction vectors keep their full `nodec * ndof` length and
+component-major layout. It delegates equation compression and full solution
+recovery to `CrsMat`; no compact equation numbering belongs in the assembly.
+
+`CrsMat` removes only exact unit-diagonal equations with a zero RHS after
+boundary elimination. It derives each field's compact index set from original
+global equation IDs through `SetFieldSplitComponents()`. FSI supplies the physical
+component groups and nested field-split configuration through
+`ConfigureReducedPreconditioner()` via `reduced_setup_callback` after the
+reduced KSP creates its root sub-solvers. The callback is needed to define nested
+compact index sets and select the assembled coupled preconditioning operator;
+it does not implement a separate solve or custom interface Schur matrix.
+
+The two physical configuration functions have different setup times:
+
+| Function | Setup stage | Responsibility |
+|----------|-------------|----------------|
+| `ConfigurePreconditioner(CrsMat &mat, PC pc)` | Before root KSP setup | Root fluid/coupled groups, PC type and default nested options |
+| `ConfigureReducedPreconditioner(KSP ksp)` | After root sub-solvers exist | Nested compact groups and the PCKSP operator/Pmat selection |
+
+`CrsMat` invokes the first through its owner and the second through the optional
+callback. The callback configures preconditioning; `CrsMat` performs the actual
+compressed solve and full-vector recovery. Pure solid/fluid use the same
+shared matrix machinery with their own physical PC choices.
+
+The outer FGMRES splits fluid components (0..3) from solid and multiplier
+components (4..9). PETSc `selfp` eliminates the fluid diagonal when assembling
+the preconditioning matrix for the coupled solid-multiplier block. A PCKSP
+application runs FGMRES on that assembled approximation, retaining the full solid
+operator and its multiplier coupling. It does not repeatedly solve the fluid
+block inside this inner iteration.
+
+The inner coupled preconditioner splits solid (4..6) and multiplier (7..9)
+components with another PETSc `selfp` Schur split. Solid remains FGMRES with
+rtol 0.1 and max 100, ASM overlap 1, and local PREONLY/ILU(1) with nonzero shift
+1e-3. The new coupled iteration uses rtol 0.5 and max 100. These are
+preconditioning solves; the outer and physical Newton tolerances control the
+final correction. `BuildInterfaceSchur` remains removed.
+
+`SolveSystem(NR_it)` preserves the unscaled physical RHS, zeros the native
+correction, scales the matrix/RHS and solves through `CrsMat`. It then multiplies
+the recovered correction by `column_scale` and restores the physical RHS.
+The outer maximum is 500. When any rank has positive lumped interface weight,
+outer `rtol=1e-6` and `atol=1e-12`; otherwise they are `1e-10` and `1e-15`.
+The divergence tolerance is `1e6` on the first Newton correction and
+`PETSC_UNLIMITED` later. A logged negative reason remains a failed linear solve;
+current code does not automatically abort or retry it.
+
+Current option prefixes are `fsi_fieldsplit_fluid_` for fluid,
+`fsi_fieldsplit_coupled_ksp_` for the coupled inner iteration, and
+`fsi_fieldsplit_coupled_ksp_fieldsplit_solid_` /
+`fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_` for its phase splits.
+Old `fsi_fieldsplit_fields_` option names no longer configure these groups.
+
+Source settings and the selected launch settings are:
+
+| Setting | Source default | Launch configuration above |
+|---------|----------------|----------------------------|
+| Mass activity | Relative phase mean times `1e-4` | Source rule, with no override |
+| Outer restart | 200 | 500 |
+| Fluid maximum iterations | 100 | 500 |
+| Solid restart | PETSc default; explicit line commented | 200 |
+| Solid inner tolerance / maximum | `0.1 / 100` | Source settings |
+| Coupled inner tolerance / maximum | `0.5 / 100` | Source settings |
+
+The inner tolerances control preconditioning work. Outer linear convergence
+and the four physical Newton criteria below determine correction acceptance.
+
+The shared compression path is already used by pure solid MPM, pure fluid MPM
+and this FSI system. `CrsMat::SolveReducedSystem()` creates the compact solve and
+recovers the full correction. `SetFieldSplitComponents()` supplies field indices
+from the same compact layout. Pure fluid defines its velocity/pressure split
+with that API; pure solid applies ASM/ILU directly to the retained equations.
+The FSI `ConfigureReducedPreconditioner()` callback only configures its nested
+fluid/[solid+lambda] hierarchy after PETSc creates the root sub-solvers. Moving
+that physical hierarchy into `CrsMat` would not make it suitable for the two
+single-phase solvers, so it remains in FSI.
+
+The physical matrix, material parameters and nonlinear tolerances are separate
+from this preconditioning layer. The full native CSR graph and full PETSc
+assembly still exist; reducing their inactive storage and assembly communication
+is a later change inside `CrsMat`.
 
 ## Newton iteration
 
@@ -48,13 +211,13 @@ once. A field with no active components has zero RMS.
 
 | Field | Residual | Acceptance threshold |
 |-------|----------|----------------------|
-| Fluid momentum | Nonlinear momentum RHS [N] | `max(1e-8, 1e-4 * initial_norm[0])` |
-| Continuity | Nonlinear continuity RHS [m^3/s] | `max(1e-10, 1e-4 * initial_norm[1])` |
-| Solid momentum | Nonlinear momentum RHS [N] | `max(1e-8, 1e-4 * initial_norm[2])` |
+| Fluid momentum | Nonlinear momentum RHS [N] | `max(1e-10, 1e-4 * initial_norm[0])` |
+| Continuity | Nonlinear continuity RHS [m^3/s] | `max(1e-12, 1e-4 * initial_norm[1])` |
+| Solid momentum | Nonlinear momentum RHS [N] | `max(1e-10, 1e-4 * initial_norm[2])` |
 | Interface | Displacement-increment difference [m] | `1e-10` |
 
 The first three references are saved inside `CheckNRConvergence()` at
-`NR_it == 0`. All four RMS values must be finite and meet their thresholds.
+`NR_it == 0`. All four RMS comparisons must meet their thresholds.
 The loop allows 100 Newton corrections; a failed check at `NR_it == 100`
 aborts before another solve. `Monolithic_NR` and `Monolithic_converge` log the
 Newton iteration, the preceding Krylov iteration count, then these four RMS
@@ -85,16 +248,27 @@ wet-interface area into `nlm_lump_local`; `NodeVarComm` produces `nlm_lump`.
 Local weights assemble matrix contributions, and synchronized weights enter
 the RHS and activation decisions.
 
-Fluid components require `fluid_.nmass[n] > mtol`; solid components require
-`solid_.nmass[n] > mtol`. A multiplier component needs both phases active and
-`nlm_lump[n] > 0`. Phase boundary conditions and solid rigid constraints are
-then applied. A multiplier component is fixed when both corresponding phase
-displacement components are fixed.
+By default, each phase uses 1e-4 times its mean effective nodal mass as its
+activity threshold. `BuildActiveDOFs()` accumulates four statistics:
+fluid mass sum/count in entries 0/1 and solid mass sum/count in entries 2/3.
+Only nodal masses strictly above `mtol` contribute, weighted by `dbc` to count
+shared nodes once; `MPI_Allreduce` combines the phase statistics.
+
+Without the absolute-mass option, `fluid_cut=1e-4*mass_stats[0]/mass_stats[1]`
+and `solid_cut=1e-4*mass_stats[2]/mass_stats[3]`. An empty phase falls back to
+`mtol`. `mtol` therefore affects the averaging population; it is not itself
+the normal relative cutoff and is not applied as a lower bound on that cutoff. `-fsi_mass_activity_absolute` selects the absolute `mtol`
+threshold instead. The selected launch configuration omits this override;
+options of an already-running process remain fixed until it exits.
+A multiplier component requires both phases active and `nlm_lump[n] > 0`. Phase boundary
+conditions and solid rigid constraints are then applied; a multiplier component
+is fixed when both corresponding phase displacement components are fixed.
 
 The coupled matrix assembly uses the per-component `fixed_dof` mask; it does
 not call the generic `CrsMat::BuildActiveRowMask()`.
 
-Reducing `mtol` changes the mass activation test. It does not create interface
+Changing `mtol` changes the statistics population in relative mode and the
+activation cutoff in absolute mode. It does not create interface
 weights at control points where `nlm_lump` is zero. The assembled multiplier
 equations enforce nodal displacement-increment continuity; their convergence
 alone does not establish particle nonpenetration.

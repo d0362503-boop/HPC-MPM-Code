@@ -1,6 +1,7 @@
 # `module/solver/` - Linear Solver and PETSc Wrapper
 
-> This note records the current `CrsMat` design, the PETSc/HYPRE bridge, and the production solver configuration used by the 32-rank FSI runs.
+> Updated 2026-10-13: shared matrix interfaces, MPM equation compression,
+> physical preconditioner callbacks and solution recovery.
 
 ---
 
@@ -31,6 +32,7 @@ Main files:
 |------|------|
 | `crsmat.h` | `CrsMat` definition |
 | `crsmat.cpp` | PETSc setup, assembly, solve, BC handling |
+| `crsmat_reduced.cpp` | Internal MPM equation compression, field numbering, and full-vector expansion |
 | `solver.cpp` | native fallback solvers (`GPBiCG`, `GPBiCGSafe`, `GPBiCGAR`) |
 
 ---
@@ -80,6 +82,7 @@ amat[j + block_id[b]]  // component pair: block_row[b], block_col[b]
 ```
 
 Fluid (`ndof=4`) stores 16 scalar blocks; solid (`ndof=3`) stores 9.
+Monolithic FSI has `ndof=10` and stores 37 selected scalar blocks.
 For matrices storing only selected component pairs, `block_row` and `block_col`
 define the layout. Block indices cannot generally be inferred as
 `row_var * ndof + col_var`.
@@ -94,10 +97,8 @@ owner_->nmass[nid] > mtol
 ```
 
 `mtol` is an absolute nodal-mass threshold in the case's mass units. A mass equal
-to or below it produces an inactive local indicator. The previous global mean
-mass and relative cutoff calculations are commented out; they no longer run,
-and their two `MPI_Allreduce` calls are no longer required. FEM control points
-remain active without a mass test.
+to or below it produces an inactive local indicator. FEM control points remain
+active without a mass test.
 
 The function first evaluates the mass test on all `nodec` control points,
 including ghosts. It then calls `NodeVarComm(local_row_active, 0)` to add the
@@ -115,25 +116,48 @@ assembly, `SolveWithPetsc()` eliminates inactive non-Dirichlet rows and columns
 with a unit diagonal and zero RHS. Physical boundary constraints are handled
 separately. See Section 3.4 for the elimination and residual-mask details.
 
+This is the single-phase mass rule. Monolithic FSI overrides assembly and uses
+its per-component `fixed_dof` mask, relative phase-mass thresholds and a
+wet-interface test; see the [FSI guide](../../work/src_fsi/MPM_MPM/README.md).
+
+### 2.6 One dimension member
+
+Physics constructors set `CrsMat::ndof`: solid `SM_=3`, fluid `NS_=4`,
+FEM phase field `PF_=1`, coupled `fsi_sys=10`. Helpers read this member; no
+separate FSI `kDofCount` or repeated dimension argument is needed.
+`num_block` remains distinct because FSI stores 37 rather than 100 blocks.
+
+| Operation | Current signature |
+|-----------|-------------------|
+| Diagonal scaling | `ExtractDiagonal()`, `ComputeDiagonalInverseSqrt()`, `BuildDiagonalPreconditioner()` |
+| Numbering | `BuildLGMAP()`, `BuildNaturalGlobalMaps(node_l2g)`, `BuildPetscLocalMaps()` |
+| Construction | `BuildPetscMat()`, `InitPetscSolver()` |
+| Assembly/RHS | `AssemblePetscMat()`, `UpdatePetscRhs()` |
+| Solve | `SolveSystem(NR_it)`, `SolveWithPetsc(NR_it)` |
+
+The physics override is `MaterialPoint::AssemblePetscMat(CrsMat &mat)`;
+its component count comes from `mat.ndof`.
+
 ---
 
 ## 3. `CrsMat` Workflow
 
-The PETSc path is:
+The physics constructor sets `owner_`, `ndof` and the block layout.
+`BuildCrsMat(num_block)` resets old PETSc state and calls `InitPetscSolver()`
+to create maps, the full matrix/vectors and the KSP.
 
-1. `BuildCrsMat(num_block)`
-2. `BuildLGMAP(ndof)`
-3. `BuildPetscMat(ndof)`
-4. `BuildKSPSolver()`
-5. per solve:
-   - `AssemblePetscMat(ndof)`
-   - `UpdatePetscRhs(ndof)`
-   - `SolveWithPetsc(ndof, NR_it)`
+For each assembled correction:
 
-With `use_petsc = true`, `BuildCrsMat` first calls `ResetPetscSolver()` to release the
-previous PETSc objects (`Mat`, `Vec`, `KSP`, lgmaps, scatter). This makes a matrix
-rebuild safe after a DLB repartition changes `nodec` and the ownership layout
-(see `module/DLB/README.md`).
+1. `SolveSystem(NR_it)` calls `AssemblePetscMat()`, delegated to the owner.
+2. `SolveWithPetsc(NR_it)` collects current BC IDs and copies the full native RHS.
+3. Eliminate inactive and physical boundary rows/columns with prescribed values.
+4. For MPM, discard explicit zeros in a solve copy, compress, solve from zero
+   and expand into the full PETSc vector. FEM solves the full matrix.
+5. `RecoverSolution()` fills native `x_lhs` through the owned/ghost scatter.
+
+`ResetPetscSolver()` releases compact maps/matrices as well as full PETSc
+objects. `BuildCrsMat()` calls it before a DLB ownership rebuild; see the
+[DLB guide](../DLB/README.md).
 
 ### 3.1 Ownership
 
@@ -158,7 +182,9 @@ MatSetOption(mat, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
 MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 ```
 
-`MatSetBlockSize(ndof)` is mandatory. Without it, BoomerAMG quality drops sharply.
+The full matrix retains `MatSetBlockSize(mat, this->ndof)` metadata.
+The compact MPM operator may not contain complete nodal blocks; its field
+groups use explicit index sets rather than assuming the original block stride.
 
 `MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE` is **required for MPM**. See Section 3.4.
 
@@ -172,7 +198,9 @@ MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 ...
 ```
 
-All reusable buffers (`petsc_cols_buf`, `petsc_block_vals_buf`) are pre-allocated in `BuildPetscMat()` to their maximum size (`max_row_nnz * ndof`). This avoids repeated heap allocation in the hot loop.
+Reusable column and block-value buffers are sized in `BuildPetscMat()` from
+the maximum row stencil and `this->ndof`. FSI overrides insertion for its 37
+selected scalar blocks.
 
 ### 3.4 MPM-specific matrix behavior
 
@@ -238,6 +266,63 @@ nodal masses. It does not depend on a previous PETSc assembly or solve.
 
 ---
 
+### 3.5 Transparent MPM equation compression
+
+All PETSc MPM paths (fluid, implicit solid, and FSI) use the same internal
+compression in `SolveWithPetsc()`. External assembly retains the existing CSR
+blocks, `nodec * ndof` RHS/correction vectors, and component-major indexing.
+
+After physical and inactive boundary elimination, `BuildReducedDofMap()` removes
+only rows containing exactly the unit diagonal with an exactly zero RHS.
+A zero RHS by itself does not mark an equation inactive. Nonzero prescribed
+boundary values are retained, and their column contributions have already been
+transferred to the RHS.
+
+The retained index set refers to full global equations. Its local entries follow
+PETSc row ownership; an `MPI_Allreduce` makes any layout change rebuild the map
+on every rank. `SolveReducedSystem()` constructs the retained operator, solves
+from zero, and expands the correction into the full PETSc vector.
+`RecoverSolution()` then uses the existing owned/ghost scatter to fill the full
+native `x_lhs`.
+
+Physical preconditioners call `SetFieldSplitComponents()` with original
+components, optionally within a parent component group. This creates explicit
+compact index sets; compact indices must never be classified using
+`index % ndof`. `reduced_setup_callback` is optional post-setup configuration
+for nested physical field splits such as those in the FSI preconditioner.
+FEM keeps its full-system solve path. `HasReducedLayout()` reports whether the
+compact map exists; `RetainedDofIds()` exposes original global equation IDs.
+The map, `reduced_active_is_` and `reduced_matrix_` remain private state.
+
+An empty retained system uses `PCNONE` and skips physical field-split setup;
+full-vector recovery still fills removed components with zero.
+
+The compact operator is rebuilt from current matrix values each solve. A changed
+retained layout also rebuilds the KSP/preconditioner; otherwise the configured
+reuse policy applies. Mesh/DLB reset releases compact maps and matrices together
+with the full PETSc solver.
+
+This stage reduces the equations seen by Krylov and the preconditioner.
+Native CSR allocation, full PETSc preallocation, and assembly communication have
+not yet been compressed. Their later optimization belongs inside `CrsMat`,
+while preserving the external assembly and vector contract.
+
+### 3.6 Two preconditioner setup stages
+
+| Stage | Responsible code | Purpose |
+|-------|------------------|---------|
+| Before setup | `CrsMat::ConfigurePreconditioner(PC)` delegates to `owner_->ConfigurePreconditioner(*this, pc)` | Select PC type, root groups and default options |
+| After compact `KSPSetUp()` | Optional `reduced_setup_callback(KSP)` | Configure already-created nested sub-solvers and their compact groups |
+
+FSI's callback is `ConfigureReducedPreconditioner(KSP)`. It defines nested
+velocity/pressure and solid/lambda groups and selects the assembled coupled
+Pmat for PCKSP. Pure solid/fluid use shared compression/recovery and their own
+`ConfigurePreconditioner()` overrides; they do not require the FSI hierarchy.
+Both setup stages remain necessary.
+
+`CrsMat` owns numbering, compression and recovery. An initialized physics
+owner defines fields, constraints and preconditioning.
+
 ## 4. Boundary Conditions
 
 BC rows are handled by:
@@ -265,256 +350,132 @@ Because `fsi_intf` changes every step, BC lists must be rebuilt before every sol
 
 ## 5. Current PETSc Solver Configuration
 
-Monolithic AMG is the default preconditioner stack for PETSc-based `CrsMat` objects with `use_schur_fieldsplit = false`. The stabilized Navier--Stokes systems in both `StabilizedMPM` and `StabilizedFEM` set it to `true` and use the Schur field split described in Section 5.1a. The FEM phase-field system and the implicit-solid system keep the default `false` value.
+`BuildKSPSolver()` initially selects outer `KSPFGMRES` with `rtol=1e-10`,
+`atol=1e-15`, `divtol=1e6` and `max_it=1000`, then reads options.
+A physical solve may set outer tolerances later, as FSI does.
+The owner supplies the PC; `use_schur_fieldsplit=false` does not imply AMG.
 
-### 5.1 Unified AMG preconditioner
+| Owner/system | Current PC |
+|--------------|------------|
+| Base `MaterialPoint`, e.g. FEM phase field | HYPRE/BoomerAMG |
+| `StabilizedMPM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
+| `StabilizedFEM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
+| `ImplicitSolidMPM::SM_` | ASM overlap 1; local PREONLY + ILU(1), nonzero shift `1e-3` |
+| Coupled FSI | Fluid / [solid + lambda], nested SELFP/PCKSP; see the [FSI guide](../../work/src_fsi/MPM_MPM/README.md) |
 
-- outer Krylov: `KSPFGMRES` (overridable via `-ksp_type`)
-- preconditioner: `PCHYPRE`
-- AMG type: `BoomerAMG`
+### 5.1 Stabilized fluid
 
-This applies to every PETSc-based `CrsMat` with `use_schur_fieldsplit = false`, regardless of `ndof` (1, 3, or 4).
+Original components are velocity `{0,1,2}` and pressure `{3}`.
+Pure MPM fluid uses `SetFieldSplitComponents()` for compact index sets and
+FieldSplit block size 1. FEM keeps its full block size 4 and field strides.
 
-The code explicitly sets the following PETSc choices:
+Both use lower Schur factorization and PETSc SELFP. Current code leaves the
+inverse approximation at PETSc's default scalar diagonal:
+`S_p = A_11 - A_10 diag(A_00)^(-1) A_01`, without an additional pressure shift.
+The full outer operator remains the assembled physical matrix.
 
-```cpp
-KSPFGMRES
-PCHYPRE + BoomerAMG
-rtol = 1.0e-10, atol = 1.0e-15, max_it = 1000
-```
+Pure-fluid child options use `-fieldsplit_velocity_*` and
+`-fieldsplit_pressure_*`. These owners set child defaults with
+`PetscOptionsSetValue()`; FSI has its separate `-fsi_fieldsplit_*` hierarchy.
 
-The Schur field split sets its child-PC defaults with `PetscOptionsSetValue(...)` before
-`KSPSetFromOptions()`. See Section 5.1a for the resulting PETSc option names.
+### 5.2 Implicit solid
 
-### 5.1a Schur field split for stabilized fluid systems
+The standalone KSP remains FGMRES and sets restart 200.
+`ImplicitSolidMPM::ConfigurePreconditioner()` selects ASM overlap 1 and PC prefix
+`solid_field_`. Local sub-solves use PREONLY + ILU(1), nonzero shift `1e-3`;
+their option prefix is `-solid_field_sub_*`.
 
-`StabilizedMPM::NS_` and `StabilizedFEM::NS_` enable `use_schur_fieldsplit` in their
-constructors. `ConfigurePreconditioner()` then configures:
+PREONLY applies the local PC once; it is distinct from the outer FGMRES.
+Standalone solid uses the shared outer tolerances above. FSI's solid block has
+its own inner `rtol=0.1` and `max_it=100`; these are different solves and counts.
 
-```cpp
-PCFIELDSPLIT with block size ndof (= 4)
-velocity field: block components {0, 1, 2}; pressure field: {3}
-PC_COMPOSITE_SCHUR + PC_FIELDSPLIT_SCHUR_FACT_LOWER
-Schur preconditioner: SELFP with a 3x3 velocity block-diagonal inverse, optionally shifted as SELFP + epsilon I
-both sub-solves: preonly + HYPRE BoomerAMG
-```
+### 5.3 Independent resources
 
-The current split layout is specific to the four-DOF stabilized fluid system: the
-`"velocity"` split contains components 0--2 and the `"pressure"` split contains component 3.
-`ConfigurePreconditioner()` enforces this at runtime: with any `ndof` other than 4 it
-falls back to plain BoomerAMG even when `use_schur_fieldsplit` is set.
-The split names determine the PETSc option middle component, for example:
+Each `CrsMat` owns its KSP/PC and numbering. Rebuilding one system does not
+release another's preconditioner.
 
-```text
--fieldsplit_velocity_pc_type hypre
--fieldsplit_pressure_pc_type hypre
-```
+## 6. Preconditioner Rebuild Policy
 
-`-fieldsplit_` and `_pc_type` are PETSc syntax; only `velocity` and `pressure` come from the
-names passed to `PCFieldSplitSetFields()`.
+The legacy name `amg_rebuild_freq` controls PC cadence, including ASM/FieldSplit.
 
-This split exists because the stabilized (u,p) rows differ strongly in scale, and a single
-monolithic AMG over the coupled block was not robust for the dam case. The split gives
-velocity and pressure their own AMG hierarchies while `SELFP` builds the Schur
-approximation for the stabilized `K_pp` term. The field split owns its child PCs, so the
-AMG rebuild path does not call `PCReset`: `KSPSetOperators()` supplies the updated matrix and
-`PCSetReusePreconditioner(pc, PETSC_FALSE)` makes PETSc rebuild the child preconditioners during
-the next setup while retaining the split configuration.
+| System | Frequency / iteration-growth policy |
+|--------|-------------------------------------|
+| Pure MPM fluid `NS_` | Every step; force next rebuild after more than 2x iteration growth |
+| Implicit solid `SM_` | Every step; force next rebuild after more than 2x iteration growth |
+| FEM fluid `NS_` / `PF_` | Every 20 steps; iteration-growth policy enabled |
+| Coupled FSI `fsi_sys` | Every step; iteration-growth rebuilding disabled |
 
-For MPM (`FEM_flag == false`), PETSc first forms the sparse SELFP matrix
-`S_p = A_11 - A_10 blockdiag_3(A_00)^{-1} A_01`, where each block is the `(u,v,w)`
-velocity block of one node, and gives only the pressure sub-solver the Pmat
-`S_p + epsilon I`, where `epsilon = 1.0e-4 * abs(trace_active(S_p)) / n_active`. The inactive
-identity rows are excluded from the trace and count. The shift is applied directly to PETSc's internally
-built SELFP Pmat, while the outer FGMRES operator remains the original Jacobian. FEM fluid bypasses this
-shift through `FEM_flag == true`; implicit solid does not enable the Schur split.
+`NeedsPreconditionerRebuild(NR_it)` consumes a pending forced rebuild. Without
+one, later Newton iterations (`NR_it>0`) reuse the PC; the first correction
+follows the step cadence.
 
-### 5.2 Solver independence
+In MPM, changed retained equations on any rank force all ranks to rebuild
+the compact layout and KSP/PC. Compact matrix values are recreated every solve
+even when the PC is reused. A KSP rebuild restores its type, prefix and tolerances,
+configures the physical PC, reads options, calls `KSPSetUp()` and invokes the
+optional nested callback.
 
-Fluid and solid keep their AMG hierarchies independently.
-
-There is no longer any global "release other AMG" behavior. The old fieldsplit flags (`use_fieldsplit`, `pressure_pc_use_amg`) were removed; the current Schur split is controlled solely by `use_schur_fieldsplit`. Fluid and solid AMG are allowed to coexist.
-
----
-
-## 6. AMG Rebuild Policy
-
-Each `CrsMat` controls its own rebuild cadence through:
-
-```cpp
-amg_rebuild_freq
-```
-
-Current production values:
-
-| System | Value |
-|--------|-------|
-| MPM fluid `NS_` | `1` (PETSc + Schur field split is the default) |
-| FEM fluid `NS_` / `PF_` | `20` |
-| Implicit solid `SM_` | `1` |
-
-Runtime logic in `SolveWithPetsc()`:
-
-- periodic rebuild when `istep % amg_rebuild_freq == 0`
-- at most one rebuild per time step: `NR_it > 0` always reuses the current
-  preconditioner, so the AMG hierarchy is built on the first Newton iteration
-  and lagged for the rest of the step
-- optional forced rebuild when iterations deteriorate strongly: a solve whose
-  KSP iteration count more than doubles versus the previous solve requests a
-  rebuild on the next solve (`force_rebuild_next_`), including later Newton
-  iterations
-- rebuild is local to the current solver only
-
-Implementation detail for a monolithic AMG preconditioner:
-
-```cpp
-if (need_rebuild) {
-    PCReset(pc);
-    KSPSetOperators(...);
-    PCSetReusePreconditioner(pc, PETSC_FALSE);
-} else {
-    PCSetReusePreconditioner(pc, PETSC_TRUE);
-}
-```
-
-This avoids keeping "old AMG + new AMG" simultaneously inside one solver for too long, while still allowing fluid and solid preconditioners to coexist.
-
-For `use_schur_fieldsplit = true`, the same rebuild decision updates the operator and disables
-preconditioner reuse, but deliberately skips `PCReset` and reconfiguration so that the existing
-FieldSplit child-PC structure remains intact.
-
-The `NR_it > 0` suppression yields to a pending forced rebuild:
-
-```cpp
-if (NR_it > 0 && !force_rebuild) { need_rebuild = false; }
-```
-
-Lagging the preconditioner within a time step is safe because the matrix
-structure is fixed and its values only drift with the Newton iterate; the 2x
-iteration-growth rule catches the cases where the lagged hierarchy actually
-deteriorates. (The older proactive rule — rebuild whenever the previous solve
-needed more than a few iterations — effectively rebuilt every Newton iteration
-for the MPM fluid and has been removed.)
+FEM retains the full operator. A scheduled rebuild disables PC reuse;
+`PCReset()` and reconfiguration are used only for `use_schur_fieldsplit=false`,
+preserving FieldSplit structure otherwise. Mesh/DLB reset releases both full
+and compact state.
 
 ---
 
-## 7. Solution Recovery
+## 7. Solution Recovery and Memory
 
-Older PETSc code gathered the full global solution onto every rank with `VecScatterCreateToAll`.
+After a compact solve, retained components are copied into the full PETSc
+solution vector and removed components remain zero. Each rank scatters only
+its owned/ghost `nodec * ndof` entries into `seq_x`, then fills native `x_lhs`.
+The full global solution is not gathered onto every rank.
 
-That was too memory-heavy for the 32-rank FSI runs.
+After standalone solid/fluid solves, temporary `adiag`, `amat`, `b_rhs` and
+`x_lhs` arrays are released. PETSc solver resources stay local to their owner
+and are reset when their mesh/numbering is rebuilt.
 
-Current behavior:
+## 8. Implementation Invariants
 
-- each rank builds a scatter for only its own `nodec * ndof` entries
-- PETSc solution is copied into a sequential local buffer `seq_x`
-- `x_lhs` is filled from that local sequential vector
+### Required properties
 
-This reduces per-rank memory pressure significantly and was one of the key changes that made the 32-rank 10-step run stable.
-
----
-
-## 8. Solid Memory Lifecycle
-
-One important practical fix is in the solid solve path:
-
-- after each solid solve, large temporary vectors are released again
-
-Specifically:
-
-- `SM_.adiag`
-- `SM_.amat`
-- `SM_.b_rhs`
-- `SM_.x_lhs`
-
-Without this release, solid work arrays remained resident across time steps and pushed the next fluid solve into OOM territory.
-
----
-
-## 9. Current 32-Rank Baseline
-
-### 9.1 Historical monolithic AMG baseline
-
-The earlier Turek baseline used a monolithic AMG preconditioner stack (`PCHYPRE` + `BoomerAMG`)
-for all PETSc-based solves. For the 10-step case:
-
-- `NS_iter ~= 8`
-
-This is the reference used to judge whether future preconditioner changes are acceptable.
-
-### 9.2 Current recommended production run
-
-Current configured default:
-
-- stabilized fluid `NS_`: `Schur field split + FGMRES`
-- FEM phase field / implicit solid: `monolithic AMG + FGMRES`
-- local PETSc solution scatter
-- solid temporary arrays released every step
-
-Successful 16-rank cavity-flow run after tightening tolerances:
-
-- fluid `NS_iter`: `6~10`, stabilizing around `6`
-- FSI block iteration converges in `0~2` iterations per step
-
-### 9.3 Default Krylov Policy
-
-Current default policy in code is simple:
-
-- all PETSc KSP objects default to `KSPFGMRES`
-- stabilized MPM and FEM fluid `NS_` systems use the Schur field split (Section 5.1a)
-- the FEM phase-field and implicit-solid systems use monolithic `BoomerAMG`
-- remaining distinctions are the rebuild frequency and the physical BCs injected by each physics object
-
-So the remaining distinction between systems is mainly in the physics (DOF count, BCs, rebuild cadence, and whether the system is a stabilized fluid `NS_` solve), not in the outer Krylov family.
-
----
-
-## 10. Known Good / Known Bad Directions
-
-### 10.1 Good directions
-
-- keep `MatSetBlockSize(ndof)`
-- keep fluid and solid AMG independent
+- retain full-matrix block metadata and explicit compact field index sets
+- keep each physical solver's PC resources independent
 - keep solid temporary arrays released after solve
 - use local solution scatter, not global `CreateToAll`
 - for poorly scaled mixed u-p linear systems, check KSP tolerances and scaling; separately verify the nonlinear residual at the updated state
 
-### 10.2 Bad or abandoned directions
+### Avoid
 
-- restoring global cross-solver AMG release logic
+- releasing another physical solver's PC resources
 - gathering the full global PETSc solution on every rank
 - using a loosely set `rtol` (e.g. `1.0e-8`) for unscaled mixed u-p systems, which can accept a trivial initial guess as "converged"
 - treating the current solid matrix as safely CG-compatible without further proof
-- editing headers without reconfiguring CMake afterward
+- classifying compressed equations with `compact_index % ndof`
 
 ---
 
-## 11. Practical Notes for Future Changes
+## 9. Build and Validation
 
-1. If you change any PETSc-related header path or solver header, reconfigure and rebuild: `rm -rf build/CMakeCache.txt build/CMakeFiles && cmake -S . -B build && cmake --build build -j8`.
+1. Reconfigure with `cmake -S . -B build` after adding/removing sources collected by CMake. Rebuild in the existing `build/` directory; normal header edits are handled by build dependencies.
 2. If you change `nxyr`, you must regenerate partitions before solver benchmarking.
-3. If a new preconditioner looks faster but `NS_iter` jumps far above the unified AMG baseline, do not keep it.
+3. Compare time, inner/outer iterations and physical residuals on the same state when changing the PC.
 4. If a run becomes fast but starts printing `PETSc KSP diverged`, that result is invalid even if the wall time looks good.
 
 ---
 
-## 12. Recommended Production Settings
+## 10. Current Settings by Solver
 
-For the current 32-rank Turek benchmark:
+| Setting | Pure MPM fluid | Implicit solid | Monolithic FSI |
+|---------|----------------|----------------|----------------|
+| Components | 4 | 3 | 10, with 37 stored blocks |
+| Equation compression | Shared `CrsMat` | Shared `CrsMat` | Shared `CrsMat` |
+| Native vector length | `nodec * 4` | `nodec * 3` | `nodec * 10` |
+| PC | Velocity/pressure Schur + BoomerAMG | ASM overlap 1 / ILU(1), shift `1e-3` | Fluid / [solid + lambda], nested SELFP/PCKSP |
+| Node activation | Absolute `nmass > mtol` | Absolute `nmass > mtol` | Relative phase mean times `1e-4` by default, plus wet multiplier test |
+| PC cadence | 1 step | 1 step | 1 step |
 
-| Setting | Value |
-|---------|-------|
-| MPI ranks | `32` |
-| Runner | `build/run.sh` |
-| Fluid Krylov | `KSPFGMRES` |
-| Stabilized fluid `NS_` PC | lower Schur field split; child PCs use `PCHYPRE` + `BoomerAMG` |
-| FEM phase-field PC | `PCHYPRE` + `BoomerAMG` |
-| Solid Krylov | `KSPFGMRES` |
-| Solid PC | `PCHYPRE` + `BoomerAMG` |
-| FEM fluid rebuild freq | `20` |
-| Implicit-solid rebuild freq | `1` |
-
-These recorded runs are historical benchmarks; they do not establish nonlinear accuracy.
+The FSI launch configuration omits the absolute-mass override. Existing
+processes retain the options with which they were started. See the
+[FSI guide](../../work/src_fsi/MPM_MPM/README.md).
 
 ## Current Convergence Limitations
 

@@ -96,10 +96,14 @@ After convergence, the solution vector `NS_.x_lhs` is unpacked back into `nvel` 
 `NS_` enables `use_schur_fieldsplit = true` by default. PETSc therefore applies a lower
 Schur field split to the four-component stabilized fluid system: components 0--2 form the
 velocity block and component 3 forms the pressure block. Both child blocks use
-HYPRE/BoomerAMG, with PETSc's unshifted `SELFP` pressure Pmat and its 3x3 `(u,v,w)`
-velocity `blockdiag` inverse approximation. The trace-scaled
-`epsilon I` shift is MPM-only (`FEM_flag == false`). `PF_` keeps the default monolithic
-AMG preconditioner.
+HYPRE/BoomerAMG with PETSc's unshifted SELFP pressure Pmat and default scalar
+diagonal inverse approximation and no additional pressure shift.
+`PF_` keeps base BoomerAMG.
+
+The 2026-10-13 shared API reads each matrix's `ndof` member rather than receiving
+a repeated dimension argument. FEM retains its full equation layout;
+the new automatic compression applies to PETSc MPM systems only. See the
+[shared solver guide](../../solver/README.md).
 
 ### 5. Time-History Update (`UpdateNodalVar`)
 At the end of each time step, the velocity / pressure history levels are moved down

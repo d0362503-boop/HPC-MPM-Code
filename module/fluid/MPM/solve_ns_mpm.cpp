@@ -19,13 +19,10 @@ using namespace stabilizedmpm;
 
 void StabilizedMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 
-    const PetscInt velocity_fields[] = {0, 1, 2};
-    const PetscInt pressure_field = 3;
-
     PCSetType(pc, PCFIELDSPLIT);
-    PCFieldSplitSetBlockSize(pc, mat.ndof);
-    PCFieldSplitSetFields(pc, "velocity", 3, velocity_fields, velocity_fields);
-    PCFieldSplitSetFields(pc, "pressure", 1, &pressure_field, &pressure_field);
+    PCFieldSplitSetBlockSize(pc, mat.HasReducedLayout() ? 1 : mat.ndof);
+    PetscCallAbort(MPI_COMM_WORLD, mat.SetFieldSplitComponents(pc, "velocity", {0, 1, 2}));
+    PetscCallAbort(MPI_COMM_WORLD, mat.SetFieldSplitComponents(pc, "pressure", {3}));
     PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
     PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
     PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
@@ -60,7 +57,6 @@ void StabilizedMPM::SolveNS() {
 
     VectorAssign(nodec * 3, this->ndispl);
     VectorAssign(nodec, this->npres);
-    VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
     double r0r = 0.0e0;
     int iter = 0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
@@ -71,6 +67,7 @@ void StabilizedMPM::SolveNS() {
 
         VectorAssign(this->NS_.nmata, this->NS_.amat);
         VectorAssign(nodec * 4, this->NS_.b_rhs);
+        VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
         this->AssembleSystem(this->NS_, nvel_k, naccel_k);
 
         if (this->NS_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }

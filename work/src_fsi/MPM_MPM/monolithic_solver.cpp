@@ -11,7 +11,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     std::vector<double> residual = this->fsi_sys.b_rhs;
 
     // Solve a new correction.
-    VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
+    VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
     double active_dof = 0.0e0;
@@ -23,46 +23,46 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     double ref_tol = (active_dof > 0.0e0) ? 1.0e-6 : 1.0e-10;
     double abs_tol = (active_dof > 0.0e0) ? 1.0e-12 : 1.0e-15;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
-    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 200);
+    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 500);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
     KSPGetConvergedReason(this->fsi_sys.ksp, &reason);
     // if (reason < 0) { MPI_Abort(MPI_COMM_WORLD, 1); }
 
-    for (int n = 0; n < nodec * 10; n++) { this->fsi_sys.x_lhs[n] *= this->column_scale[n]; }
+    for (int n = 0; n < nodec * this->fsi_sys.ndof; n++) { this->fsi_sys.x_lhs[n] *= this->column_scale[n]; }
     this->fsi_sys.b_rhs.swap(residual);
 
     return iter;
 }
 
-MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); }
-
 void MPMMPMMonolithicFSI::BuildActiveDOFs() {
 
-    // double mass_stats[4]{};
-    // for (int n = 0; n < nodec; n++) {
-    //     if (this->fluid_.nmass[n] > mtol) {
-    //         mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
-    //         mass_stats[1] += dbc[n];
-    //     }
-    //     if (this->solid_.nmass[n] > mtol) {
-    //         mass_stats[2] += this->solid_.nmass[n] * dbc[n];
-    //         mass_stats[3] += dbc[n];
-    //     }
-    // }
-
-    // MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    // const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
-    // const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
-
-    this->fixed_dof.assign(nodec * 10, 0);
+    double mass_stats[4]{};
     for (int n = 0; n < nodec; n++) {
-        const bool fluid_active = this->fluid_.nmass[n] > mtol; // fluid_cut;
-        const bool solid_active = this->solid_.nmass[n] > mtol; // solid_cut;
+        if (this->fluid_.nmass[n] > mtol) {
+            mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
+            mass_stats[1] += dbc[n];
+        }
+        if (this->solid_.nmass[n] > mtol) {
+            mass_stats[2] += this->solid_.nmass[n] * dbc[n];
+            mass_stats[3] += dbc[n];
+        }
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    PetscBool absolute_activity = PETSC_FALSE;
+    PetscOptionsGetBool(nullptr, nullptr, "-fsi_mass_activity_absolute", &absolute_activity, nullptr);
+    const double fluid_cut = absolute_activity ? mtol : (mass_stats[1] > 0.0 ? 1.0e-4 * mass_stats[0] / mass_stats[1] : mtol);
+    const double solid_cut = absolute_activity ? mtol : (mass_stats[3] > 0.0 ? 1.0e-4 * mass_stats[2] / mass_stats[3] : mtol);
+
+    this->fixed_dof.assign(nodec * this->fsi_sys.ndof, 0);
+    for (int n = 0; n < nodec; n++) {
+        const bool fluid_active = this->fluid_.nmass[n] > fluid_cut;
+        const bool solid_active = this->solid_.nmass[n] > solid_cut;
         for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
-        for (int d = 7; d < 10; d++) {
+        for (int d = 7; d < this->fsi_sys.ndof; d++) {
             this->fixed_dof[n + d * nodec] = !fluid_active || !solid_active || this->nlm_lump[n] <= 0.0e0;
         }
     }
@@ -89,7 +89,7 @@ void MPMMPMMonolithicFSI::BuildActiveDOFs() {
 void MPMMPMMonolithicFSI::BuildPetscBCList(CrsMat &mat) {
 
     for (int n : mat.owned_natural_ids) {
-        for (int d = 0; d < 10; d++) {
+        for (int d = 0; d < this->fsi_sys.ndof; d++) {
             if (this->fixed_dof[n + d * nodec]) { mat.petsc_bc_gids.push_back(mat.natural_var_gids[n + d * nodec]); }
         }
     }
@@ -97,12 +97,12 @@ void MPMMPMMonolithicFSI::BuildPetscBCList(CrsMat &mat) {
 
 void MPMMPMMonolithicFSI::ScaleSystem() {
 
-    this->fsi_sys.adiag.assign(nodec * 10, 0.0);
-    this->fsi_sys.ExtractDiagonal(10);
+    this->fsi_sys.adiag.assign(nodec * this->fsi_sys.ndof, 0.0);
+    this->fsi_sys.ExtractDiagonal();
 
     // Reuse nodal-mass activity mask.
-    this->column_scale.assign(nodec * 10, 0.0);
-    std::vector<double> row_scale(nodec * 10, 0.0);
+    this->column_scale.assign(nodec * this->fsi_sys.ndof, 0.0);
+    std::vector<double> row_scale(nodec * this->fsi_sys.ndof, 0.0);
 
     for (int n = 0; n < nodec; n++) {
         for (int d = 0; d < 7; d++) {
@@ -130,116 +130,16 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
         }
     }
 
-    for (int n = 0; n < nodec * 10; n++) {
+    for (int n = 0; n < nodec * this->fsi_sys.ndof; n++) {
         this->fsi_sys.b_rhs[n] *= row_scale[n];
-        // Scale previous physical increment.
+        // Keep zero correction initial guess.
         this->fsi_sys.x_lhs[n] = this->fixed_dof[n] ? 0.0 : this->fsi_sys.x_lhs[n] / this->column_scale[n];
     }
 }
 
 void MPMMPMMonolithicFSI::BCResidualSet(std::vector<double> &rr) {
 
-    for (int n = 0; n < nodec * 10; n++) {
+    for (int n = 0; n < nodec * this->fsi_sys.ndof; n++) {
         if (this->fixed_dof[n]) { rr[n] = 0.0; }
-    }
-}
-
-void MPMMPMMonolithicFSI::AssemblePetscMat(CrsMat &mat, int ndof) {
-
-    MatZeroEntries(mat.petsc_mat);
-    mat.active_row_mask.assign(nodec, 1);
-    std::vector<PetscInt> columns;
-    std::vector<PetscScalar> values;
-
-    for (int n = 0; n < nodec; n++) {
-        for (int d = 0; d < ndof; d++) {
-            if (this->fixed_dof[n + d * nodec]) continue;
-            columns.clear();
-            values.clear();
-            for (int b = 0; b < mat.num_block; b++) {
-                if (mat.block_row[b] != d) continue;
-                for (int j = mat.matrow[n]; j < mat.matrow[n + 1]; j++) {
-                    const double value = mat.amat[j + mat.block_id[b]];
-                    if (value == 0.0) continue;
-                    columns.push_back(mat.natural_var_gids[mat.matcolid[j] + mat.block_col[b] * nodec]);
-                    values.push_back(value);
-                }
-            }
-            const PetscInt row = mat.natural_var_gids[n + d * nodec];
-            MatSetValues(mat.petsc_mat, 1, &row, columns.size(), columns.data(), values.data(), ADD_VALUES);
-        }
-    }
-
-    MatAssemblyBegin(mat.petsc_mat, MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(mat.petsc_mat, MAT_FINAL_ASSEMBLY);
-}
-
-void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
-
-    const PetscInt fields[] = {0, 1, 2, 3, 4, 5, 6};
-    const PetscInt multiplier[] = {7, 8, 9};
-
-    KSPSetOptionsPrefix(mat.ksp, "fsi_");
-    PCSetOptionsPrefix(pc, "fsi_");
-    KSPGMRESSetRestart(mat.ksp, 200);
-
-    PCSetType(pc, PCFIELDSPLIT);
-    PCFieldSplitSetBlockSize(pc, 10);
-    PCFieldSplitSetFields(pc, "fields", 7, fields, fields);
-    PCFieldSplitSetFields(pc, "lambda", 3, multiplier, multiplier);
-    PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
-    PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
-    PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
-
-    const char *options[][2] = {{"-fsi_ksp_gmres_cgs_refinement_type", "refine_always"},
-                                {"-fsi_fieldsplit_fields_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_pc_type", "fieldsplit"},
-                                {"-fsi_fieldsplit_fields_pc_fieldsplit_type", "additive"},
-                                {"-fsi_fieldsplit_fields_pc_fieldsplit_block_size", "7"},
-                                {"-fsi_fieldsplit_fields_pc_fieldsplit_0_fields", "0,1,2,3"},
-                                {"-fsi_fieldsplit_fields_pc_fieldsplit_1_fields", "4,5,6"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_type", "fgmres"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_rtol", "0.5"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_ksp_max_it", "100"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_type", "fieldsplit"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_block_size", "4"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_type", "schur"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_0_fields", "0,1,2"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_1_fields", "3"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_fact_type", "lower"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_pc_fieldsplit_schur_precondition", "selfp"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_pc_type", "asm"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_type", "ilu"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_levels", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_pc_type", "asm"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_type", "ilu"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_levels", "1"},
-                                // Reject tiny pressure ILU pivots.
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_zeropivot", "1e-8"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_0_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
-
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_type", "hypre"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_type", "boomeramg"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_type", "Euclid"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_smooth_num_levels", "1"},
-                                {"-fsi_fieldsplit_fields_fieldsplit_1_pc_hypre_boomeramg_eu_level", "1"},
-
-                                {"-fsi_fieldsplit_lambda_ksp_type", "preonly"},
-                                {"-fsi_fieldsplit_lambda_pc_type", "asm"},
-                                {"-fsi_fieldsplit_lambda_sub_pc_type", "ilu"},
-                                {"-fsi_fieldsplit_lambda_sub_pc_factor_levels", "1"},
-                                {"-fsi_fieldsplit_lambda_sub_pc_factor_shift_type", "nonzero"},
-                                {"-fsi_fieldsplit_lambda_sub_pc_factor_shift_amount", "1e-3"}};
-
-    for (const auto &option : options) {
-        PetscBool supplied;
-        PetscOptionsHasName(nullptr, nullptr, option[0], &supplied);
-        if (!supplied) { PetscOptionsSetValue(nullptr, option[0], option[1]); }
     }
 }

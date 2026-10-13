@@ -41,7 +41,8 @@ MaterialPoint (base)
 | `NS_.FEM_flag`             | `false`                                  | `true`                           |
 | `NS_.use_petsc`            | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
 | `NS_.use_schur_fieldsplit` | `true`                                   | `true`                           |
-| Pressure Pmat              | PETSc `SELFP + epsilon I`                | PETSc `SELFP`                    |
+| Pressure Pmat              | PETSc `SELFP`                            | PETSc `SELFP`                    |
+| PETSc equation layout      | Internally compressed; full native vectors | Full system                     |
 | `NS_.amg_rebuild_freq`     | `1`                                      | `20`                             |
 
 ## Driver Flow
@@ -96,6 +97,7 @@ for NR_it = 0 .. iter_max
     ComputeNodeVelAccelFromDispl(...);     // predictor
     AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
     if CheckNRConvergence(...) break;       // check current physical RHS
+    zero NS_.x_lhs;                        // new correction starts from zero
     iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
 ```
@@ -147,19 +149,29 @@ if (NS_.use_petsc)  →  PETSc KSP
 else                 →  GPBiCGAR (native iterative solver)
 ```
 
-The MPM fluid default is PETSc with `use_schur_fieldsplit = true`. Its monolithic (u,p)
-system is preconditioned by a lower Schur-complement field split: velocity and pressure
-blocks each get an HYPRE/BoomerAMG hierarchy, with `SELFP` as the Schur preconditioner.
-Its `A_00` inverse approximation is PETSc's 3x3 `(u,v,w)` `blockdiag`, rather than a
-scalar diagonal.
-Because its `FEM_flag` is false, the MPM pressure Pmat is the regularized `SELFP + epsilon I`, with
-`epsilon = 1.0e-4 * abs(trace_active(SELFP)) / n_active`; inactive identity rows are excluded from
-the scale. The code keeps PETSc's `PC_FIELDSPLIT_SCHUR_PRE_SELFP` selection and shifts its internally
-built pressure Pmat in place after field-split setup; it does not switch to `SCHUR_PRE_USER`. The outer
-FGMRES system remains unchanged.
-The FEM fluid `NS_` system uses unshifted `SELFP` through `FEM_flag == true`; the MPM and FEM
-rebuild frequencies differ.
-Set `NS_.use_petsc = false` to fall back to the native solver.
+The MPM fluid default is PETSc/FGMRES with a lower velocity/pressure Schur split.
+Both child PCs use PREONLY + HYPRE/BoomerAMG; PETSc SELFP supplies the pressure Pmat.
+PETSc uses its default scalar diagonal approximation for `A_00`, with no
+additional pressure shift. FEM also uses unshifted SELFP and its own PC cadence.
+
+#### Shared equation layout (2026-10-13)
+
+The constructor sets `NS_.ndof=4`. Native assembly, RHS and `x_lhs` keep their
+full `nodec * NS_.ndof` component-major layout. `CrsMat` internally compresses
+exact zero-increment identity equations after BC elimination, solves from zero
+and restores the full vector, including ghosts.
+
+`ConfigurePreconditioner()` calls `SetFieldSplitComponents()` with original
+velocity components `{0,1,2}` and pressure `{3}`. The helper converts them to
+explicit compact index sets; FieldSplit block size is 1 in the reduced layout.
+Do not infer a field from `compact_index % 4`. Single-phase node activation
+remains the absolute `nmass > mtol` test.
+
+The physics assembly callback is `AssemblePetscMat(CrsMat &mat)`; it reads
+`mat.ndof`. Pure fluid does not need FSI's nested post-setup callback.
+Full CSR storage and full assembly communication are still present. See the
+[shared solver guide](../../solver/README.md) for lifecycle and field mapping.
+Set `NS_.use_petsc=false` to use the native solver.
 
 ### G2P and particle motion (`Node2Particle`)
 

@@ -24,12 +24,15 @@ using namespace implicitmpm;
 
 void ImplicitSolidMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 
-    PCSetType(pc, PCHYPRE);
-    PCHYPRESetType(pc, "boomeramg");
+    KSPGMRESSetRestart(mat.ksp, 200);
+    PCSetType(pc, PCASM);
+    PCASMSetOverlap(pc, 1);
     PCSetOptionsPrefix(pc, "solid_field_");
-    PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_type", "Euclid");
-    PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_smooth_num_levels", "1");
-    PetscOptionsSetValue(nullptr, "-solid_field_pc_hypre_boomeramg_eu_level", "1");
+    PetscOptionsSetValue(nullptr, "-solid_field_sub_ksp_type", "preonly");
+    PetscOptionsSetValue(nullptr, "-solid_field_sub_pc_type", "ilu");
+    PetscOptionsSetValue(nullptr, "-solid_field_sub_pc_factor_levels", "1");
+    PetscOptionsSetValue(nullptr, "-solid_field_sub_pc_factor_shift_type", "nonzero");
+    PetscOptionsSetValue(nullptr, "-solid_field_sub_pc_factor_shift_amount", "1e-3");
     PCSetFromOptions(pc);
 
     return;
@@ -81,8 +84,7 @@ void ImplicitSolidMPM::SolveSolid() {
 
     std::vector<std::array<double, 6>> stress_k = this->InitializeNRStress(); // --- Reset stress for NR ---
 
-    VectorAssign(nodec * 3, this->ndispl);    // ---- Reset displacement ----
-    VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
+    VectorAssign(nodec * 3, this->ndispl); // ---- Reset displacement ----
     double r0r = 0.0e0;
     int iter = 0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
@@ -93,6 +95,7 @@ void ImplicitSolidMPM::SolveSolid() {
 
         VectorAssign(this->SM_.nmata, this->SM_.amat);
         VectorAssign(nodec * 3, this->SM_.b_rhs);
+        VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
         this->AssembleSystem(this->SM_, naccel_k, nvel_k, stress_k);
 
         if (!NR_flag) { // --- Linear not need Newton Raphson ---

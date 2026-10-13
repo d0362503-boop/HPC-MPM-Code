@@ -14,6 +14,32 @@
 
 using namespace mpm_mpm_monolithic_fsi;
 
+MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
+    this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
+    this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
+    this->fluid_.rhs_start = 0;
+    this->solid_.rhs_start = 4;
+    this->integrator_.ode_order = 2;
+    this->fsi_sys.ndof = 10;
+    this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
+                               4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
+    this->fsi_sys.block_col = {0, 1, 2, 3, 7, 0, 1, 2, 3, 8, 0, 1, 2, 3, 9, 0, 1, 2, 3,
+                               4, 5, 6, 7, 4, 5, 6, 8, 4, 5, 6, 9, 0, 4, 1, 5, 2, 6};
+    this->fsi_sys.FEM_flag = false;
+    this->fsi_sys.use_petsc = true;
+    this->fsi_sys.use_schur_fieldsplit = true;
+    this->fsi_sys.amg_rebuild_freq = 1; // rebuild PC every step
+    this->fsi_sys.rebuild_on_iteration_growth = false; // lag PC within Newton
+    this->fsi_sys.owner_ = this;
+    this->fsi_sys.reduced_setup_callback = [this](KSP ksp) {
+        return this->ConfigureReducedPreconditioner(ksp);
+    };
+}
+
+MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() {
+    this->fsi_sys.ResetPetscSolver();
+}
+
 void MPMMPMMonolithicFSI::SolveFSISystem() {
 
     this->LumpedLagrangeMultiplier();
@@ -32,12 +58,12 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
     VectorAssign(nodec * 3, this->solid_.ndispl);
     VectorAssign(nodec * 3, this->nlambda);
     VectorAssign(nodec, this->fluid_.npres);
-    VectorAssign(nodec * 10, this->fsi_sys.x_lhs);
+    VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
 
     int solver_it = 0;
     for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
         VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
-        VectorAssign(nodec * 10, this->fsi_sys.b_rhs);
+        VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
 
         this->fluid_.BCNRSet();
         this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
@@ -55,47 +81,6 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
 
         this->UpdateNRIncrement();
     }
-
-    return;
-}
-
-void MPMMPMMonolithicFSI::AssembleFluidSystem(const std::vector<double> &nvel_k, //
-                                              const std::vector<double> &naccel_k) {
-
-    this->fluid_.AssembleSystem(this->fsi_sys, nvel_k, naccel_k);
-
-    const double af = this->fluid_.integrator_.alpha_f;
-    for (int n = 0; n < nodec; n++) {
-        int ncol = 0;
-        int ida = this->fsi_sys.FindIndex(n, n, ncol);
-        double lm = this->nlm_lump_local[n];
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[4]] -= af * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[9]] -= af * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[14]] -= af * lm;
-    }
-
-    this->AddLagrangeMultiplierToRHS(af, this->fluid_.RHSOffsets());
-
-    return;
-}
-
-void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &nvel_k,   //
-                                              const std::vector<double> &naccel_k, //
-                                              std::vector<std::array<double, 6>> &stress_k) {
-
-    this->solid_.AssembleSystem(this->fsi_sys, naccel_k, nvel_k, stress_k);
-
-    const double af = this->solid_.integrator_.alpha_f;
-    for (int n = 0; n < nodec; n++) {
-        int ncol = 0;
-        int ida = this->fsi_sys.FindIndex(n, n, ncol);
-        double lm = this->nlm_lump_local[n];
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[22]] += af * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[26]] += af * lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[30]] += af * lm;
-    }
-
-    this->AddLagrangeMultiplierToRHS(-af, this->solid_.RHSOffsets());
 
     return;
 }
@@ -125,7 +110,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
     std::array<double, 8> stats{};
 
     for (int n : this->fsi_sys.owned_natural_ids) {
-        for (int d = 0; d < 10; d++) {
+        for (int d = 0; d < this->fsi_sys.ndof; d++) {
             const int index = n + d * nodec;
             if (this->fixed_dof[index]) continue;
 

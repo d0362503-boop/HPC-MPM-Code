@@ -17,6 +17,7 @@ namespace mpm_mpm_monolithic_fsi {
 
 class MPMMPMMonolithicFSI : public MaterialPoint {
   public:
+    static constexpr int kStoredBlocks = 37;
     static constexpr int max_NR_it = 100;
 
     stabilizedmpm::StabilizedMPM fluid_;
@@ -28,24 +29,12 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     std::vector<char> fixed_dof;      // constrained and inactive components
     std::vector<double> column_scale; // linear increment scaling factors
 
+    // Driver operations and physics callbacks.
     /** @brief Configure ten coupled components and the 37 stored fluid-solid-multiplier blocks. */
-    MPMMPMMonolithicFSI() {
-        this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
-        this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
-        this->fluid_.rhs_start = 0;
-        this->solid_.rhs_start = 4;
-        this->integrator_.ode_order = 2;
-        this->fsi_sys.ndof = 10;
-        this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
-                                   4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
-        this->fsi_sys.block_col = {0, 1, 2, 3, 7, 0, 1, 2, 3, 8, 0, 1, 2, 3, 9, 0, 1, 2, 3,
-                                   4, 5, 6, 7, 4, 5, 6, 8, 4, 5, 6, 9, 0, 4, 1, 5, 2, 6};
-        this->fsi_sys.FEM_flag = false;
-        this->fsi_sys.use_petsc = true;
-        this->fsi_sys.use_schur_fieldsplit = true;
-        this->fsi_sys.amg_rebuild_freq = 1; // rebuild AMG every step
-        this->fsi_sys.owner_ = this;
-    }
+    MPMMPMMonolithicFSI();
+
+    /** @brief Release the coupled PETSc solver and compact equation resources. */
+    ~MPMMPMMonolithicFSI();
 
     /**
      * @brief Read and initialize the coupled FSI case input data.
@@ -55,16 +44,49 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     void DataInput();
 
-    /** @brief Integrate the wet solid-surface distance delta into lumped nodal interface-area weights. */
-    void LumpedLagrangeMultiplier();
+    /** @brief Solve the coupled fields with interface displacement-increment continuity. */
+    void SolveFSISystem();
 
     /**
-     * @brief Add interface multiplier forces to the fluid or solid momentum RHS.
-     * @param af_coeff Signed generalized-alpha force weight: positive for fluid and negative for solid.
-     * @param offsets Start indices of the field's three momentum components in the coupled RHS.
+     * @brief Move fluid centres on the inside of the final solid phi=0.5 surface directly to that surface.
+     * @note Call after both Node2Particle updates and solid MoveParticle, before fluid MoveParticle. Reuses the solid contour
+     * and finite-triangle distance routines with an updated temporary phase field. Projection is normal
+     * to a triangle interior, or to its nearest edge/vertex. Queries use the existing one-grid-spacing
+     * surface band and nearest-triangle sign. Velocity, acceleration, TPIC state, pressure, mass and volume are preserved.
+     * This is geometric remapping, not a physical contact-force or momentum correction.
      */
-    void AddLagrangeMultiplierToRHS(double af_coeff, const std::vector<int> &offsets);
+    void CorrectFluidPenetration();
 
+    /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
+    void UpdateNRIncrement() override;
+
+    /**
+     * @brief Register fixed and inactive monolithic components.
+     * @param mat Coupled system receiving zero-increment boundary rows.
+     */
+    void BuildPetscBCList(CrsMat &mat) override;
+
+    /**
+     * @brief Zero fixed and inactive residual components.
+     * @param rr Coupled residual in component-major order.
+     */
+    void BCResidualSet(std::vector<double> &rr) override;
+
+    /**
+     * @brief Insert the 37 stored scalar blocks without expanding local storage.
+     * @param mat Coupled matrix receiving rank-local contributions.
+     */
+    void AssemblePetscMat(CrsMat &mat) override;
+
+    /**
+     * @brief Configure fluid and coupled solid-multiplier field splits with solid ASM/ILU(1).
+     * @param mat Coupled linear system being solved.
+     * @param pc PETSc preconditioner for the coupled Krylov solver.
+     */
+    void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
+
+  private:
+    // Coupled assembly.
     /**
      * @brief Assemble the fluid field and its multiplier load into the coupled system.
      * @param nvel_k Fluid nodal velocity at the current endpoint iterate.
@@ -89,18 +111,19 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     void AssembleInterfaceSystem();
 
-    /** @brief Solve the coupled fields with interface displacement-increment continuity. */
-    void SolveFSISystem();
-
     /**
-     * @brief Move fluid centres on the inside of the final solid phi=0.5 surface directly to that surface.
-     * @note Call after both Node2Particle updates and solid MoveParticle, before fluid MoveParticle. Reuses the solid contour
-     * and finite-triangle distance routines with an updated temporary phase field. Projection is normal
-     * to a triangle interior, or to its nearest edge/vertex. Queries use the existing one-grid-spacing
-     * surface band and nearest-triangle sign. Velocity, acceleration, TPIC state, pressure, mass and volume are preserved.
-     * This is geometric remapping, not a physical contact-force or momentum correction.
+     * @brief Add interface multiplier forces to the fluid or solid momentum RHS.
+     * @param af_coeff Signed generalized-alpha force weight: positive for fluid and negative for solid.
+     * @param offsets Start indices of the field's three momentum components in the coupled RHS.
      */
-    void CorrectFluidPenetration();
+    void AddLagrangeMultiplierToRHS(double af_coeff, const std::vector<int> &offsets);
+
+    // Linear correction and preconditioning.
+    /** @brief Select active components using field-specific nodal-mass thresholds and physical boundary constraints. */
+    void BuildActiveDOFs();
+
+    /** @brief Scale the coupled matrix and RHS; constrained corrections stay zero. */
+    void ScaleSystem();
 
     /**
      * @brief Apply residual constraints and solve for physical monolithic increments.
@@ -111,45 +134,14 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     int SolveSystem(int NR_it);
 
-    /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
-    void UpdateNRIncrement() override;
-
-    /** @brief Select active components using field-specific nodal-mass thresholds and physical boundary constraints. */
-    void BuildActiveDOFs();
-
-    /** @brief Scale the matrix, RHS and physical initial increment; fixed and inactive guesses are zero. */
-    void ScaleSystem();
-
     /**
-     * @brief Register fixed and inactive monolithic components.
-     * @param mat Coupled system receiving zero-increment boundary rows.
+     * @brief Configure the fluid split and iterative solid-multiplier preconditioner on compact equations.
+     * @param ksp Reduced coupled solver with its root field split initialized.
+     * @return PETSc preconditioner setup status.
      */
-    void BuildPetscBCList(CrsMat &mat) override;
+    PetscErrorCode ConfigureReducedPreconditioner(KSP ksp);
 
-    /**
-     * @brief Zero fixed and inactive residual components.
-     * @param rr Coupled residual in component-major order.
-     */
-    void BCResidualSet(std::vector<double> &rr) override;
-
-    /**
-     * @brief Insert the 37 stored scalar blocks without expanding local storage.
-     * @param mat Coupled matrix receiving rank-local contributions.
-     * @param ndof Number of coupled components per control point.
-     */
-    void AssemblePetscMat(CrsMat &mat, int ndof) override;
-
-    /**
-     * @brief Configure nested fields, multipliers and the default pressure ASM/ILU preconditioner.
-     * @param mat Coupled linear system being solved.
-     * @param pc PETSc preconditioner for the coupled Krylov solver.
-     */
-    void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
-
-    /** @brief Release the coupled PETSc solver and pressure preconditioner resources. */
-    ~MPMMPMMonolithicFSI();
-
-  private:
+    // Nonlinear residuals.
     /**
      * @brief Measure the nonlinear field RHS and direct interface displacement difference on globally owned active components.
      * @return RMS fluid momentum [N], continuity [m^3/s], solid momentum [N] and unweighted interface displacement [m] residuals.
@@ -167,6 +159,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @note Call after reassembly, before row scaling. The interface test uses solid_.ndispl-fluid_.ndispl without area weights.
      */
     bool CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it);
+
+    // Interface geometry.
+    /** @brief Integrate the wet solid-surface distance delta into lumped nodal interface-area weights. */
+    void LumpedLagrangeMultiplier();
+
     /**
      * @brief Exchange current interface geometry across MPI ranks.
      * @param local_geometry Rank-local solid triangles or nearby fluid particle-domain bounds.
