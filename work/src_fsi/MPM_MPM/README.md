@@ -87,8 +87,7 @@ Material and gravity parameters remain separate from preconditioner settings.
 | `monolithic_fsi.cpp` | Coupled lifecycle, Newton loop, increments, and convergence |
 | `monolithic_assembly.cpp` | Fluid, solid, and multiplier contributions; 37-block PETSc insertion |
 | `monolithic_interface.cpp` | Solid contour, wet-interface weights, and particle correction |
-| `monolithic_solver.cpp` | Active components, boundary constraints, scaling, and linear correction |
-| `monolithic_preconditioner.cpp` | Physical field splits and PETSc Schur preconditioner configuration |
+| `monolithic_solver.cpp` | Active components, constraints, scaling, linear correction, and physical preconditioner configuration |
 | `monolithic_fsi.h` | Class declarations and function documentation |
 | `../../../module/interface_sdf.h` / `.cpp` | Indexed finite-triangle distance queries |
 
@@ -111,24 +110,23 @@ recovery to `CrsMat`; no compact equation numbering belongs in the assembly.
 
 `CrsMat` removes only exact unit-diagonal equations with a zero RHS after
 boundary elimination. It derives each field's compact index set from original
-global equation IDs through `SetFieldSplitComponents()`. FSI supplies the physical
-component groups and nested field-split configuration through
-`ConfigureReducedPreconditioner()` via `reduced_setup_callback` after the
-reduced KSP creates its root sub-solvers. The callback is needed to define nested
-compact index sets and select the assembled coupled preconditioning operator;
-it does not implement a separate solve or custom interface Schur matrix.
+global equation IDs through `SetFieldSplitComponents()`. FSI declares only
+PC choices and physical groups in `ConfigurePreconditioner()`:
 
-The two physical configuration functions have different setup times:
+```text
+fluid {0,1,2,3}
+  0 {0,1,2}
+  1 {3}
+coupled {4,5,6,7,8,9}
+  solid {4,5,6}
+  lambda {7,8,9}
+```
 
-| Function | Setup stage | Responsibility |
-|----------|-------------|----------------|
-| `ConfigurePreconditioner(CrsMat &mat, PC pc)` | Before root KSP setup | Root fluid/coupled groups, PC type and default nested options |
-| `ConfigureReducedPreconditioner(KSP ksp)` | After root sub-solvers exist | Nested compact groups and the PCKSP operator/Pmat selection |
-
-`CrsMat` invokes the first through its owner and the second through the optional
-callback. The callback configures preconditioning; `CrsMat` performs the actual
-compressed solve and full-vector recovery. Pure solid/fluid use the same
-shared matrix machinery with their own physical PC choices.
+These groups are stored in `CrsMat::field_splits`. The ordinary
+`CrsMat::ConfigureReducedPreconditioner()` member owns compact root setup,
+child-group numbering, nested PETSc setup and PCKSP operator selection.
+It also handles pure-fluid flat groups and pure-solid ASM without groups.
+FSI has no separate reduced-setup method or function callback.
 
 The outer FGMRES splits fluid components (0..3) from solid and multiplier
 components (4..9). PETSc `selfp` eliminates the fluid diagonal when assembling
@@ -178,10 +176,8 @@ and this FSI system. `CrsMat::SolveReducedSystem()` creates the compact solve an
 recovers the full correction. `SetFieldSplitComponents()` supplies field indices
 from the same compact layout. Pure fluid defines its velocity/pressure split
 with that API; pure solid applies ASM/ILU directly to the retained equations.
-The FSI `ConfigureReducedPreconditioner()` callback only configures its nested
-fluid/[solid+lambda] hierarchy after PETSc creates the root sub-solvers. Moving
-that physical hierarchy into `CrsMat` would not make it suitable for the two
-single-phase solvers, so it remains in FSI.
+Only the physical group declarations differ between these systems;
+`CrsMat` owns the reusable setup and numbering machinery.
 
 The physical matrix, material parameters and nonlinear tolerances are separate
 from this preconditioning layer. The full native CSR graph and full PETSc

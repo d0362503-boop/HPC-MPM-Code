@@ -102,9 +102,9 @@ after BC elimination, solves the compact system from zero and recovers the full
 owned/ghost vector. Generic single-phase node activation remains `nmass > mtol`;
 it is independent of FSI's relative-mass rule.
 
-No standalone FSI-style `ConfigureReducedPreconditioner()` is needed:
-the solid override chooses its physical PC and `CrsMat` supplies compression
-and solution recovery. Full CSR/assembly storage is still allocated. See the
+The solid override selects its physical PC without declaring field groups.
+`CrsMat::ConfigureReducedPreconditioner()` supplies the same compact setup
+entry used by fluid and FSI, followed by solution recovery. Full CSR/assembly storage is still allocated. See the
 [shared solver guide](../../solver/README.md) for interfaces and rebuild policy.
 
 ### 4. System Assembly (`AssembleSystem`)

@@ -288,8 +288,9 @@ native `x_lhs`.
 Physical preconditioners call `SetFieldSplitComponents()` with original
 components, optionally within a parent component group. This creates explicit
 compact index sets; compact indices must never be classified using
-`index % ndof`. `reduced_setup_callback` is optional post-setup configuration
-for nested physical field splits such as those in the FSI preconditioner.
+`index % ndof`. Physical owners declare `field_splits` as a tree of split names,
+original components and optional children. `ConfigureReducedPreconditioner()`
+sets up that hierarchy inside `CrsMat`.
 FEM keeps its full-system solve path. `HasReducedLayout()` reports whether the
 compact map exists; `RetainedDofIds()` exposes original global equation IDs.
 The map, `reduced_active_is_` and `reduced_matrix_` remain private state.
@@ -307,21 +308,26 @@ Native CSR allocation, full PETSc preallocation, and assembly communication have
 not yet been compressed. Their later optimization belongs inside `CrsMat`,
 while preserving the external assembly and vector contract.
 
-### 3.6 Two preconditioner setup stages
+### 3.6 Shared preconditioner configuration
 
-| Stage | Responsible code | Purpose |
-|-------|------------------|---------|
-| Before setup | `CrsMat::ConfigurePreconditioner(PC)` delegates to `owner_->ConfigurePreconditioner(*this, pc)` | Select PC type, root groups and default options |
-| After compact `KSPSetUp()` | Optional `reduced_setup_callback(KSP)` | Configure already-created nested sub-solvers and their compact groups |
+`CrsMat::ConfigurePreconditioner(PC)` delegates PC choices and the physical
+`field_splits` tree to the owner, then converts its root groups to compact
+index sets. Each `FieldSplit` contains a PETSc name, original component IDs
+and optional child groups.
 
-FSI's callback is `ConfigureReducedPreconditioner(KSP)`. It defines nested
-velocity/pressure and solid/lambda groups and selects the assembled coupled
-Pmat for PCKSP. Pure solid/fluid use shared compression/recovery and their own
-`ConfigurePreconditioner()` overrides; they do not require the FSI hierarchy.
-Both setup stages remain necessary.
+`CrsMat::ConfigureReducedPreconditioner()` is a normal member used by every
+PETSc MPM solve. It sets compact operators, reads options, handles empty
+systems with `PCNONE` and creates the root sub-solvers. The private
+`ConfigureNestedFieldSplits()` converts child groups to their enclosing
+numbering and sets up nested solvers. For a PCKSP child it uses the enclosing
+preconditioning matrix as both inner operators, retaining the assembled-Pmat
+strategy without repeated fluid elimination.
 
-`CrsMat` owns numbering, compression and recovery. An initialized physics
-owner defines fields, constraints and preconditioning.
+FSI declares fluid/[solid+lambda], velocity/pressure and solid/lambda groups.
+Pure fluid declares velocity/pressure; pure solid has no field groups and keeps
+ASM/ILU. No function callback or extra virtual function is needed.
+The existing owner virtual `ConfigurePreconditioner()` supplies physical choices;
+generic traversal, PETSc setup, compression and recovery stay in `CrsMat`.
 
 ## 4. Boundary Conditions
 
@@ -412,8 +418,8 @@ follows the step cadence.
 In MPM, changed retained equations on any rank force all ranks to rebuild
 the compact layout and KSP/PC. Compact matrix values are recreated every solve
 even when the PC is reused. A KSP rebuild restores its type, prefix and tolerances,
-configures the physical PC, reads options, calls `KSPSetUp()` and invokes the
-optional nested callback.
+calls `ConfigureReducedPreconditioner()` to configure the physical PC, read
+options and initialize its declared field hierarchy.
 
 FEM retains the full operator. A scheduled rebuild disables PC reuse;
 `PCReset()` and reconfiguration are used only for `use_schur_fieldsplit=false`,

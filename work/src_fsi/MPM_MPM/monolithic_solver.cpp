@@ -5,6 +5,84 @@
 
 using namespace mpm_mpm_monolithic_fsi;
 
+void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
+    KSPSetOptionsPrefix(mat.ksp, "fsi_");
+    PCSetOptionsPrefix(pc, "fsi_");
+    KSPGMRESSetRestart(mat.ksp, 200);
+    PCSetType(pc, PCFIELDSPLIT);
+    PCFieldSplitSetBlockSize(pc, 1);
+    mat.field_splits = {{"fluid", {0, 1, 2, 3}, {{"0", {0, 1, 2}}, {"1", {3}}}},
+                        {"coupled", {4, 5, 6, 7, 8, 9}, {{"solid", {4, 5, 6}}, {"lambda", {7, 8, 9}}}}};
+    PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+    PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+    PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+
+    // Fluid velocity-pressure preconditioner.
+    const char *options[][2] = {{"-fsi_ksp_gmres_cgs_refinement_type", "refine_always"},
+                                {"-fsi_fieldsplit_fluid_ksp_type", "fgmres"},
+                                {"-fsi_fieldsplit_fluid_ksp_rtol", "0.5"},
+                                {"-fsi_fieldsplit_fluid_ksp_max_it", "100"},
+                                {"-fsi_fieldsplit_fluid_pc_type", "fieldsplit"},
+                                {"-fsi_fieldsplit_fluid_pc_fieldsplit_type", "schur"},
+                                {"-fsi_fieldsplit_fluid_pc_fieldsplit_schur_fact_type", "lower"},
+                                {"-fsi_fieldsplit_fluid_pc_fieldsplit_schur_precondition", "selfp"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_0_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_0_pc_type", "asm"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_0_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_0_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_0_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_0_sub_pc_factor_shift_amount", "1e-3"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_pc_type", "asm"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_sub_pc_factor_levels", "1"},
+                                // Reject tiny pressure ILU pivots.
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_sub_pc_factor_zeropivot", "1e-8"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_fluid_fieldsplit_1_sub_pc_factor_shift_amount", "1e-3"},
+
+                                // Joint solid-multiplier iteration.
+                                {"-fsi_fieldsplit_coupled_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_coupled_pc_type", "ksp"},
+                                {"-fsi_fieldsplit_coupled_ksp_ksp_type", "fgmres"},
+                                {"-fsi_fieldsplit_coupled_ksp_ksp_rtol", "0.5"},
+                                {"-fsi_fieldsplit_coupled_ksp_ksp_max_it", "100"},
+                                {"-fsi_fieldsplit_coupled_ksp_ksp_gmres_restart", "100"},
+                                {"-fsi_fieldsplit_coupled_ksp_pc_type", "fieldsplit"},
+                                {"-fsi_fieldsplit_coupled_ksp_pc_fieldsplit_type", "schur"},
+                                {"-fsi_fieldsplit_coupled_ksp_pc_fieldsplit_schur_fact_type", "lower"},
+                                {"-fsi_fieldsplit_coupled_ksp_pc_fieldsplit_schur_precondition", "selfp"},
+
+                                // Solid ASM with local ILU(1).
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_type", "fgmres"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_rtol", "0.1"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_max_it", "100"},
+                                // {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_gmres_restart", "200"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_pc_type", "asm"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_shift_amount", "1e-3"},
+
+                                // Multiplier Schur preconditioner.
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_pc_type", "asm"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_pc_asm_overlap", "1"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_sub_ksp_type", "preonly"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_sub_pc_type", "ilu"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_sub_pc_factor_shift_type", "nonzero"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_sub_pc_factor_shift_amount", "1e-3"}};
+
+    for (const auto &option : options) {
+        PetscBool supplied;
+        PetscOptionsHasName(nullptr, nullptr, option[0], &supplied);
+        if (!supplied) { PetscOptionsSetValue(nullptr, option[0], option[1]); }
+    }
+}
+
 int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
     this->BCResidualSet(this->fsi_sys.b_rhs);
@@ -38,28 +116,26 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
 void MPMMPMMonolithicFSI::BuildActiveDOFs() {
 
-    double mass_stats[4]{};
-    for (int n = 0; n < nodec; n++) {
-        if (this->fluid_.nmass[n] > mtol) {
-            mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
-            mass_stats[1] += dbc[n];
-        }
-        if (this->solid_.nmass[n] > mtol) {
-            mass_stats[2] += this->solid_.nmass[n] * dbc[n];
-            mass_stats[3] += dbc[n];
-        }
-    }
+    // double mass_stats[4]{};
+    // for (int n = 0; n < nodec; n++) {
+    //     if (this->fluid_.nmass[n] > mtol) {
+    //         mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
+    //         mass_stats[1] += dbc[n];
+    //     }
+    //     if (this->solid_.nmass[n] > mtol) {
+    //         mass_stats[2] += this->solid_.nmass[n] * dbc[n];
+    //         mass_stats[3] += dbc[n];
+    //     }
+    // }
 
-    MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    PetscBool absolute_activity = PETSC_FALSE;
-    PetscOptionsGetBool(nullptr, nullptr, "-fsi_mass_activity_absolute", &absolute_activity, nullptr);
-    const double fluid_cut = absolute_activity ? mtol : (mass_stats[1] > 0.0 ? 1.0e-4 * mass_stats[0] / mass_stats[1] : mtol);
-    const double solid_cut = absolute_activity ? mtol : (mass_stats[3] > 0.0 ? 1.0e-4 * mass_stats[2] / mass_stats[3] : mtol);
+    // MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    // const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
+    // const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
 
     this->fixed_dof.assign(nodec * this->fsi_sys.ndof, 0);
     for (int n = 0; n < nodec; n++) {
-        const bool fluid_active = this->fluid_.nmass[n] > fluid_cut;
-        const bool solid_active = this->solid_.nmass[n] > solid_cut;
+        const bool fluid_active = this->fluid_.nmass[n] > mtol;
+        const bool solid_active = this->solid_.nmass[n] > mtol;
         for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
         for (int d = 7; d < this->fsi_sys.ndof; d++) {

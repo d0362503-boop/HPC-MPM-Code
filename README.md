@@ -110,7 +110,7 @@ solver strategy. Its nonlinear check is separate from the standalone
 | Change | Current behavior | Guide |
 |--------|------------------|-------|
 | One component count | Physics constructors set `CrsMat::ndof` once; matrix helpers and assembly callbacks read it | [Shared solver](module/solver/README.md) |
-| MPM equation compression | Pure fluid, implicit solid and FSI retain full `nodec * ndof` assembly/vectors; `CrsMat` compresses the solve and fills the full solution back | [Shared solver](module/solver/README.md) |
+| Shared MPM solve/setup | Pure fluid, implicit solid and FSI retain full `nodec * ndof` assembly/vectors; `CrsMat` configures declared field groups, compresses and recovers the full solution | [Shared solver](module/solver/README.md) |
 | Solid preconditioning | FGMRES with ASM overlap 1 and local PREONLY/ILU(1), nonzero shift `1e-3` | [Implicit solid](module/solid/implicit/README.md) |
 | Coupled FSI preconditioning | Fluid / [solid + lambda] Schur grouping; the coupled inner FGMRES uses PETSc's assembled `selfp` Pmat | [FSI strategy](work/src_fsi/MPM_MPM/README.md) |
 | Logging and launch settings | Successful inner KSP reports and test timing diagnostics are disabled; future FSI launches use the source relative-mass rule | [FSI configuration](work/src_fsi/MPM_MPM/README.md) |

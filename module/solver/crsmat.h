@@ -2,7 +2,6 @@
 
 #include <petsc.h>
 
-#include <functional>
 #include <vector>
 
 #include "module/bc.h"
@@ -21,7 +20,7 @@ class CrsMat {
     // false → MPM path (inactive nodes are skipped and later identity-filled).
     bool FEM_flag = true;
 
-    int ndof;                             // components per control point
+    int ndof;                              // components per control point
     int num_block = 0;                     // stored scalar block count
     std::vector<int> block_row, block_col; // component indices per block
     int nmata, nmat;                       // total scalar entries in amat, and CSR entry count
@@ -162,8 +161,13 @@ class CrsMat {
     Vec petsc_b = nullptr;
     Vec petsc_x = nullptr;
     KSP ksp = nullptr;
-    // Optional reduced preconditioner setup.
-    std::function<PetscErrorCode(KSP)> reduced_setup_callback;
+
+    struct FieldSplit {
+        const char *name;                 // PETSc field option name
+        std::vector<int> components;      // original physical component IDs
+        std::vector<FieldSplit> children; // nested physical field groups
+    };
+    std::vector<FieldSplit> field_splits; // physical preconditioner hierarchy
 
     std::vector<PetscInt> petsc_bc_gids; // cached global BC row/column IDs
 
@@ -252,10 +256,17 @@ class CrsMat {
 
     /**
      * @brief Delegate preconditioner configuration to the owning physical field.
-     * Systems without an owner use BoomerAMG.
+     * Converts declared root groups into compact index sets when present.
      * @param pc PETSc preconditioner associated with `ksp`.
      */
     void ConfigurePreconditioner(PC pc);
+
+    /**
+     * @brief Set up the compact solver using the owner's physical field hierarchy.
+     * @return PETSc configuration status for the current retained equations.
+     * @note Handles empty systems, compact field indices and nested PCKSP operators.
+     */
+    PetscErrorCode ConfigureReducedPreconditioner();
 
     /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
@@ -337,7 +348,7 @@ class CrsMat {
 
   private:
     IS reduced_active_is_ = nullptr; // original retained equation IDs
-    Mat reduced_matrix_ = nullptr;  // current compressed operator
+    Mat reduced_matrix_ = nullptr;   // current compressed operator
     std::vector<PetscInt> retained_dof_gids_;
 
     /**
@@ -358,6 +369,14 @@ class CrsMat {
      * @return PETSc solve status; the convergence reason remains on ksp.
      */
     PetscErrorCode SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it);
+
+    /**
+     * @brief Configure nested physical groups on already-created PETSc sub-solvers.
+     * @param solver Solver for the enclosing physical group.
+     * @param splits Original component groups and their nested subdivisions.
+     * @return PETSc nested preconditioner setup status.
+     */
+    PetscErrorCode ConfigureNestedFieldSplits(KSP solver, const std::vector<FieldSplit> &splits);
 
     /** @brief Release compressed matrices and numbering before a mesh rebuild. */
     void ResetReducedSystem();

@@ -161,14 +161,15 @@ full `nodec * NS_.ndof` component-major layout. `CrsMat` internally compresses
 exact zero-increment identity equations after BC elimination, solves from zero
 and restores the full vector, including ghosts.
 
-`ConfigurePreconditioner()` calls `SetFieldSplitComponents()` with original
-velocity components `{0,1,2}` and pressure `{3}`. The helper converts them to
-explicit compact index sets; FieldSplit block size is 1 in the reduced layout.
+`ConfigurePreconditioner()` declares velocity `{0,1,2}` and pressure `{3}`
+in `mat.field_splits`. `CrsMat::ConfigureReducedPreconditioner()` converts
+them to explicit compact index sets and performs PETSc setup.
+FieldSplit block size is 1 in the reduced layout.
 Do not infer a field from `compact_index % 4`. Single-phase node activation
 remains the absolute `nmass > mtol` test.
 
 The physics assembly callback is `AssemblePetscMat(CrsMat &mat)`; it reads
-`mat.ndof`. Pure fluid does not need FSI's nested post-setup callback.
+`mat.ndof`. Pure fluid uses the same shared setup entry as solid and FSI.
 Full CSR storage and full assembly communication are still present. See the
 [shared solver guide](../../solver/README.md) for lifecycle and field mapping.
 Set `NS_.use_petsc=false` to use the native solver.

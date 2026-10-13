@@ -75,6 +75,64 @@ PetscErrorCode CrsMat::SetFieldSplitComponents(PC pc, const char *name, const st
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode CrsMat::ConfigureReducedPreconditioner() {
+    PetscFunctionBeginUser;
+    PC pc;
+    PetscInt active_count;
+    PetscCall(KSPGetPC(this->ksp, &pc));
+    PetscCall(MatGetSize(this->reduced_matrix_, &active_count, nullptr));
+    if (active_count) {
+        this->ConfigurePreconditioner(pc);
+    } else {
+        PetscCall(PCSetType(pc, PCNONE));
+    }
+    PetscCall(KSPSetOperators(this->ksp, this->reduced_matrix_, this->reduced_matrix_));
+    PetscCall(KSPSetFromOptions(this->ksp));
+    if (!active_count) { PetscCall(PCSetType(pc, PCNONE)); }
+    PetscCall(KSPSetUp(this->ksp));
+    if (active_count) { PetscCall(this->ConfigureNestedFieldSplits(this->ksp, this->field_splits)); }
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode CrsMat::ConfigureNestedFieldSplits(KSP solver, const std::vector<FieldSplit> &splits) {
+    PetscFunctionBeginUser;
+    if (std::none_of(splits.begin(), splits.end(), [](const FieldSplit &split) { return !split.children.empty(); })) {
+        PetscFunctionReturn(PETSC_SUCCESS);
+    }
+    PC pc;
+    KSP *sub_solvers;
+    PetscInt count;
+    PetscCall(KSPGetPC(solver, &pc));
+    PetscCall(PCFieldSplitGetSubKSP(pc, &count, &sub_solvers));
+    PetscCheck(count == static_cast<PetscInt>(splits.size()), MPI_COMM_WORLD, PETSC_ERR_ARG_SIZ,
+               "Physical field groups must match PETSc sub-solvers");
+    for (PetscInt i = 0; i < count; ++i) {
+        const auto &split = splits[i];
+        if (split.children.empty()) continue;
+        KSP inner = sub_solvers[i];
+        PC inner_pc;
+        PetscBool is_ksp;
+        PetscCall(KSPGetPC(inner, &inner_pc));
+        PetscCall(PetscObjectTypeCompare((PetscObject)inner_pc, PCKSP, &is_ksp));
+        if (is_ksp) {
+            Mat pmat;
+            PetscCall(PCSetUseAmat(inner_pc, PETSC_FALSE));
+            PetscCall(PCKSPGetKSP(inner_pc, &inner));
+            PetscCall(KSPGetOperators(sub_solvers[i], nullptr, &pmat));
+            PetscCall(KSPSetOperators(inner, pmat, pmat));
+            PetscCall(KSPSetFromOptions(inner));
+            PetscCall(KSPGetPC(inner, &inner_pc));
+        }
+        for (const auto &child : split.children) {
+            PetscCall(this->SetFieldSplitComponents(inner_pc, child.name, child.components, split.components));
+        }
+        PetscCall(KSPSetUp(inner));
+        PetscCall(this->ConfigureNestedFieldSplits(inner, split.children));
+    }
+    PetscCall(PetscFree(sub_solvers));
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode CrsMat::SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it) {
     PetscFunctionBeginUser;
     bool layout_changed;
@@ -91,7 +149,7 @@ PetscErrorCode CrsMat::SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it) {
 
     if (rebuild) {
         PetscReal rtol, atol, dtol;
-        PetscInt max_it, active_count;
+        PetscInt max_it;
         const char *old_type, *old_prefix;
         PetscCall(KSPGetTolerances(this->ksp, &rtol, &atol, &dtol, &max_it));
         PetscCall(KSPGetType(this->ksp, &old_type));
@@ -103,20 +161,7 @@ PetscErrorCode CrsMat::SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it) {
         PetscCall(KSPSetType(this->ksp, type.c_str()));
         PetscCall(KSPSetOptionsPrefix(this->ksp, prefix.c_str()));
         PetscCall(KSPSetTolerances(this->ksp, rtol, atol, dtol, max_it));
-        PC pc;
-        PetscCall(KSPGetPC(this->ksp, &pc));
-        PetscCall(MatGetSize(this->reduced_matrix_, &active_count, nullptr));
-        if (active_count) {
-            this->ConfigurePreconditioner(pc);
-        } else {
-            PetscCall(PCSetType(pc, PCNONE));
-        }
-        PetscCall(KSPSetOperators(this->ksp, this->reduced_matrix_, this->reduced_matrix_));
-        PetscCall(KSPSetFromOptions(this->ksp));
-        // Empty systems must not construct a factorization or a field split.
-        if (!active_count) { PetscCall(PCSetType(pc, PCNONE)); }
-        PetscCall(KSPSetUp(this->ksp));
-        if (active_count && this->reduced_setup_callback) { PetscCall(this->reduced_setup_callback(this->ksp)); }
+        PetscCall(this->ConfigureReducedPreconditioner());
     } else {
         PetscCall(KSPSetOperators(this->ksp, this->reduced_matrix_, this->reduced_matrix_));
         PetscCall(KSPSetReusePreconditioner(this->ksp, PETSC_TRUE));

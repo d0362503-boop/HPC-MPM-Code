@@ -21,8 +21,7 @@ void StabilizedMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 
     PCSetType(pc, PCFIELDSPLIT);
     PCFieldSplitSetBlockSize(pc, mat.HasReducedLayout() ? 1 : mat.ndof);
-    PetscCallAbort(MPI_COMM_WORLD, mat.SetFieldSplitComponents(pc, "velocity", {0, 1, 2}));
-    PetscCallAbort(MPI_COMM_WORLD, mat.SetFieldSplitComponents(pc, "pressure", {3}));
+    mat.field_splits = {{"velocity", {0, 1, 2}}, {"pressure", {3}}};
     PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
     PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
     PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);

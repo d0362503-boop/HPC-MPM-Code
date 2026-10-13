@@ -439,7 +439,13 @@ void CrsMat::BuildKSPSolver() {
 
 void CrsMat::ConfigurePreconditioner(PC pc) {
 
+    this->field_splits.clear();
     this->owner_->ConfigurePreconditioner(*this, pc);
+    if (this->HasReducedLayout()) {
+        for (const auto &split : this->field_splits) {
+            PetscCallAbort(MPI_COMM_WORLD, this->SetFieldSplitComponents(pc, split.name, split.components));
+        }
+    }
 
     return;
 }

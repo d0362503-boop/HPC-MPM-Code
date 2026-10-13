@@ -134,13 +134,6 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     int SolveSystem(int NR_it);
 
-    /**
-     * @brief Configure the fluid split and iterative solid-multiplier preconditioner on compact equations.
-     * @param ksp Reduced coupled solver with its root field split initialized.
-     * @return PETSc preconditioner setup status.
-     */
-    PetscErrorCode ConfigureReducedPreconditioner(KSP ksp);
-
     // Nonlinear residuals.
     /**
      * @brief Measure the nonlinear field RHS and direct interface displacement difference on globally owned active components.

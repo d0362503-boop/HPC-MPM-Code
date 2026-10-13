@@ -31,9 +31,6 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
     this->fsi_sys.amg_rebuild_freq = 1; // rebuild PC every step
     this->fsi_sys.rebuild_on_iteration_growth = false; // lag PC within Newton
     this->fsi_sys.owner_ = this;
-    this->fsi_sys.reduced_setup_callback = [this](KSP ksp) {
-        return this->ConfigureReducedPreconditioner(ksp);
-    };
 }
 
 MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() {
