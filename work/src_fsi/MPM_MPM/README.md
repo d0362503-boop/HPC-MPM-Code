@@ -13,7 +13,7 @@ solid displacement (3), and interface multipliers (3), stored in 37 scalar block
 | Newton correction | Zero initial guess; physical RHS preserved before scaling and restored after solving |
 | Root preconditioner | Lower Schur split: fluid / [solid + lambda] |
 | Coupled preconditioning | PCKSP inner FGMRES acts on PETSc's assembled `selfp` Pmat, retaining solid/lambda coupling |
-| Solid block | FGMRES, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1), nonzero shift `1e-3` |
+| Solid block | FGMRES, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1) with RCM ordering, nonzero shift `1e-3` |
 | Mass activation | Each phase uses `1e-4` times its mean effective nodal mass; wet-interface and physical constraints determine active multiplier components |
 
 ```text
@@ -23,7 +23,7 @@ Outer FGMRES: fluid / [solid + lambda], lower Schur split
   [solid + lambda]: PREONLY + PCKSP
     inner FGMRES acts on the assembled selfp Pmat
     solid / lambda: lower Schur split
-      solid: FGMRES + ASM overlap 1 / local PREONLY + ILU(1)
+      solid: FGMRES + ASM overlap 1 / local PREONLY + ILU(1), RCM ordering
       lambda: PREONLY + ASM overlap 1 / local PREONLY + ILU(1)
 ```
 
@@ -32,6 +32,12 @@ elimination. The inner split retains the solid operator and its multiplier
 coupling inside that approximation. The outer FGMRES solves the full coupled
 equations. PETSc constructs the Schur preconditioning matrices; no custom
 `BuildInterfaceSchur` implementation or global direct solver is used.
+
+RCM (Reverse Cuthill-McKee) ordering is the default for the solid local ILU
+factors. It reorders each ASM subdomain without changing the equations, active
+degrees of freedom or convergence tolerances. This reduces sensitivity of
+ILU(1) to sparsity changes as particles move. An explicit PETSc option can
+override the default.
 
 ## Launch configuration and logging
 

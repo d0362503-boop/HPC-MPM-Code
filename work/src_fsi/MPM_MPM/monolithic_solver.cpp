@@ -62,6 +62,7 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
                                 {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_ksp_type", "preonly"},
                                 {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_type", "ilu"},
                                 {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_levels", "1"},
+                                {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_mat_ordering_type", "rcm"},
                                 {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_shift_type", "nonzero"},
                                 {"-fsi_fieldsplit_coupled_ksp_fieldsplit_solid_sub_pc_factor_shift_amount", "1e-3"},
 

@@ -120,6 +120,7 @@ void SolidMaterialPointBase::RestartOutput() {
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);
+    reoutfile.precision(17);
     reoutfile.open(filename);
 
     reoutfile << this->num << "     --- Number of solid material point --- " << "\n";
@@ -129,11 +130,11 @@ void SolidMaterialPointBase::RestartOutput() {
 
         for (int i = 0; i < this->num; i++) {
             reoutfile << this->id[i]                          //
-                      << std::setw(15) << this->matid[i]      //
-                      << std::setw(15) << this->surf_point[i] //
-                      << std::setw(15) << this->mass[i]       //
-                      << std::setw(15) << this->vol0[i]       //
-                      << std::setw(15) << this->vol[i] << "\n";
+                      << std::setw(26) << this->matid[i]      //
+                      << std::setw(26) << this->surf_point[i] //
+                      << std::setw(26) << this->mass[i]       //
+                      << std::setw(26) << this->vol0[i]       //
+                      << std::setw(26) << this->vol[i] << "\n";
         }
 
         OutputVector(reoutfile, this->num, this->vel);

@@ -118,6 +118,7 @@ void StabilizedMPM::RestartOutput() {
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);
+    reoutfile.precision(17);
     reoutfile.open(filename);
 
     reoutfile << this->num << "     --- Number of water material point --- " << "\n";
@@ -125,10 +126,10 @@ void StabilizedMPM::RestartOutput() {
     OutputVector(reoutfile, this->num, this->coord);
 
     for (int i = 0; i < this->num; i++) {
-        reoutfile << this->id[i] << std::setw(15)    //
-                  << this->matid[i] << std::setw(15) //
-                  << this->mass[i] << std::setw(15)  //
-                  << this->vol[i] << std::setw(15)   //
+        reoutfile << this->id[i] << std::setw(26)    //
+                  << this->matid[i] << std::setw(26) //
+                  << this->mass[i] << std::setw(26)  //
+                  << this->vol[i] << std::setw(26)   //
                   << this->pres[i] << "\n";
     }
 
