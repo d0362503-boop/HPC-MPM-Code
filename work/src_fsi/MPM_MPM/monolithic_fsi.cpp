@@ -28,14 +28,12 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
     this->fsi_sys.FEM_flag = false;
     this->fsi_sys.use_petsc = true;
     this->fsi_sys.use_schur_fieldsplit = true;
-    this->fsi_sys.amg_rebuild_freq = 1; // rebuild PC every step
+    this->fsi_sys.amg_rebuild_freq = 1;                // rebuild PC every step
     this->fsi_sys.rebuild_on_iteration_growth = false; // lag PC within Newton
     this->fsi_sys.owner_ = this;
 }
 
-MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() {
-    this->fsi_sys.ResetPetscSolver();
-}
+MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); }
 
 void MPMMPMMonolithicFSI::SolveFSISystem() {
 
@@ -55,7 +53,6 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
     VectorAssign(nodec * 3, this->solid_.ndispl);
     VectorAssign(nodec * 3, this->nlambda);
     VectorAssign(nodec, this->fluid_.npres);
-    VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
 
     int solver_it = 0;
     for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
