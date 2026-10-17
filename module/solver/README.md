@@ -117,7 +117,7 @@ with a unit diagonal and zero RHS. Physical boundary constraints are handled
 separately. See Section 3.4 for the elimination and residual-mask details.
 
 This is the single-phase mass rule. Monolithic FSI overrides assembly and uses
-its per-component `fixed_dof` mask, relative phase-mass thresholds and a
+its per-component `fixed_dof` mask, absolute `nmass > mtol` phase tests and a
 wet-interface test; see the [FSI guide](../../work/src_fsi/MPM_MPM/README.md).
 
 ### 2.6 One dimension member
@@ -167,7 +167,22 @@ Shared control points are owned by a tie-break based on `aelemmin`.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
 
-**Resolved: LGMAP size and PETSc ownership consistency.** `BuildLGMAP()` now builds explicit owned-first PETSc-local maps through `BuildPetscLocalMaps()`. `petsc_local_to_natural` places owned control points first, followed by ghost control points, and `petsc_local_block_gids` maps these `nodec` PETSc-local indices to global node IDs. `BuildPetscMat()` creates the matrix with local size `local_node * ndof` and attaches an LGMAP of size `nodec` (owned + ghost). PETSc interprets the first `local_node * ndof` entries as owned rows and uses the remaining entries as ghost/assembly indices. `CheckOwnershipMetadata()` validates that `owned_natural_ids`, `ghost_natural_ids`, and the local-to-natural map sum to the expected global control-point count.
+`BuildLGMAP()` uses `BuildPetscLocalMaps()` to place physically owned control
+points before ghosts in `petsc_local_to_natural`. The associated LGMAP maps
+those assembly indices to geometric global node IDs; it does not assign PETSc
+matrix row ownership.
+
+`MatSetSizes()` determines each rank's contiguous PETSc global row interval.
+With geometric global numbering, that interval need not contain the global IDs
+of the control points physically owned by the same rank. Off-process assembly
+routes contributions to the correct matrix row owner; solution recovery scatters
+them back to the original control points. `CheckOwnershipMetadata()` validates
+the physical owned/ghost maps independently.
+
+Consequently, a rank with particles can own no retained fluid matrix rows after
+compression. This is distinct from having no fluid particles or dropping fluid
+equations. Solver-row load balance and particle/assembly load balance must be
+measured separately.
 
 ### 3.2 Matrix setup
 
@@ -279,8 +294,8 @@ boundary values are retained, and their column contributions have already been
 transferred to the RHS.
 
 The retained index set refers to full global equations. Its local entries follow
-PETSc row ownership; an `MPI_Allreduce` makes any layout change rebuild the map
-on every rank. `SolveReducedSystem()` constructs the retained operator, solves
+PETSc row ownership; empty local retained sets are valid. An `MPI_Allreduce`
+makes any layout change rebuild the map on every rank. `SolveReducedSystem()` constructs the retained operator, solves
 from zero, and expands the correction into the full PETSc vector.
 `RecoverSolution()` then uses the existing owned/ghost scatter to fill the full
 native `x_lhs`.

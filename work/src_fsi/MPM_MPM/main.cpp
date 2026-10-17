@@ -55,13 +55,13 @@ int main(int argc, char *argv[]) {
         for (istep = ista; istep <= iend; istep++) {
             // -----------------------------------------------
             real_time = dt * double(istep);
-            // double s_t;
-            // if (real_time < 0.51e0) {
-            //     s_t = std::pow(real_time, 2) / (2.0e0 * 0.51e0);
-            // } else {
-            //     s_t = real_time - 0.51e0 / 2.0e0;
-            // }
-            double theta = M_PI / 45.0e0 * std::sin(2.0e0 * M_PI / 1.211e0 * real_time);
+            double s_t;
+            if (real_time < 0.51e0) {
+                s_t = std::pow(real_time, 2) / (2.0e0 * 0.51e0);
+            } else {
+                s_t = real_time - 0.51e0 / 2.0e0;
+            }
+            double theta = M_PI / 45.0e0 * std::sin(2.0e0 * M_PI / 1.211e0 * s_t);
             bb[0] = -9.81e0 * std::sin(theta);
             bb[2] = -9.81e0 * std::cos(theta);
 

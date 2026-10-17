@@ -13,13 +13,15 @@ solid displacement (3), and interface multipliers (3), stored in 37 scalar block
 | Newton correction | Zero initial guess; physical RHS preserved before scaling and restored after solving |
 | Root preconditioner | Lower Schur split: fluid / [solid + lambda] |
 | Coupled preconditioning | PCKSP inner FGMRES acts on PETSc's assembled `selfp` Pmat, retaining solid/lambda coupling |
+| Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 100, restart 100; velocity/pressure lower Schur, ASM/ILU(1), velocity and pressure RCM ordering |
 | Solid block | FGMRES, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1) with RCM ordering, nonzero shift `1e-3` |
 | Mass activation | Each phase uses `1e-4` times its mean effective nodal mass; wet-interface and physical constraints determine active multiplier components |
 
 ```text
 Outer FGMRES: fluid / [solid + lambda], lower Schur split
-  fluid: FGMRES, velocity / pressure Schur split
-    velocity, pressure: PREONLY + ASM / ILU(1)
+  fluid: FGMRES with CGS refinement always, velocity / pressure Schur split
+    velocity: PREONLY + ASM / ILU(1), RCM ordering
+    pressure: PREONLY + ASM / ILU(1), RCM ordering
   [solid + lambda]: PREONLY + PCKSP
     inner FGMRES acts on the assembled selfp Pmat
     solid / lambda: lower Schur split
@@ -33,56 +35,82 @@ coupling inside that approximation. The outer FGMRES solves the full coupled
 equations. PETSc constructs the Schur preconditioning matrices; no custom
 `BuildInterfaceSchur` implementation or global direct solver is used.
 
-RCM (Reverse Cuthill-McKee) ordering is the default for the solid local ILU
-factors. It reorders each ASM subdomain without changing the equations, active
+RCM (Reverse Cuthill-McKee) ordering is the default for the solid and both
+fluid local ILU factors. It reorders each ASM subdomain without changing the equations, active
 degrees of freedom or convergence tolerances. This reduces sensitivity of
 ILU(1) to sparsity changes as particles move. An explicit PETSc option can
 override the default.
 
+The compiled fluid FGMRES default now includes
+-fsi_fieldsplit_fluid_ksp_gmres_cgs_refinement_type refine_always.
+A second classical Gram-Schmidt pass prevents loss of Krylov-basis
+orthogonality on difficult pressure directions. The assembled VMS equations,
+field splits, tolerances and iteration limits are unchanged.
+Velocity RCM alone did not resolve the step 2395 fluid failure; refinement is
+the additional change.
+
 ## Launch configuration and logging
 
-The Slosh input block in `build/data/generate/fsi/MPM_MPM/input.txt` is:
+The current restart uses the first Slosh block in
+build/data/generate/fsi/MPM_MPM/input.txt:
 
-```text
-<sp.solswitch, rstflag, nlstep>
-TPIC  2  1
-<ista, iend, iout>
-1  5000  10
-<dt, mtol, wp.spec_rad, sp.spec_rad>
-1.0e-3  1.0e-12  0.5e0  0.5e0
-```
+    <sp.solswitch, rstflag, nlstep>
+    TPIC  3  1
+    <ista, iend, iout>
+    2591  5000  10
+    <dt, mtol, wp.spec_rad, sp.spec_rad>
+    1.0e-3  1.0e-11  0.25e0  0.25e0
 
-`rstflag=2` reads original partitioned particle inputs and writes restart
-output. The 61-rank partition topology must match the MPI count.
+rstflag=3 reads the complete step 2590 TPIC checkpoint and continues writing
+restart files. A fresh run uses rstflag=2 and ista=1 instead. The 61-rank
+partition topology must match the MPI count. Verify both phase HDF time,
+particle IDs/coordinates, all 122 restart files and particle ownership before
+restarting.
 
-The following future-launch configuration uses the source relative-mass rule;
-`-fsi_mass_activity_absolute` is omitted. It retains the other selected solver
-and failure-reporting options. Run it only when starting a new job, after
-checking that no target job is already active. Launch options do not change a
-process that is already running.
+Launch with the compiled defaults and failure-only diagnostic viewers:
 
-```sh
-cd /home/ps/HPC-MPM-Code/build
-export PETSC_OPTIONS="-fsi_ksp_gmres_restart 500 \
--fsi_fieldsplit_fluid_ksp_max_it 500 \
--fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_gmres_restart 200 \
--fsi_fieldsplit_fluid_ksp_converged_reason ::failed \
--fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_converged_reason ::failed \
--fsi_fieldsplit_coupled_ksp_ksp_converged_reason ::failed \
--fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_ksp_converged_reason ::failed"
-sh run.sh 61
-```
+    cd /home/ps/HPC-MPM-Code/build
+    export PETSC_OPTIONS="-fsi_fieldsplit_fluid_ksp_converged_reason ::failed -fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_converged_reason ::failed -fsi_fieldsplit_coupled_ksp_ksp_converged_reason ::failed"
+    sh run.sh 61
 
-Newton records are `Monolithic_NR` and `Monolithic_converge`. The command uses
-`::failed` viewers for inner KSP failures and does not enable successful KSP
-reports. Outer KSP divergence and Newton failure messages remain.
-The current driver also has startup/final summaries and rank-zero
-`OutputMessage(iview, istep)` every 100 steps.
+The viewers do not override numerical settings or print successful inner KSP
+solves. Newton records remain Monolithic_NR and Monolithic_converge; negative
+outer KSP and Newton failures remain visible. The driver also prints startup,
+final summaries and OutputMessage every 100 steps.
 
-The Slosh gravity law is `real_time=dt*istep`,
-`theta=(pi/45)*sin(2*pi*real_time/1.211)` in radians,
-`gx=-9.81*sin(theta)` and `gz=-9.81*cos(theta)`.
-Material and gravity parameters remain separate from preconditioner settings.
+Current Slosh gravity uses real_time=dt*istep and
+s=real_time^2/(2*0.51) before 0.51 s, then s=real_time-0.255.
+The angle is theta=(pi/45)*sin(2*pi*s/1.211), with
+gx=-9.81*sin(theta) and gz=-9.81*cos(theta).
+This user-selected gravity law and VMS stabilization are unchanged by the
+orthogonalization update.
+
+## Restart verification
+
+The current fluid block uses FGMRES, CGS refinement always, restart 100,
+rtol 0.5 and max 100. Both velocity and pressure ASM subdomains use local
+ILU(1) with RCM ordering. The solid, multiplier and outer settings, physical
+parameters, VMS equations and nonlinear acceptance criteria are unchanged.
+
+The following full-FSI tests start from the same validated step 2580 TPIC
+checkpoint and use sh run.sh 61 with no numerical PETSC_OPTIONS overrides:
+
+| Pressure local ILU ordering | Completed test steps | Negative KSP reasons | Ten-step time |
+|---|---|---:|---|
+| Natural, fluid restart 100 | 2581–2587; stopped on the first failure in 2588 | 1 | Not completed |
+| RCM, fluid restart 100 | 2581–2590, normal finish | 0 | 271.2 s from launch to complete two-phase output |
+
+The accepted RCM test's output-to-output interval is 267.8 s. Both phase
+HDF files are complete at time 2.59 s with 4140 solid and 627210 fluid
+particles. All 122 TPIC restart files match their particle positions and
+velocities exactly; ownership validation reports no misplaced particles.
+This passes the ten-step no-negative-reason and at-most-300-second targets.
+
+The same compiled solver then restarts from that verified step 2590 state
+with ista 2591, iend 5000 and rstflag 3. The earlier pre-2580 history contains
+fluid-inner failures, so the new branch must not be described as a clean
+5000-step run from the initial state. The ten-step test is not proof that
+all remaining steps will satisfy the same limits.
 
 ## Source responsibilities
 
@@ -163,16 +191,17 @@ Current option prefixes are `fsi_fieldsplit_fluid_` for fluid,
 `fsi_fieldsplit_coupled_ksp_fieldsplit_lambda_` for its phase splits.
 Old `fsi_fieldsplit_fields_` option names no longer configure these groups.
 
-Source settings and the selected launch settings are:
+Current launch settings use the source defaults:
 
-| Setting | Source default | Launch configuration above |
-|---------|----------------|----------------------------|
-| Mass activity | Relative phase mean times `1e-4` | Source rule, with no override |
-| Outer restart | 200 | 500 |
-| Fluid maximum iterations | 100 | 500 |
-| Solid restart | PETSc default; explicit line commented | 200 |
-| Solid inner tolerance / maximum | `0.1 / 100` | Source settings |
-| Coupled inner tolerance / maximum | `0.5 / 100` | Source settings |
+| Setting | Value |
+|---------|-------|
+| Mass activity | Relative phase mean times 1e-4 |
+| Outer restart | 200 |
+| Fluid tolerance / maximum / restart | 0.5 / 100 / 100 |
+| Fluid orthogonalization | Classical Gram-Schmidt with refinement always |
+| Velocity / pressure local ILU ordering | RCM / RCM |
+| Solid tolerance / maximum / restart | 0.1 / 100 / 30 |
+| Coupled tolerance / maximum / restart | 0.5 / 100 / 100 |
 
 The inner tolerances control preconditioning work. Outer linear convergence
 and the four physical Newton criteria below determine correction acceptance.
@@ -256,12 +285,11 @@ fluid mass sum/count in entries 0/1 and solid mass sum/count in entries 2/3.
 Only nodal masses strictly above `mtol` contribute, weighted by `dbc` to count
 shared nodes once; `MPI_Allreduce` combines the phase statistics.
 
-Without the absolute-mass option, `fluid_cut=1e-4*mass_stats[0]/mass_stats[1]`
-and `solid_cut=1e-4*mass_stats[2]/mass_stats[3]`. An empty phase falls back to
-`mtol`. `mtol` therefore affects the averaging population; it is not itself
-the normal relative cutoff and is not applied as a lower bound on that cutoff. `-fsi_mass_activity_absolute` selects the absolute `mtol`
-threshold instead. The selected launch configuration omits this override;
-options of an already-running process remain fixed until it exits.
+The cutoffs are fluid_cut=1e-4*mass_stats[0]/mass_stats[1]
+and solid_cut=1e-4*mass_stats[2]/mass_stats[3].
+mtol affects the averaging population; it is not itself the relative cutoff
+or a lower bound on it. The current FSI code uses this relative rule directly;
+there is no launch-time absolute-mass override.
 A multiplier component requires both phases active and `nlm_lump[n] > 0`. Phase boundary
 conditions and solid rigid constraints are then applied; a multiplier component
 is fixed when both corresponding phase displacement components are fixed.
@@ -269,8 +297,7 @@ is fixed when both corresponding phase displacement components are fixed.
 The coupled matrix assembly uses the per-component `fixed_dof` mask; it does
 not call the generic `CrsMat::BuildActiveRowMask()`.
 
-Changing `mtol` changes the statistics population in relative mode and the
-activation cutoff in absolute mode. It does not create interface
+Changing `mtol` changes the statistics population used by the relative cutoff. It does not create interface
 weights at control points where `nlm_lump` is zero. The assembled multiplier
 equations enforce nodal displacement-increment continuity; their convergence
 alone does not establish particle nonpenetration.

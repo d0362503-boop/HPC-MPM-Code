@@ -46,31 +46,31 @@ void MPMMPMFSIFluidGenerator::CreateBCs() {
         for (int j = 0; j < ynodec; ++j) {
             for (int i = 0; i < xnodec; ++i) {
                 const int id = i + xnodec * j + xnodec * ynodec * k;
-                if (i == 0 || i == xnodec - 1 || k == 0) {
+                if (i == 0 || i == xnodec - 1) {
                     this->ubc.nbc[this->ubc.ibc] = id;
                     this->ubc.fbc[this->ubc.ibc] = 0.0e0;
                     this->ubc.ibc++;
-                    this->wbc.nbc[this->wbc.ibc] = id;
-                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
-                    this->wbc.ibc++;
+                    // this->wbc.nbc[this->wbc.ibc] = id;
+                    // this->wbc.fbc[this->wbc.ibc] = 0.0e0;
+                    // this->wbc.ibc++;
                 }
                 if (j == 0 || j == ynodec - 1) {
                     this->vbc.nbc[this->vbc.ibc] = id;
                     this->vbc.fbc[this->vbc.ibc] = 0.0e0;
                     this->vbc.ibc++;
                 }
-                if (k == znodec - 1 && (i != 0 && i != xnodec - 1)) {
+                if (k == 0 || k == znodec - 1) {
                     double vel;
-                    if (xyc[id][0] <= 0.3e-2) {
-                        vel = std::pow(std::sin(M_PI * xyc[id][0] / 0.6e-2), 2);
-                    } else if (xyc[id][0] >= 1.7e-2 && xyc[id][0] <= 2.0e-2) {
-                        vel = std::pow(std::sin(M_PI * (xyc[id][0] - 2.0e-2) / 0.6e-2), 2);
-                    } else {
-                        vel = 1.0e0;
-                    }
-                    this->ubc.nbc[this->ubc.ibc] = id;
-                    this->ubc.fbc[this->ubc.ibc] = 0.5e-2 * vel;
-                    this->ubc.ibc++;
+                    // if (xyc[id][0] <= 0.3e-2) {
+                    //     vel = std::pow(std::sin(M_PI * xyc[id][0] / 0.6e-2), 2);
+                    // } else if (xyc[id][0] >= 1.7e-2 && xyc[id][0] <= 2.0e-2) {
+                    //     vel = std::pow(std::sin(M_PI * (xyc[id][0] - 2.0e-2) / 0.6e-2), 2);
+                    // } else {
+                    //     vel = 1.0e0;
+                    // }
+                    // this->ubc.nbc[this->ubc.ibc] = id;
+                    // this->ubc.fbc[this->ubc.ibc] = 0.0e0; // * vel;
+                    // this->ubc.ibc++;
                     this->wbc.nbc[this->wbc.ibc] = id;
                     this->wbc.fbc[this->wbc.ibc] = 0.0e0;
                     this->wbc.ibc++;
@@ -118,7 +118,7 @@ void MPMMPMFSIFluidGenerator::CreateParticles() {
                         const double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ++ip) {
                             const double xp = ecx + dec2p[ip][0];
-                            if (zp > 0.5e-2) {
+                            if (zp <= 0.115e0 && (xp <= 0.303e0 || xp >= 0.307e0)) {
                                 this->coord[this->num][0] = xp;
                                 this->coord[this->num][1] = yp;
                                 this->coord[this->num][2] = zp;
@@ -217,7 +217,8 @@ void MPMMPMFSISolidGenerator::CreateParticles() {
                         const double yp = ecy + dec2p[jp][1];
                         for (int ip = 0; ip < npxye[0]; ++ip) {
                             const double xp = ecx + dec2p[ip][0];
-                            if (zp < 0.5e-2) {
+                            if (zp <= 0.115e0 && (xp >= 0.303e0 && xp <= 0.307e0)) {
+                                // if (zp < 0.5e-2) {
                                 this->coord[this->num][0] = xp;
                                 this->coord[this->num][1] = yp;
                                 this->coord[this->num][2] = zp;
