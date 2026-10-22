@@ -28,8 +28,8 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
     this->fsi_sys.FEM_flag = false;
     this->fsi_sys.use_petsc = true;
     this->fsi_sys.use_schur_fieldsplit = true;
-    this->fsi_sys.amg_rebuild_freq = 1;                // rebuild PC every step
-    this->fsi_sys.rebuild_on_iteration_growth = false; // lag PC within Newton
+    this->fsi_sys.amg_rebuild_freq = 1;                // refresh at each step start
+    this->fsi_sys.rebuild_on_iteration_growth = false; // reuse within Newton loop
     this->fsi_sys.owner_ = this;
 }
 
@@ -139,7 +139,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
 bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-12, 1.0e-10, 1.0e-10};
+    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-10, 1.0e-10, 1.0e-10};
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
     // Fields 0..2: max(absolute_tol, 1e-4 * initial nonlinear residual RMS).

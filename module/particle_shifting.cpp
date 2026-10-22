@@ -125,7 +125,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
 
     std::vector<int> surface_tag(this->num, 0);
     for (int n = 0; n < this->num; n++) {
-        if (surface_weight[n] < 0.7e0 && surface_weight[n] > 0.3e0) { surface_tag[n] = 1; }
+        if (surface_weight[n] < 0.6e0 && surface_weight[n] > 0.4e0) { surface_tag[n] = 1; }
     }
 
     // -------------------------------------------------------------------------

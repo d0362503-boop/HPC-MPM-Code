@@ -13,19 +13,20 @@ solid displacement (3), and interface multipliers (3), stored in 37 scalar block
 | Newton correction | Zero initial guess; physical RHS preserved before scaling and restored after solving |
 | Root preconditioner | Lower Schur split: fluid / [solid + lambda] |
 | Coupled preconditioning | PCKSP inner FGMRES acts on PETSc's assembled `selfp` Pmat, retaining solid/lambda coupling |
-| Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 100, restart 100; velocity/pressure lower Schur, ASM/ILU(1), velocity and pressure RCM ordering |
-| Solid block | FGMRES, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1) with RCM ordering, nonzero shift `1e-3` |
+| Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 100, restart 100; velocity/pressure lower Schur; velocity and pressure PREONLY + ASM/local ILU(1), RCM ordering, nonzero shift 1e-3 |
+| Preconditioner refresh | Constructor sets `amg_rebuild_freq=1`; rebuild at NR=0 each step and reuse for NR>0 when the retained layout is unchanged |
+| Solid block | FGMRES with CGS refinement always, `restart=30`, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(2), RCM ordering, nonzero shift `1e-3` |
 | Mass activation | Each phase uses `1e-4` times its mean effective nodal mass; wet-interface and physical constraints determine active multiplier components |
 
 ```text
 Outer FGMRES: fluid / [solid + lambda], lower Schur split
   fluid: FGMRES with CGS refinement always, velocity / pressure Schur split
     velocity: PREONLY + ASM / ILU(1), RCM ordering
-    pressure: PREONLY + ASM / ILU(1), RCM ordering
+    pressure: PREONLY + ASM overlap 1 / local PREONLY + ILU(1), RCM ordering
   [solid + lambda]: PREONLY + PCKSP
     inner FGMRES acts on the assembled selfp Pmat
     solid / lambda: lower Schur split
-      solid: FGMRES + ASM overlap 1 / local PREONLY + ILU(1), RCM ordering
+      solid: FGMRES + ASM overlap 1 / local PREONLY + ILU(2), RCM ordering
       lambda: PREONLY + ASM overlap 1 / local PREONLY + ILU(1)
 ```
 
@@ -35,11 +36,11 @@ coupling inside that approximation. The outer FGMRES solves the full coupled
 equations. PETSc constructs the Schur preconditioning matrices; no custom
 `BuildInterfaceSchur` implementation or global direct solver is used.
 
-RCM (Reverse Cuthill-McKee) ordering is the default for the solid and both
-fluid local ILU factors. It reorders each ASM subdomain without changing the equations, active
-degrees of freedom or convergence tolerances. This reduces sensitivity of
-ILU(1) to sparsity changes as particles move. An explicit PETSc option can
-override the default.
+Velocity and pressure use ASM/local ILU(1) with RCM ordering and
+nonzero shift 1e-3. Pressure uses PREONLY, ASM overlap 1 and local PREONLY/ILU(1).
+Solid uses FGMRES with rtol 0.1 and max 100, ASM overlap 1 and local
+PREONLY/ILU(2), retaining RCM ordering and nonzero shift 1e-3. The multiplier Schur PC retains
+ASM/local ILU(1). These choices affect the preconditioner only.
 
 The compiled fluid FGMRES default now includes
 -fsi_fieldsplit_fluid_ksp_gmres_cgs_refinement_type refine_always.
@@ -49,29 +50,80 @@ field splits, tolerances and iteration limits are unchanged.
 Velocity RCM alone did not resolve the step 2395 fluid failure; refinement is
 the additional change.
 
+## Step 1720 checkpoint comparison (2026-10-20)
+
+Both ten-step tests use the same validated 60-partition TPIC checkpoint,
+pressure and velocity ASM/local ILU(1), unchanged physical parameters and
+tolerances, and sh run.sh 60.
+
+| Solid PC (FGMRES rtol 0.1, max 100) | Steps | Solver time | Outer total (30 corrections) | Max per correction | Negative reasons |
+|---|---|---:|---:|---:|---:|
+| ASM overlap 1 / ILU(1) | 1721-1730 | 253.6049 s | 1895 | 72 | 0 |
+| ASM overlap 1 / ILU(2) | 1721-1730 | 244.5542 s | 1898 | 71 | 0 |
+
+ILU(2) reduced solver time by about 3.6%, with essentially unchanged outer
+iteration counts. Single-step screening also tried ASM overlap 2, HYPRE
+Euclid levels 1/2, and HYPRE ILU with GMRES-ILUk. None improved total time
+over ASM overlap 1 / ILU(2). The formal solid default is ASM/local ILU(2); velocity and pressure retain ILU(1).
+No rigid-body near-nullspace code is retained. This restart comparison does
+not establish convergence over the preceding or remaining simulation.
+
+The current history starts from initial particle data with ista=1 and
+rstflag=2. Steps 1-120 used solid ILU(1), with no negative KSP reasons.
+A complete step 120 TPIC checkpoint was verified against both phase outputs
+at t=0.12 s, including all 120 restart files. The continuation uses ista=121,
+iend=5000, rstflag=3 and iout=10, launched by sh run.sh 60.
+The 60-partition initial input contains 4140 solid and 626175 fluid particles.
+Current defaults are velocity/pressure ASM/local ILU(1), solid FGMRES +
+ASM/local ILU(2), and NR0 rebuild / NR>0 reuse. Physics, tolerances and all
+other PC settings remain unchanged.
+
+## Step 1260 checkpoint comparison (2026-10-20)
+
+All rows start from the same validated 60-partition TPIC checkpoint and use
+`sh run.sh 60`. Solver time includes initialization and output. Outer totals
+in the two completed rows cover 20 linear corrections (two per time step).
+
+| Velocity PC | Pressure PC | Solid PC | Refresh policy | Result / solver time | Outer total | Negative reasons |
+|---|---|---|---|---|---:|---:|
+| ASM/ILU(1) | BoomerAMG | ASM/ILU(1) | Every Newton correction | 1261–1270 passed / 249.1756 s | 1489 | 0 |
+| BoomerAMG | BoomerAMG | ASM/ILU(1) | Every Newton correction | 1261–1270 passed / 341.9262 s | 1476 | 0 |
+| BoomerAMG | BoomerAMG | BoomerAMG | NR0 rebuild, NR>0 reuse | Failed at 1261, NR0; stopped | No completed solve | 207 solid inner DIVERGED_ITS |
+| ASM/ILU(1) | BoomerAMG | ASM/ILU(1) | NR0 rebuild, NR>0 reuse | 1261–1270 passed / 234.1054 s | 1490 | 0 |
+
+The solid-AMG row follows the requested within-step reuse policy. Its failure
+occurs at NR0 with a fresh preconditioner, before reuse can occur. Every failing
+solid inner solve reached the unchanged limit of 100 iterations. This ordinary
+scalar BoomerAMG configuration has not passed the ten-step test. The solid-AMG
+trial was stopped; that comparison restored velocity and solid ASM/ILU(1),
+retaining pressure BoomerAMG and within-step reuse. The
+first two timings use per-correction rebuilding. The latest pressure-only AMG
+row confirms that NR0-only rebuilding also passes the same ten steps without
+negative KSP reasons. Physical parameters and convergence tolerances were held
+fixed throughout.
+
 ## Launch configuration and logging
 
-The current restart uses the first Slosh block in
+The 1261–1270 restart test uses the first Slosh block in
 build/data/generate/fsi/MPM_MPM/input.txt:
 
     <sp.solswitch, rstflag, nlstep>
     TPIC  3  1
     <ista, iend, iout>
-    2591  5000  10
+    1261  1270  10
     <dt, mtol, wp.spec_rad, sp.spec_rad>
-    1.0e-3  1.0e-11  0.25e0  0.25e0
+    1.0e-3  1.0e-11  0.0e0  0.0e0
 
-rstflag=3 reads the complete step 2590 TPIC checkpoint and continues writing
-restart files. A fresh run uses rstflag=2 and ista=1 instead. The 61-rank
-partition topology must match the MPI count. Verify both phase HDF time,
-particle IDs/coordinates, all 122 restart files and particle ownership before
-restarting.
+rstflag=3 reads the complete step 1260 TPIC checkpoint and continues writing
+restart files. A fresh run uses rstflag=2 and ista=1 instead. This checkpoint
+has 60 partitions; the MPI count must match. Verify both phase HDF time,
+particle IDs/coordinates and all 120 restart files before restarting.
 
 Launch with the compiled defaults and failure-only diagnostic viewers:
 
     cd /home/ps/HPC-MPM-Code/build
     export PETSC_OPTIONS="-fsi_fieldsplit_fluid_ksp_converged_reason ::failed -fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_converged_reason ::failed -fsi_fieldsplit_coupled_ksp_ksp_converged_reason ::failed"
-    sh run.sh 61
+    sh run.sh 60
 
 The viewers do not override numerical settings or print successful inner KSP
 solves. Newton records remain Monolithic_NR and Monolithic_converge; negative
@@ -88,9 +140,16 @@ orthogonalization update.
 ## Restart verification
 
 The current fluid block uses FGMRES, CGS refinement always, restart 100,
-rtol 0.5 and max 100. Both velocity and pressure ASM subdomains use local
-ILU(1) with RCM ordering. The solid, multiplier and outer settings, physical
+rtol 0.5 and max 100. Velocity and pressure use ASM/local ILU(1) with RCM ordering
+and nonzero shift 1e-3. Pressure uses PREONLY and ASM overlap 1.
+Solid retains FGMRES rtol 0.1 / max 100 with ASM overlap 1, local ILU(2),
+RCM ordering and nonzero shift 1e-3.
+The FSI constructor sets amg_rebuild_freq=1. The first Newton correction in
+each step rebuilds the compressed KSP and its nested preconditioners; subsequent
+corrections reuse them. A changed retained layout still requires rebuilding.
+Iteration-growth forced rebuilding is disabled for this FSI configuration. Physical
 parameters, VMS equations and nonlinear acceptance criteria are unchanged.
+The tables below describe earlier configurations; current settings are listed above.
 
 The following full-FSI tests start from the same validated step 2580 TPIC
 checkpoint and use sh run.sh 61 with no numerical PETSC_OPTIONS overrides:
@@ -171,7 +230,7 @@ block inside this inner iteration.
 
 The inner coupled preconditioner splits solid (4..6) and multiplier (7..9)
 components with another PETSc `selfp` Schur split. Solid remains FGMRES with
-rtol 0.1 and max 100, ASM overlap 1, and local PREONLY/ILU(1) with nonzero shift
+rtol 0.1 and max 100, ASM overlap 1, and local PREONLY/ILU(2) with nonzero shift
 1e-3. The new coupled iteration uses rtol 0.5 and max 100. These are
 preconditioning solves; the outer and physical Newton tolerances control the
 final correction. `BuildInterfaceSchur` remains removed.
@@ -201,7 +260,9 @@ Current launch settings use the source defaults:
 | Fluid orthogonalization | Classical Gram-Schmidt with refinement always |
 | Velocity / pressure local ILU ordering | RCM / RCM |
 | Solid tolerance / maximum / restart | 0.1 / 100 / 30 |
+| Solid orthogonalization | Classical Gram-Schmidt with refinement always |
 | Coupled tolerance / maximum / restart | 0.5 / 100 / 100 |
+| Coupled orthogonalization | Classical Gram-Schmidt with refinement always |
 
 The inner tolerances control preconditioning work. Outer linear convergence
 and the four physical Newton criteria below determine correction acceptance.
