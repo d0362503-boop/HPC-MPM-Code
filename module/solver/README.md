@@ -490,7 +490,7 @@ and are reset when their mesh/numbering is rebuilt.
 | Components | 4 | 3 | 10, with 37 stored blocks |
 | Equation compression | Shared `CrsMat` | Shared `CrsMat` | Shared `CrsMat` |
 | Native vector length | `nodec * 4` | `nodec * 3` | `nodec * 10` |
-| PC | Velocity/pressure Schur + BoomerAMG | ASM overlap 1 / ILU(1), shift `1e-3` | Fluid / [solid + lambda], nested SELFP/PCKSP; velocity/pressure ASM-ILU(1), solid FGMRES + ASM-ILU(2) |
+| PC | Velocity/pressure Schur + BoomerAMG | ASM overlap 1 / ILU(1), shift `1e-3` | Fluid / [solid + lambda], nested SELFP/PCKSP; velocity/pressure ASM-ILU(2), solid FGMRES + ASM-ILU(2) |
 | Node activation | Absolute `nmass > mtol` | Absolute `nmass > mtol` | Relative phase mean times `1e-4` by default, plus wet multiplier test |
 | PC cadence | 1 step | 1 step | 1 step |
 

@@ -13,7 +13,7 @@ solid displacement (3), and interface multipliers (3), stored in 37 scalar block
 | Newton correction | Zero initial guess; physical RHS preserved before scaling and restored after solving |
 | Root preconditioner | Lower Schur split: fluid / [solid + lambda] |
 | Coupled preconditioning | PCKSP inner FGMRES acts on PETSc's assembled `selfp` Pmat, retaining solid/lambda coupling |
-| Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 100, restart 100; velocity/pressure lower Schur; velocity and pressure PREONLY + ASM/local ILU(1), RCM ordering, nonzero shift 1e-3 |
+| Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 200, restart 100; velocity/pressure lower Schur; velocity and pressure PREONLY + ASM/local ILU(2), RCM ordering, nonzero shift 1e-3 |
 | Preconditioner refresh | Constructor sets `amg_rebuild_freq=1`; rebuild at NR=0 each step and reuse for NR>0 when the retained layout is unchanged |
 | Solid block | FGMRES with CGS refinement always, `restart=30`, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(2), RCM ordering, nonzero shift `1e-3` |
 | Mass activation | Each phase uses `1e-4` times its mean effective nodal mass; wet-interface and physical constraints determine active multiplier components |
@@ -21,8 +21,8 @@ solid displacement (3), and interface multipliers (3), stored in 37 scalar block
 ```text
 Outer FGMRES: fluid / [solid + lambda], lower Schur split
   fluid: FGMRES with CGS refinement always, velocity / pressure Schur split
-    velocity: PREONLY + ASM / ILU(1), RCM ordering
-    pressure: PREONLY + ASM overlap 1 / local PREONLY + ILU(1), RCM ordering
+    velocity: PREONLY + ASM / ILU(2), RCM ordering
+    pressure: PREONLY + ASM overlap 1 / local PREONLY + ILU(2), RCM ordering
   [solid + lambda]: PREONLY + PCKSP
     inner FGMRES acts on the assembled selfp Pmat
     solid / lambda: lower Schur split
@@ -36,8 +36,8 @@ coupling inside that approximation. The outer FGMRES solves the full coupled
 equations. PETSc constructs the Schur preconditioning matrices; no custom
 `BuildInterfaceSchur` implementation or global direct solver is used.
 
-Velocity and pressure use ASM/local ILU(1) with RCM ordering and
-nonzero shift 1e-3. Pressure uses PREONLY, ASM overlap 1 and local PREONLY/ILU(1).
+Velocity and pressure use ASM/local ILU(2) with RCM ordering and
+nonzero shift 1e-3. Pressure uses PREONLY, ASM overlap 1 and local PREONLY/ILU(2).
 Solid uses FGMRES with rtol 0.1 and max 100, ASM overlap 1 and local
 PREONLY/ILU(2), retaining RCM ordering and nonzero shift 1e-3. The multiplier Schur PC retains
 ASM/local ILU(1). These choices affect the preconditioner only.
@@ -140,7 +140,7 @@ orthogonalization update.
 ## Restart verification
 
 The current fluid block uses FGMRES, CGS refinement always, restart 100,
-rtol 0.5 and max 100. Velocity and pressure use ASM/local ILU(1) with RCM ordering
+rtol 0.5 and max 200. Velocity and pressure use ASM/local ILU(2) with RCM ordering
 and nonzero shift 1e-3. Pressure uses PREONLY and ASM overlap 1.
 Solid retains FGMRES rtol 0.1 / max 100 with ASM overlap 1, local ILU(2),
 RCM ordering and nonzero shift 1e-3.
@@ -256,13 +256,13 @@ Current launch settings use the source defaults:
 |---------|-------|
 | Mass activity | Relative phase mean times 1e-4 |
 | Outer restart | 200 |
-| Fluid tolerance / maximum / restart | 0.5 / 100 / 100 |
+| Fluid tolerance / maximum / restart | 0.5 / 200 / 100 |
 | Fluid orthogonalization | Classical Gram-Schmidt with refinement always |
-| Velocity / pressure local ILU ordering | RCM / RCM |
+| Velocity / pressure local ILU fill / ordering | 2 / RCM for both |
 | Solid tolerance / maximum / restart | 0.1 / 100 / 30 |
 | Solid orthogonalization | Classical Gram-Schmidt with refinement always |
 | Coupled tolerance / maximum / restart | 0.5 / 100 / 100 |
-| Coupled orthogonalization | Classical Gram-Schmidt with refinement always |
+| Coupled orthogonalization | Classical Gram-Schmidt; no explicit refinement option (PETSc default: never) |
 
 The inner tolerances control preconditioning work. Outer linear convergence
 and the four physical Newton criteria below determine correction acceptance.
