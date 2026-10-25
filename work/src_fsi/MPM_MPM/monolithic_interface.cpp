@@ -164,10 +164,9 @@ MPMMPMMonolithicFSI::BuildSolidInterface(const std::vector<double> &solid_phi) c
     return this->GatherInterfaceGeometry(surface);
 }
 
-std::vector<std::array<std::array<double, 3>, 2>> MPMMPMMonolithicFSI::BuildFluidDomains() const {
+std::vector<std::array<double, 4>> MPMMPMMonolithicFSI::BuildFluidSupportParticles() const {
 
-    std::vector<std::array<std::array<double, 3>, 2>> domains;
-    const double reference_volume = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
+    std::vector<double> packed;
 
     for (int cell = 0; cell < nelem; ++cell) {
         double solid_support = 0.0;
@@ -176,40 +175,47 @@ std::vector<std::array<std::array<double, 3>, 2>> MPMMPMMonolithicFSI::BuildFlui
 
         int pid = this->fluid_.idepf[cell];
         while (pid != -1) {
-            const double volume_scale = std::cbrt(this->fluid_.vol[pid] / reference_volume);
-            std::array<std::array<double, 3>, 2> domain;
-
-            // ponytail: preserve volume and grid aspect ratio; fluid domain deformation is not tracked.
-            for (int d = 0; d < 3; ++d) {
-                const double half_width = 0.5 * dxy[d] / npxye[d] * volume_scale;
-                domain[0][d] = this->fluid_.coord[pid][d] - half_width;
-                domain[1][d] = this->fluid_.coord[pid][d] + half_width;
-            }
-
-            domains.push_back(domain);
+            packed.insert(packed.end(), this->fluid_.coord[pid].begin(), this->fluid_.coord[pid].end());
+            packed.push_back(this->fluid_.vol[pid]);
 
             pid = this->fluid_.idp2p[pid];
         }
     }
 
-    return this->GatherInterfaceGeometry(domains);
+    const int local_count = packed.size();
+    std::vector<int> counts(nprocs), offsets(nprocs);
+    MPI_Allgather(&local_count, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    for (int rank = 1; rank < nprocs; ++rank) { offsets[rank] = offsets[rank - 1] + counts[rank - 1]; }
+
+    std::vector<double> gathered(offsets.back() + counts.back());
+    MPI_Allgatherv(packed.data(), local_count, MPI_DOUBLE, gathered.data(), counts.data(), offsets.data(), MPI_DOUBLE,
+                   MPI_COMM_WORLD);
+
+    std::vector<std::array<double, 4>> particles(gathered.size() / 4);
+    for (std::size_t p = 0; p < particles.size(); p++) {
+        for (int d = 0; d < 4; d++) { particles[p][d] = gathered[4 * p + d]; }
+    }
+
+    return particles;
 }
 
 std::map<std::array<int, 3>, std::vector<std::size_t>>
-MPMMPMMonolithicFSI::IndexFluidDomains(const std::vector<std::array<std::array<double, 3>, 2>> &domains) const {
+MPMMPMMonolithicFSI::IndexFluidSupportParticles(const std::vector<std::array<double, 4>> &particles) const {
 
     std::map<std::array<int, 3>, std::vector<std::size_t>> bins;
-    for (std::size_t domain_id = 0; domain_id < domains.size(); domain_id++) {
+    const double pi = std::acos(-1.0);
+    for (std::size_t particle_id = 0; particle_id < particles.size(); particle_id++) {
+        const std::array<double, 4> &particle = particles[particle_id];
+        const double diameter = std::cbrt(6.0 * particle[3] / pi);
         std::array<int, 3> lower, upper;
         for (int d = 0; d < 3; d++) {
-            const double margin = 1.5 * dxy[d];
-            lower[d] = int(std::floor((domains[domain_id][0][d] - margin) / dxy[d]));
-            upper[d] = int(std::floor((domains[domain_id][1][d] + margin) / dxy[d]));
+            lower[d] = int(std::floor((particle[d] - diameter) / dxy[d]));
+            upper[d] = int(std::floor((particle[d] + diameter) / dxy[d]));
         }
 
         for (int k = lower[2]; k <= upper[2]; k++) {
             for (int j = lower[1]; j <= upper[1]; j++) {
-                for (int i = lower[0]; i <= upper[0]; i++) { bins[{i, j, k}].push_back(domain_id); }
+                for (int i = lower[0]; i <= upper[0]; i++) { bins[{i, j, k}].push_back(particle_id); }
             }
         }
     }
@@ -219,7 +225,7 @@ MPMMPMMonolithicFSI::IndexFluidDomains(const std::vector<std::array<std::array<d
 
 double MPMMPMMonolithicFSI::WetInterfaceAreaDensity(const std::array<double, 3> &point,
                                                     const interface_geometry::InterfaceSDF &interface,
-                                                    const std::vector<std::array<std::array<double, 3>, 2>> &domains,
+                                                    const std::vector<std::array<double, 4>> &particles,
                                                     const std::map<std::array<int, 3>, std::vector<std::size_t>> &bins) const {
 
     std::array<double, 3> surface_point, normal;
@@ -237,15 +243,14 @@ double MPMMPMMonolithicFSI::WetInterfaceAreaDensity(const std::array<double, 3> 
     const auto fluid_bin = bins.find(cell);
     if (fluid_bin == bins.end()) return 0.0;
 
-    for (std::size_t domain_id : fluid_bin->second) {
-        std::array<double, 3> separation{};
-        for (int d = 0; d < 3; d++) {
-            const double nearest = std::clamp(surface_point[d], domains[domain_id][0][d], domains[domain_id][1][d]);
-            separation[d] = (surface_point[d] - nearest) / (1.5 * dxy[d]);
-        }
+    const double pi = std::acos(-1.0);
+    for (std::size_t particle_id : fluid_bin->second) {
+        const std::array<double, 4> &particle = particles[particle_id];
+        const double diameter = std::cbrt(6.0 * particle[3] / pi);
+        std::array<double, 3> separation;
+        for (int d = 0; d < 3; d++) { separation[d] = surface_point[d] - particle[d]; }
 
-        if (DotVec3(separation, separation) <= 1.0) {
-            const double pi = std::acos(-1.0);
+        if (DotVec3(separation, separation) <= diameter * diameter) {
             return (1.0 + std::cos(pi * signed_distance / band_width)) / (2.0 * band_width);
         }
     }
@@ -256,8 +261,8 @@ double MPMMPMMonolithicFSI::WetInterfaceAreaDensity(const std::array<double, 3> 
 void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 
     std::vector<std::array<std::array<double, 3>, 3>> surface = this->BuildSolidInterface(this->solid_.nphi);
-    const std::vector<std::array<std::array<double, 3>, 2>> fluid_domains = this->BuildFluidDomains();
-    const std::map<std::array<int, 3>, std::vector<std::size_t>> fluid_bins = this->IndexFluidDomains(fluid_domains);
+    const std::vector<std::array<double, 4>> fluid_particles = this->BuildFluidSupportParticles();
+    const std::map<std::array<int, 3>, std::vector<std::size_t>> fluid_bins = this->IndexFluidSupportParticles(fluid_particles);
     interface_geometry::InterfaceSDF interface(std::move(surface), {dxy[0], dxy[1], dxy[2]});
 
     std::array<std::array<double, 3>, 6> quadrature_offset;
@@ -283,7 +288,7 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
                 xyg[1] = cell_center[1] + quadrature_offset[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
                     xyg[0] = cell_center[0] + quadrature_offset[ix][0];
-                    const double area_density = this->WetInterfaceAreaDensity(xyg, interface, fluid_domains, fluid_bins);
+                    const double area_density = this->WetInterfaceAreaDensity(xyg, interface, fluid_particles, fluid_bins);
                     if (area_density == 0.0) continue;
 
                     MakeSF(m, xyg, idimc, xynodec, ncm, nenode, sf, dsf);

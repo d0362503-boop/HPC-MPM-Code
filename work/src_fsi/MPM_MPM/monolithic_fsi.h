@@ -159,7 +159,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
     /**
      * @brief Exchange current interface geometry across MPI ranks.
-     * @param local_geometry Rank-local solid triangles or nearby fluid particle-domain bounds.
+     * @param local_geometry Rank-local solid triangles in physical coordinates.
      * @return Physical geometry available to all ranks in the current configuration.
      */
     template <size_t vertex_count>
@@ -204,29 +204,29 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface(const std::vector<double> &solid_phi) const;
 
     /**
-     * @brief Reconstruct and exchange finite fluid domains near the solid interface.
-     * @return Globally available particle-box bounds in the current physical configuration.
+     * @brief Exchange nearby fluid centers and current particle volumes.
+     * @return Globally available records containing x, y, z and particle volume.
      */
-    std::vector<std::array<std::array<double, 3>, 2>> BuildFluidDomains() const;
+    std::vector<std::array<double, 4>> BuildFluidSupportParticles() const;
 
     /**
-     * @brief Index finite fluid boxes within the existing contact activation band.
-     * @param domains Current volume-equivalent fluid particle boxes in physical coordinates.
-     * @return Spatial bins covering each box expanded by 1.5 background-grid spacings.
+     * @brief Index each fluid center within one equivalent particle diameter.
+     * @param particles Fluid records containing x, y, z and current volume.
+     * @return Spatial bins covering each particle-centered spherical search region.
      */
     std::map<std::array<int, 3>, std::vector<std::size_t>>
-    IndexFluidDomains(const std::vector<std::array<std::array<double, 3>, 2>> &domains) const;
+    IndexFluidSupportParticles(const std::vector<std::array<double, 4>> &particles) const;
 
     /**
      * @brief Evaluate wet-interface area density chi_w * delta_epsilon(d_s).
      * @param point Current volume quadrature position.
      * @param interface Indexed solid surface in the current configuration.
-     * @param domains Current volume-equivalent fluid particle boxes.
-     * @param bins Candidate fluid boxes in the grid-scaled contact band.
+     * @param particles Fluid records containing x, y, z and current volume, used to compute equivalent diameters.
+     * @param bins Candidate fluid particles within one diameter of the projected surface point.
      * @return Interface area per volume [1/m], zero outside the band or on dry surfaces.
      */
     double WetInterfaceAreaDensity(const std::array<double, 3> &point, const interface_geometry::InterfaceSDF &interface,
-                                   const std::vector<std::array<std::array<double, 3>, 2>> &domains,
+                                   const std::vector<std::array<double, 4>> &particles,
                                    const std::map<std::array<int, 3>, std::vector<std::size_t>> &bins) const;
 };
 
