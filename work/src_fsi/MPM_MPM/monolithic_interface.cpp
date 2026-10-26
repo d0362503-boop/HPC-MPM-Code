@@ -336,6 +336,7 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
 
     interface_geometry::InterfaceSDF interface(this->BuildSolidInterface(final_phi), {dxy[0], dxy[1], dxy[2]});
 
+    const double retreat_offset = 0.1 * dxy[0];
     int corrected = 0;
     double maximum_shift = 0.0;
     for (int pid = 0; pid < this->fluid_.num; pid++) {
@@ -343,8 +344,10 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
         std::array<double, 3> surface_point, normal;
         double signed_distance;
         if (!interface.FindSurfacePoint(original, surface_point, signed_distance, normal) || signed_distance >= 0.0) continue;
-        this->fluid_.coord[pid] = surface_point;
-        maximum_shift = std::max(maximum_shift, -signed_distance);
+        for (int d = 0; d < 3; d++) {
+            this->fluid_.coord[pid][d] = surface_point[d] + retreat_offset * normal[d];
+        }
+        maximum_shift = std::max(maximum_shift, NormVec3(DifferenceVec3(this->fluid_.coord[pid], original)));
         corrected++;
     }
 

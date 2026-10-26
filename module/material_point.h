@@ -437,14 +437,14 @@ class MaterialPoint {
                         const std::vector<std::array<double, 3>> &dsf) const noexcept;
 
     /**
-     * @brief Project a particle-shifting displacement into the common interface and wall tangent space.
+     * @brief Apply full wall constraints and continuous interface-normal removal to a particle shift.
      * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
      * @param interface_normal Unit material-interface normal interpolated at the material point.
-     * @param surface_particle Whether the material-interface constraint is active at the material point.
+     * @param normal_removal_weight Fraction in [0,1] of the interface-normal shift to remove; wall constraints remain full.
      * @param disp_corr Particle-shifting displacement replaced by its constrained value.
      */
     void ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &interface_normal,
-                                  bool surface_particle, std::array<double, 3> &disp_corr) const;
+                                  double normal_removal_weight, std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.

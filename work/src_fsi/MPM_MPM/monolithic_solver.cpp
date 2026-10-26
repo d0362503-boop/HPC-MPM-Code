@@ -123,26 +123,10 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
 
 void MPMMPMMonolithicFSI::BuildActiveDOFs() {
 
-    double mass_stats[4]{};
-    for (int n = 0; n < nodec; n++) {
-        if (this->fluid_.nmass[n] > mtol) {
-            mass_stats[0] += this->fluid_.nmass[n] * dbc[n];
-            mass_stats[1] += dbc[n];
-        }
-        if (this->solid_.nmass[n] > mtol) {
-            mass_stats[2] += this->solid_.nmass[n] * dbc[n];
-            mass_stats[3] += dbc[n];
-        }
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, mass_stats, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    const double fluid_cut = 1.0e-4 * mass_stats[0] / mass_stats[1];
-    const double solid_cut = 1.0e-4 * mass_stats[2] / mass_stats[3];
-
     this->fixed_dof.assign(nodec * this->fsi_sys.ndof, 0);
     for (int n = 0; n < nodec; n++) {
-        const bool fluid_active = this->fluid_.nmass[n] > fluid_cut;
-        const bool solid_active = this->solid_.nmass[n] > solid_cut;
+        const bool fluid_active = this->fluid_.nmass[n] > mtol;
+        const bool solid_active = this->solid_.nmass[n] > mtol;
         for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
         for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
         for (int d = 7; d < this->fsi_sys.ndof; d++) {

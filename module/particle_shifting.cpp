@@ -68,17 +68,21 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
 }
 
 void MaterialPoint::ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord,
-                                             const std::array<double, 3> &interface_normal, bool surface_particle,
+                                             const std::array<double, 3> &interface_normal, double normal_removal_weight,
                                              std::array<double, 3> &disp_corr) const {
 
+    std::array<double, 3> wall_shift = disp_corr;
     std::array<std::array<double, 3>, 4> constraints{};
     int constraint_count = 0;
-    if (surface_particle) { constraints[constraint_count++] = interface_normal; }
+    if (normal_removal_weight > 0.0e0) { constraints[constraint_count++] = interface_normal; }
 
     for (int i = 0; i < 3; i++) {
         const bool near_lower_wall = particle_coord[i] - xyminw[i] < dxy[i];
         const bool near_upper_wall = xymaxw[i] - particle_coord[i] < dxy[i];
-        if (near_lower_wall || near_upper_wall) { constraints[constraint_count++][i] = 1.0e0; }
+        if (near_lower_wall || near_upper_wall) {
+            wall_shift[i] = 0.0e0;
+            constraints[constraint_count++][i] = 1.0e0;
+        }
     }
 
     std::array<std::array<double, 3>, 3> normal_basis{};
@@ -106,6 +110,10 @@ void MaterialPoint::ConstrainPSTDisplacement(const std::array<double, 3> &partic
         for (int i = 0; i < 3; i++) { disp_corr[i] -= normal_shift * normal_basis[n][i]; }
     }
 
+    for (int i = 0; i < 3; i++) {
+        disp_corr[i] = wall_shift[i] - normal_removal_weight * (wall_shift[i] - disp_corr[i]);
+    }
+
     return;
 }
 
@@ -123,11 +131,6 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     std::vector<double> surface_weight;
     this->CalPointUnitNormal(particle_normal, surface_weight);
 
-    std::vector<int> surface_tag(this->num, 0);
-    for (int n = 0; n < this->num; n++) {
-        if (surface_weight[n] < 0.6e0 && surface_weight[n] > 0.4e0) { surface_tag[n] = 1; }
-    }
-
     // -------------------------------------------------------------------------
     // 2. Ghost particle communication
     // -------------------------------------------------------------------------
@@ -144,7 +147,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
 
     std::vector<std::vector<int>> send_ids(isb);
     for (int ip = 0; ip < this->num; ip++) {
-        const double support = std::cbrt(this->vol[ip]);
+        const double support = 0.5e0 * dxy[0];
 
         for (int i = 0; i < isb; ++i) {
             bool intersects_peer = true;
@@ -257,7 +260,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     const double gamma_s = 50.0e0;
 
     for (int ip = 0; ip < this->num; ip++) {
-        const double support = std::cbrt(this->vol[ip]);
+        const double support = 0.5e0 * dxy[0];
         const double support_sq = support * support;
         const std::array<double, 3> &pi = this->coord[ip];
 
@@ -320,7 +323,8 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     // 5. Interface and wall tangential projection
     // -------------------------------------------------------------------------
     for (int n = 0; n < this->num; n++) {
-        this->ConstrainPSTDisplacement(this->coord[n], particle_normal[n], surface_tag[n] != 0, disp_corr[n]);
+        const double alpha = std::max(0.0e0, std::min(1.0e0, 1.0e0 - surface_weight[n]));
+        this->ConstrainPSTDisplacement(this->coord[n], particle_normal[n], alpha, disp_corr[n]);
 
         const double shift_norm = NormVec3(disp_corr[n]);
         const double max_shift = dxy[0] / 10.0e0;

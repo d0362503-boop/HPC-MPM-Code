@@ -41,8 +41,6 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
 
     this->BuildActiveDOFs();
 
-    this->fluid_.MakeNSStabCoeff(this->fluid_.nvel);
-
     std::vector<std::array<double, 6>> stress_k = this->solid_.InitializeNRStress();
 
     std::vector<double> nvel_f(nodec * 3), nvel_s(nodec * 3);
@@ -139,7 +137,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
 bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-10, 1.0e-10, 1.0e-10};
+    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-10, 1.0e-10, 1.0e-8};
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
     // Fields 0..2: max(absolute_tol, 1e-4 * initial nonlinear residual RMS).
