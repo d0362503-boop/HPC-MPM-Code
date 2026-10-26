@@ -164,7 +164,7 @@ PetscErrorCode CrsMat::SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it) {
         PetscCall(this->ConfigureReducedPreconditioner());
     } else {
         PetscCall(KSPSetOperators(this->ksp, this->reduced_matrix_, this->reduced_matrix_));
-        PetscCall(KSPSetReusePreconditioner(this->ksp, PETSC_TRUE));
+        PetscCall(KSPSetReusePreconditioner(this->ksp, PETSC_FALSE));
     }
     PetscCall(KSPSetInitialGuessNonzero(this->ksp, PETSC_FALSE));
     PetscCall(KSPSolve(this->ksp, reduced_rhs, reduced_x));

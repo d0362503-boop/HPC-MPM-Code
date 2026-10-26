@@ -29,7 +29,6 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
     this->fsi_sys.use_petsc = true;
     this->fsi_sys.use_schur_fieldsplit = true;
     this->fsi_sys.amg_rebuild_freq = 1;                // refresh at each step start
-    this->fsi_sys.rebuild_on_iteration_growth = false; // reuse within Newton loop
     this->fsi_sys.owner_ = this;
 }
 

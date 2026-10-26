@@ -68,21 +68,17 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
 }
 
 void MaterialPoint::ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord,
-                                             const std::array<double, 3> &interface_normal, double normal_removal_weight,
+                                             const std::array<double, 3> &interface_normal, bool surface_particle,
                                              std::array<double, 3> &disp_corr) const {
 
-    std::array<double, 3> wall_shift = disp_corr;
     std::array<std::array<double, 3>, 4> constraints{};
     int constraint_count = 0;
-    if (normal_removal_weight > 0.0e0) { constraints[constraint_count++] = interface_normal; }
+    if (surface_particle) { constraints[constraint_count++] = interface_normal; }
 
     for (int i = 0; i < 3; i++) {
         const bool near_lower_wall = particle_coord[i] - xyminw[i] < dxy[i];
         const bool near_upper_wall = xymaxw[i] - particle_coord[i] < dxy[i];
-        if (near_lower_wall || near_upper_wall) {
-            wall_shift[i] = 0.0e0;
-            constraints[constraint_count++][i] = 1.0e0;
-        }
+        if (near_lower_wall || near_upper_wall) { constraints[constraint_count++][i] = 1.0e0; }
     }
 
     std::array<std::array<double, 3>, 3> normal_basis{};
@@ -108,10 +104,6 @@ void MaterialPoint::ConstrainPSTDisplacement(const std::array<double, 3> &partic
         double normal_shift = 0.0e0;
         for (int i = 0; i < 3; i++) { normal_shift += disp_corr[i] * normal_basis[n][i]; }
         for (int i = 0; i < 3; i++) { disp_corr[i] -= normal_shift * normal_basis[n][i]; }
-    }
-
-    for (int i = 0; i < 3; i++) {
-        disp_corr[i] = wall_shift[i] - normal_removal_weight * (wall_shift[i] - disp_corr[i]);
     }
 
     return;
@@ -323,8 +315,8 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     // 5. Interface and wall tangential projection
     // -------------------------------------------------------------------------
     for (int n = 0; n < this->num; n++) {
-        const double alpha = std::max(0.0e0, std::min(1.0e0, 1.0e0 - surface_weight[n]));
-        this->ConstrainPSTDisplacement(this->coord[n], particle_normal[n], alpha, disp_corr[n]);
+        const bool surface_particle = surface_weight[n] >= 0.3e0 && surface_weight[n] <= 0.7e0;
+        this->ConstrainPSTDisplacement(this->coord[n], particle_normal[n], surface_particle, disp_corr[n]);
 
         const double shift_norm = NormVec3(disp_corr[n]);
         const double max_shift = dxy[0] / 10.0e0;
