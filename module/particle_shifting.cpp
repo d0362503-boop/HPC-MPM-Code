@@ -139,7 +139,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
 
     std::vector<std::vector<int>> send_ids(isb);
     for (int ip = 0; ip < this->num; ip++) {
-        const double support = 0.5e0 * dxy[0];
+        const double support = 0.75e0 * dxy[0];
 
         for (int i = 0; i < isb; ++i) {
             bool intersects_peer = true;
@@ -252,7 +252,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     const double gamma_s = 50.0e0;
 
     for (int ip = 0; ip < this->num; ip++) {
-        const double support = 0.5e0 * dxy[0];
+        const double support = 0.75e0 * dxy[0];
         const double support_sq = support * support;
         const std::array<double, 3> &pi = this->coord[ip];
 
