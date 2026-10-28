@@ -139,12 +139,12 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm
     const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-13, 1.0e-10, 1.0e-10};
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
-    // Fields 0..2: max(absolute_tol, 1e-4 * initial nonlinear residual RMS).
+    // Fields 0..2: max(absolute_tol, 1e-5 * initial nonlinear residual RMS).
     // Field 3: displacement-increment RMS <= 1e-10 m, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         if (NR_it == 0 && field < 3) { initial_norm[field] = stats[field]; }
-        const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-4 * initial_norm[field]);
+        const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-5 * initial_norm[field]);
         converged = converged && stats[field] <= tolerance;
     }
 
