@@ -18,7 +18,7 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 Shared helpers live outside this directory:
 
 - `module/particle_shifting.cpp` — `DeltaCorrectionPST()` and `PairwiseRepulsivePST()`.
-- `module/nonlinear_time_integration.cpp` — `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`.
+- `module/generalized_alpha_integrator.cpp` — `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
 ## Class Architecture
@@ -73,6 +73,15 @@ distribution and rebuilds the partition-dependent data (mesh, `nvol`, BCs, `NS_`
 See `module/DLB/README.md` for the full pipeline and its invariants.
 
 ## Time Integration
+
+`CommitImplicitParticleKinematics()` uses each particle object's own normal
+velocity and inflow BCs. A whole box face is closed only when every face control
+point prescribes zero normal velocity and no normal inflow is marked. Shared
+control points are counted with `dbc`; reductions combine face counts and inflow flags.
+After displacement and PST, closed-face overshoots are moved `0.01*dxy[i]` inside.
+Other faces allow outflow. The same rule applies to implicit solid commits;
+velocity, acceleration and constitutive state are unchanged. This is a geometric
+restriction for whole faces, not a wall-reaction model or a local-opening treatment.
 
 ### 1. Newmark-β / Generalized-α predictor
 

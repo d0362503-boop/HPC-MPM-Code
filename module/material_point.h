@@ -283,15 +283,39 @@ class MaterialPoint {
     void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
 
     /**
+     * @brief Identify whole box faces with stationary impermeable normal BCs.
+     * @return Flags indexed by 2*axis+side (side 0: lower, 1: upper). A face is
+     * closed only when all face control points prescribe zero normal velocity
+     * and no normal inflow is marked; pressure and tangential BCs do not close it.
+     * @note Call collectively on all MPI ranks. Uses this object's BCs and overlap
+     * weights without caching state. Local openings within one face are not resolved.
+     */
+    std::array<bool, 6> DetermineClosedBoundaryFaces() const;
+
+    /**
+     * @brief Move one candidate coordinate inside a crossed closed box face.
+     * @param coordinate Particle coordinate after displacement and shifting.
+     * @param direction Spatial axis: 0=x, 1=y, 2=z.
+     * @param closed_face Whole-face impermeability flags for this particle object.
+     * @return Coordinate 0.01 cell widths inside a crossed closed face, or the
+     * unchanged coordinate for an interior point or an open-face crossing.
+     */
+    double ConstrainClosedBoundaryCoordinate(double coordinate, int direction,
+                                               const std::array<bool, 6> &closed_face) const;
+
+    /**
      * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
      *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
      * @param accel_old Particle acceleration from the previous step.
      * @param disp Particle displacement increments interpolated from control points.
-     * @param disp_corr Per-particle shifting displacements; supply zeros to disable shifting.
-     * @pre All three arrays contain at least `num` entries.
-     * @warning Despite the empty default argument, the current implementation indexes
-     * `disp_corr` unconditionally. Empty corrections are unsafe when `num > 0`.
-     * Shifting-induced domain crossings are currently not rejected here.
+     * @param disp_corr Per-particle shifting displacements; empty or zero disables shifting.
+     * @pre `disp` contains at least `num` entries, as does `accel_old` for FLIP.
+     * Nonempty `disp_corr` contains at least `num` entries. All MPI ranks call collectively.
+     * @note Uses this object's BCs: a whole box face is closed only when all its
+     * control points prescribe zero normal velocity and no normal inflow is marked.
+     * Closed-face overshoots are placed 0.01 cell widths inside; other faces allow outflow.
+     * This position-only restriction leaves velocity, acceleration and constitutive
+     * state unchanged. It does not handle local openings within an otherwise closed face.
      */
     void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                           const std::vector<std::array<double, 3>> &disp,
