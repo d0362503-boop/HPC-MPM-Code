@@ -48,7 +48,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     void SolveFSISystem();
 
     /**
-     * @brief Move penetrated fluid centres 0.1*dxy[0] beyond the final solid phi=0.5 surface.
+     * @brief Move penetrated fluid centres onto the final solid phi=0.5 surface.
      * @note Call after both Node2Particle updates and solid MoveParticle, before fluid MoveParticle. Reuses the solid contour
      * and finite-triangle distance routines with an updated temporary phase field. The extra offset follows
      * the solid outward unit normal; the signed-distance<0 trigger is unchanged. Projection is normal

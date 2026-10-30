@@ -121,7 +121,7 @@ std::array<bool, 6> MaterialPoint::DetermineClosedBoundaryFaces() const {
 }
 
 double MaterialPoint::ConstrainClosedBoundaryCoordinate(double coordinate, int direction,
-                                                         const std::array<bool, 6> &closed_face) const {
+                                                        const std::array<bool, 6> &closed_face) const {
 
     if (coordinate >= xyminw[direction] && coordinate <= xymaxw[direction]) return coordinate;
     const bool below_wall = coordinate < xyminw[direction];
@@ -137,7 +137,7 @@ void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::arra
                                                      const std::vector<std::array<double, 3>> &disp,
                                                      const std::vector<std::array<double, 3>> &disp_corr) {
 
-    const auto closed_face = this->DetermineClosedBoundaryFaces();
+    // const auto closed_face = this->DetermineClosedBoundaryFaces();
     const bool has_shift = !disp_corr.empty();
     for (int n = 0; n < this->num; n++) {
         for (int i = 0; i < 3; i++) {
@@ -147,7 +147,7 @@ void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::arra
             }
             this->coord[n][i] += disp[n][i];
             if (has_shift) this->coord[n][i] += disp_corr[n][i];
-            this->coord[n][i] = this->ConstrainClosedBoundaryCoordinate(this->coord[n][i], i, closed_face);
+            // this->coord[n][i] = this->ConstrainClosedBoundaryCoordinate(this->coord[n][i], i, closed_face);
         }
     }
 

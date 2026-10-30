@@ -394,6 +394,9 @@ retreat or fluid particle-to-grid mapping in this query. Triangle-interior
 projection follows the normal; edge and vertex cases use the nearest finite
 surface point.
 
+No extra outward normal offset is added: near the solid foot, such an offset
+can move an otherwise interior fluid centre through a closed domain wall.
+
 The correction changes fluid coordinates only, preserving velocity,
 acceleration, TPIC/APIC state, pressure, mass, and volume. It is a geometric
 remapping separate from PST and does not supply a contact reaction. The distance
