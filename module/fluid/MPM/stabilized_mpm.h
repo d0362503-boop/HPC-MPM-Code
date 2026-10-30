@@ -39,8 +39,7 @@ class StabilizedMPM : public MaterialPoint {
         this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
         this->NS_.FEM_flag = false;
         this->NS_.use_petsc = true;
-        this->NS_.use_schur_fieldsplit = true;
-        this->NS_.amg_rebuild_freq = 1; // rebuild AMG every step
+        this->NS_.rebuild_freq = 1; // refresh each step start
         this->NS_.owner_ = this;
     }
 

@@ -27,8 +27,7 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
                                4, 5, 6, 7, 4, 5, 6, 8, 4, 5, 6, 9, 0, 4, 1, 5, 2, 6};
     this->fsi_sys.FEM_flag = false;
     this->fsi_sys.use_petsc = true;
-    this->fsi_sys.use_schur_fieldsplit = true;
-    this->fsi_sys.amg_rebuild_freq = 1; // refresh at each step start
+    this->fsi_sys.rebuild_freq = 1; // refresh each step start
     this->fsi_sys.owner_ = this;
 }
 

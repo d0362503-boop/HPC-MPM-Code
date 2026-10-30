@@ -113,10 +113,13 @@ solver strategy. Its nonlinear check is separate from the standalone
 | Shared MPM solve/setup | Pure fluid, implicit solid and FSI retain full `nodec * ndof` assembly/vectors; `CrsMat` configures declared field groups, compresses and recovers the full solution | [Shared solver](module/solver/README.md) |
 | Solid preconditioning | FGMRES with ASM overlap 1 and local PREONLY/ILU(1), nonzero shift `1e-3` | [Implicit solid](module/solid/implicit/README.md) |
 | Coupled FSI preconditioning | Fluid / [solid + lambda] Schur grouping; the coupled inner FGMRES uses PETSc's assembled `selfp` Pmat | [FSI strategy](work/src_fsi/MPM_MPM/README.md) |
-| Logging and launch settings | Successful inner KSP reports and test timing diagnostics are disabled; future FSI launches use the source relative-mass rule | [FSI configuration](work/src_fsi/MPM_MPM/README.md) |
+| Activity and logging | Absolute `nmass > mtol` phase activation; optional PETSc performance logging | [FSI configuration](work/src_fsi/MPM_MPM/README.md) |
 
-FSI uses the source relative-mass activation rule in future launches. Launch
-options apply to new processes; editing a command does not change a running job.
+The current PETSc MPM path uses reduced equations after boundary elimination.
+It rebuilds the compact matrix values every linear solve. The KSP is recreated
+when retained equations change or the configured cadence requests it; otherwise
+the KSP is retained while its numerical preconditioner is refreshed. This is
+distinct from keeping the entire preconditioner unchanged between NR iterations.
 
 ### Selecting data tools
 
@@ -185,14 +188,11 @@ cd build
 sh run.sh [NP]
 ```
 
-`NP` must be supplied as an argument (`sh run.sh 61`) or through the `NP`
-environment variable. The current cluster script has no automatic `nproc` default.
-
-The script samples current CPU activity and chooses one logical CPU from each
-apparently idle physical core, avoiding its busy hardware-thread siblings. It
-launches `MPM` with `mpirun --cpu-list ... --bind-to cpu-list:ordered` under
-`nohup`/`setsid`. Selection is a load snapshot rather than a scheduler reservation;
-another job can subsequently move onto those cores.
+Supply the partition count as an argument (`sh run.sh 16`) or through `NP`.
+The local script falls back to `nproc` when neither is supplied, which is suitable
+only when the generated partition count matches. Launcher copies are host-local:
+cluster versions may instead require `NP` and select apparently idle physical
+cores. Inspect the installed script for its binding policy.
 
 Output goes to:
 
@@ -200,12 +200,24 @@ Output goes to:
 - `stderr/err_<PID>_<NP>.log`
 
 The launcher prints only the process count, background PID, stdout path and
-stderr path. It inherits `PETSC_OPTIONS`; it does not add
-`-fsi_mass_activity_absolute` itself. Check the installed script on another host.
+stderr path. It inherits `PETSC_OPTIONS`. For optional PETSc event timings:
+
+```bash
+PETSC_OPTIONS="-log_view" sh run.sh 16
+```
+
+PETSc writes the performance summary to stdout at normal finalization. Setup,
+preconditioner, and solve event times can overlap; do not add them as independent
+costs. Ordinary NR records report residuals and iteration counts, not separate
+KSP setup/solve times. Options and rebuilt code affect new processes only.
 
 `build/run.sh` is gitignored; copy it elsewhere if you want to version a customized version.
 
 > **Do not delete `build/`**: it contains generated runtime files, partitioned input data, and job outputs. If a clean CMake configure is needed, remove only `build/CMakeCache.txt` and `build/CMakeFiles/`.
+
+CMake copies some parameter files from `data/` into `build/data/` during
+configuration. After reconfiguring, check the selected parameter block and
+restart settings before launching; local runtime edits may have been overwritten.
 
 ## Data Generator / Partitioner Workflow
 

@@ -47,11 +47,11 @@ The projection consists of two steps:
 
 ## Integration
 
-This directory is always built as part of `mpm_modules` through `module/solid/explicit/CMakeLists.txt`. It is consumed by:
-
-- `work/src_solid/explicit/main.cpp` for the standalone explicit-solid solver.
-
-The current MPM-FEM and MPM-MPM FSI drivers use `ImplicitSolidMPM` instead.
+This directory is always built as part of `mpm_modules` through
+`module/solid/explicit/CMakeLists.txt` and exports `ExplicitSolidMPM`.
+Its force/mass acceleration update does not use `CrsMat` or a PETSc KSP.
+The reduced-equation and preconditioner rebuild policies of the implicit
+solver therefore do not apply to this explicit path.
 
 ## Notes
 

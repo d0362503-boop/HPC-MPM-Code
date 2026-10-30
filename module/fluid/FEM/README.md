@@ -22,9 +22,8 @@ The solver uses a **SUPG/PSPG stabilized formulation** with **generalized-α tim
 | `phase_field.cpp`  | Phase-field initialization, volume-fraction projection (`Particle2NodePhi`), material-property blending (`SetPFDomain`), liquid-volume calculation (`CalLiquidVol`) |
 | `fluid_fem_data_io.cpp` | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshDataVTKHDF`), VTK nodal interpolation (`Cp2NodeVTK`) |
 
-> **Note:** Default boundary-condition methods are implemented inline in
-> `stabilized_fem.h`. `FSIFluid` extends them with interface constraints in
-> `work/src_fsi/MPM_FEM/bc_setting.cpp`.
+Default boundary-condition methods are implemented inline in
+`stabilized_fem.h`; derived owners may extend these virtual hooks.
 
 ---
 
@@ -37,19 +36,16 @@ MaterialPoint  (base)
             └── PF_  : CrsMat  (ndof = 1, owner_ = this)
 ```
 
-`CrsMat` calls the protected virtual BC hooks through `owner_`. Their defaults
-live in `stabilized_fem.h`; `FSIFluid` calls these defaults before adding its
-interface constraints.
+`CrsMat` calls the virtual BC hooks through `owner_`. Their defaults
+live in `stabilized_fem.h` and collect the module's velocity/pressure constraints.
 
 ### `BuildPetscBCList(CrsMat& mat)`
 Collects Dirichlet boundary-condition global IDs for the PETSc `MatZeroRowsColumns` pass:
 - `ubc`, `vbc`, `wbc`, `pbc` — standard velocity/pressure BCs
-- `fsi_intf` — FSI interface constraints (applied to u, v, w)
 
 ### `BCResidualSet(std::vector<double>& rr)`
 Zeroes out constrained degrees of freedom in a residual / RHS vector after a matrix-vector product:
 - `ubc`, `vbc`, `wbc` on their corresponding velocity components
-- `fsi_intf` on u, v, w in the FSI override
 - `pbc` on p
 
 These overrides replace the former free-function `BCResidualSet` that contained a hard-coded `if (ndof == 4) … else …` branch, achieving full polymorphic decoupling between `CrsMat` and fluid-specific logic.
@@ -58,7 +54,8 @@ These overrides replace the former free-function `BCResidualSet` that contained 
 
 ## Numerical Method
 
-The phase helpers below (`ComputeAdvectionVel`, `MakeNSStabCoeff`, `AssembleSystem`) are private members called by `SolveNS`.
+`SolveNS` calls the phase helpers below: `ComputeAdvectionVel`,
+`MakeNSStabCoeff`, and `AssembleSystem`.
 
 ### 1. Generalized-α Predictor
 ```cpp
@@ -93,16 +90,22 @@ else                 →  GPBiCGAR (custom iterative solver)
 ```
 After convergence, the solution vector `NS_.x_lhs` is unpacked back into `nvel` (u, v, w) and `npres` (p).
 
-`NS_` enables `use_schur_fieldsplit = true` by default. PETSc therefore applies a lower
+`ConfigurePreconditioner()` selects `PCFIELDSPLIT` directly for `NS_`, applying a lower
 Schur field split to the four-component stabilized fluid system: components 0--2 form the
 velocity block and component 3 forms the pressure block. Both child blocks use
 HYPRE/BoomerAMG with PETSc's unshifted SELFP pressure Pmat and default scalar
 diagonal inverse approximation and no additional pressure shift.
-`PF_` keeps base BoomerAMG.
+The scalar `PF_` system delegates PC selection to the base BoomerAMG callback;
+the four-component NS system uses the velocity/pressure split. `PF_` remains
+reserved rather than advanced by the current module workflow.
 
-The 2026-10-13 shared API reads each matrix's `ndof` member rather than receiving
+The shared API reads each matrix's `ndof` member rather than receiving
 a repeated dimension argument. FEM retains its full equation layout;
-the new automatic compression applies to PETSc MPM systems only. See the
+reduced equation extraction applies to PETSc MPM systems only. The FEM NS
+constructor sets `rebuild_freq=20`. The shared solver checks the actual PC type
+when rebuilding, preserving FieldSplit groups without a separate boolean flag.
+Between rebuilds, the FEM solve can
+reuse the existing numerical PC while matrix values continue to update. See the
 [shared solver guide](../../solver/README.md).
 
 ### 5. Time-History Update (`UpdateNodalVar`)
@@ -134,7 +137,7 @@ npres_old  ← npres
 
 ## Integration with the Rest of the Codebase
 
-- **`CrsMat`** (`module/solver/`) — sparse-matrix wrapper; default BC methods live in `stabilized_fem.h`, with coupled overrides in `work/src_fsi/MPM_FEM/bc_setting.cpp`.
+- **`CrsMat`** (`module/solver/`) — sparse-matrix wrapper; default BC methods live in `stabilized_fem.h`.
 - **`MaterialPoint`** (`module/material_point.h`) — base class providing the `BuildPetscBCList` and `BCResidualSet` virtual hooks.
 - **Solvers** (`module/solver/solver.cpp`) — generic GPBiCG* routines call `mat.MatVecMult(xx)` and `mat.owner_->BCResidualSet(rr)` without knowing whether the matrix belongs to fluid or solid physics.
 
@@ -143,5 +146,5 @@ npres_old  ← npres
 ## Coding Style Notes
 
 - Trailing underscore for class members (`owner_`, `NS_`, `PF_`).
-- The class lives in namespace `stabilizedfem`; the partitioned FSI driver defines `FSIFluid` in `work/src_fsi/MPM_FEM/block_fsi.h`.
+- The class lives in namespace `stabilizedfem`.
 - `using namespace stabilizedfem;` appears in `.cpp` files only.

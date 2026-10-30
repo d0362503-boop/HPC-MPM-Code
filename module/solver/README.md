@@ -1,7 +1,7 @@
 # `module/solver/` - Linear Solver and PETSc Wrapper
 
-> Updated 2026-10-13: shared matrix interfaces, MPM equation compression,
-> physical preconditioner callbacks and solution recovery.
+> Updated 2026-10-30: reduced MPM solves, preconditioner lifecycle,
+> residual checks and solution recovery.
 
 ---
 
@@ -82,7 +82,6 @@ amat[j + block_id[b]]  // component pair: block_row[b], block_col[b]
 ```
 
 Fluid (`ndof=4`) stores 16 scalar blocks; solid (`ndof=3`) stores 9.
-Monolithic FSI has `ndof=10` and stores 37 selected scalar blocks.
 For matrices storing only selected component pairs, `block_row` and `block_col`
 define the layout. Block indices cannot generally be inferred as
 `row_var * ndof + col_var`.
@@ -116,16 +115,15 @@ assembly, `SolveWithPetsc()` eliminates inactive non-Dirichlet rows and columns
 with a unit diagonal and zero RHS. Physical boundary constraints are handled
 separately. See Section 3.4 for the elimination and residual-mask details.
 
-This is the single-phase mass rule. Monolithic FSI overrides assembly and uses
-its per-component `fixed_dof` mask, absolute `nmass > mtol` phase tests and a
-wet-interface test; see the [FSI guide](../../work/src_fsi/MPM_MPM/README.md).
+An owner that overrides assembly may provide a per-component activity mask.
+That mask and its boundary constraints remain the owner's responsibility.
 
 ### 2.6 One dimension member
 
 Physics constructors set `CrsMat::ndof`: solid `SM_=3`, fluid `NS_=4`,
-FEM phase field `PF_=1`, coupled `fsi_sys=10`. Helpers read this member; no
-separate FSI `kDofCount` or repeated dimension argument is needed.
-`num_block` remains distinct because FSI stores 37 rather than 100 blocks.
+and FEM phase field `PF_=1`. Helpers read this member.
+`num_block` remains distinct because a system may store only selected
+component pairs rather than all `ndof * ndof` blocks.
 
 | Operation | Current signature |
 |-----------|-------------------|
@@ -164,6 +162,8 @@ objects. `BuildCrsMat()` calls it before a DLB ownership rebuild; see the
 Shared control points are owned by a tie-break based on `aelemmin`.
 
 `owned_natural_ids` stores locally owned control points; `ghost_natural_ids` stores ghosts.
+`natural_to_petsc_local` maps each natural control-point ID to its owned-first
+assembly index; `petsc_local_to_natural` provides the inverse ordering.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
 
@@ -214,8 +214,8 @@ groups use explicit index sets rather than assuming the original block stride.
 ```
 
 Reusable column and block-value buffers are sized in `BuildPetscMat()` from
-the maximum row stencil and `this->ndof`. FSI overrides insertion for its 37
-selected scalar blocks.
+the maximum row stencil and `this->ndof`. Owners with selected component pairs
+can override insertion using their own block layout.
 
 ### 3.4 MPM-specific matrix behavior
 
@@ -268,6 +268,8 @@ from both the squared residual sum and the DOF count, independently of residual 
 
 The native layout is component-blocked: entry `n` belongs to node `n % nodec`.
 MPM includes free entries whose nodal mass exceeds `mtol`; FEM includes all free entries.
+For these three-/four-component paths, `dbc` stores four repeated component
+blocks of the nodal overlap weights, so `dbc[n]` indexes the current component.
 Over these entries, MPI sums `rtr = sum(b_rhs[n]^2 * dbc[n])` and
 `active_dof = sum(dbc[n])`. The outputs are `sqrt(rtr)` and
 `sqrt(rtr / active_dof)`, or both zero if no DOFs are counted.
@@ -283,7 +285,7 @@ nodal masses. It does not depend on a previous PETSc assembly or solve.
 
 ### 3.5 Transparent MPM equation compression
 
-All PETSc MPM paths (fluid, implicit solid, and FSI) use the same internal
+PETSc MPM systems use the same internal
 compression in `SolveWithPetsc()`. External assembly retains the existing CSR
 blocks, `nodec * ndof` RHS/correction vectors, and component-major indexing.
 
@@ -300,23 +302,27 @@ from zero, and expands the correction into the full PETSc vector.
 `RecoverSolution()` then uses the existing owned/ghost scatter to fill the full
 native `x_lhs`.
 
-Physical preconditioners call `SetFieldSplitComponents()` with original
-components, optionally within a parent component group. This creates explicit
-compact index sets; compact indices must never be classified using
-`index % ndof`. Physical owners declare `field_splits` as a tree of split names,
-original components and optional children. `ConfigureReducedPreconditioner()`
-sets up that hierarchy inside `CrsMat`.
-FEM keeps its full-system solve path. `HasReducedLayout()` reports whether the
-compact map exists; `RetainedDofIds()` exposes original global equation IDs.
-The map, `reduced_active_is_` and `reduced_matrix_` remain private state.
+Physical owners declare `field_splits` as a tree of split names, original
+components and optional children. During reduced setup,
+`SetFieldSplitComponents()` converts these components into explicit compact
+index sets, optionally within a parent component group. It requires an
+initialized reduced map; compact indices must never be classified using
+`index % ndof`. `ConfigureReducedPreconditioner()` sets up that hierarchy
+inside `CrsMat`.
+FEM keeps its full-system solve path and defines its fields directly through
+PETSc. `HasReducedLayout()` reports whether the compact map exists.
+The retained global equation IDs, `reduced_active_is_` and `reduced_matrix_`
+remain private state.
 
 An empty retained system uses `PCNONE` and skips physical field-split setup;
 full-vector recovery still fills removed components with zero.
 
-The compact operator is rebuilt from current matrix values each solve. A changed
-retained layout also rebuilds the KSP/preconditioner; otherwise the configured
-reuse policy applies. Mesh/DLB reset releases compact maps and matrices together
-with the full PETSc solver.
+The compact operator is recreated from current matrix values each solve.
+A changed retained layout, the first solve, or a scheduled/forced rebuild
+recreates the KSP and its physical field setup. Otherwise the KSP is retained
+and receives the new compact operator with `KSPSetReusePreconditioner(false)`:
+the numerical PC is refreshed, not frozen. Mesh/DLB reset releases compact
+maps and matrices together with the full PETSc solver.
 
 This stage reduces the equations seen by Krylov and the preconditioner.
 Native CSR allocation, full PETSc preallocation, and assembly communication have
@@ -338,7 +344,6 @@ numbering and sets up nested solvers. For a PCKSP child it uses the enclosing
 preconditioning matrix as both inner operators, retaining the assembled-Pmat
 strategy without repeated fluid elimination.
 
-FSI declares fluid/[solid+lambda], velocity/pressure and solid/lambda groups.
 Pure fluid declares velocity/pressure; pure solid has no field groups and keeps
 ASM/ILU. No function callback or extra virtual function is needed.
 The existing owner virtual `ConfigurePreconditioner()` supplies physical choices;
@@ -362,10 +367,10 @@ Current owner responsibilities:
 
 | Physics | BC contributors |
 |---------|-----------------|
-| Fluid | `ubc`, `vbc`, `wbc`, `pbc`, `fsi_intf` |
+| Fluid | `ubc`, `vbc`, `wbc`, `pbc` |
 | Solid | `ubc`, `vbc`, `wbc`, `rigid_bc` |
 
-Because `fsi_intf` changes every step, BC lists must be rebuilt before every solve.
+BC lists are collected before every solve so owner-specific constraints can change.
 
 ---
 
@@ -373,16 +378,15 @@ Because `fsi_intf` changes every step, BC lists must be rebuilt before every sol
 
 `BuildKSPSolver()` initially selects outer `KSPFGMRES` with `rtol=1e-10`,
 `atol=1e-15`, `divtol=1e6` and `max_it=1000`, then reads options.
-A physical solve may set outer tolerances later, as FSI does.
-The owner supplies the PC; `use_schur_fieldsplit=false` does not imply AMG.
+A physical solve may set outer tolerances later.
+The owner supplies the actual PETSc PC type; no separate field-split switch is stored.
 
 | Owner/system | Current PC |
 |--------------|------------|
-| Base `MaterialPoint`, e.g. FEM phase field | HYPRE/BoomerAMG |
+| Base `MaterialPoint` callback | HYPRE/BoomerAMG |
 | `StabilizedMPM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
 | `StabilizedFEM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
 | `ImplicitSolidMPM::SM_` | ASM overlap 1; local PREONLY + ILU(1), nonzero shift `1e-3` |
-| Coupled FSI | Fluid / [solid + lambda], nested SELFP/PCKSP; see the [FSI guide](../../work/src_fsi/MPM_MPM/README.md) |
 
 ### 5.1 Stabilized fluid
 
@@ -397,7 +401,7 @@ The full outer operator remains the assembled physical matrix.
 
 Pure-fluid child options use `-fieldsplit_velocity_*` and
 `-fieldsplit_pressure_*`. These owners set child defaults with
-`PetscOptionsSetValue()`; FSI has its separate `-fsi_fieldsplit_*` hierarchy.
+`PetscOptionsSetValue()`.
 
 ### 5.2 Implicit solid
 
@@ -407,8 +411,8 @@ The standalone KSP remains FGMRES and sets restart 200.
 their option prefix is `-solid_field_sub_*`.
 
 PREONLY applies the local PC once; it is distinct from the outer FGMRES.
-Standalone solid uses the shared outer tolerances above. FSI's solid block has
-its own inner `rtol=0.1` and `max_it=100`; these are different solves and counts.
+Standalone solid uses the shared outer tolerances above. An enclosing physical
+solver can choose different settings for a nested solid block.
 
 ### 5.3 Independent resources
 
@@ -417,29 +421,31 @@ release another's preconditioner.
 
 ## 6. Preconditioner Rebuild Policy
 
-The legacy name `amg_rebuild_freq` controls PC cadence, including ASM/FieldSplit.
+`rebuild_freq` controls scheduled reconfiguration, including
+ASM/FieldSplit. It does not delay assembly or compact-matrix value updates.
 
 | System | Frequency / iteration-growth policy |
 |--------|-------------------------------------|
 | Pure MPM fluid `NS_` | Every step; force next rebuild after more than 2x iteration growth |
 | Implicit solid `SM_` | Every step; force next rebuild after more than 2x iteration growth |
 | FEM fluid `NS_` / `PF_` | Every 20 steps; iteration-growth policy enabled |
-| Coupled FSI `fsi_sys` | Every step; iteration-growth rebuilding disabled |
 
 `NeedsPreconditionerRebuild(NR_it)` consumes a pending forced rebuild. Without
-one, later Newton iterations (`NR_it>0`) reuse the PC; the first correction
-follows the step cadence.
+one, later Newton iterations (`NR_it>0`) do not request scheduled
+reconfiguration; the first correction follows the step cadence.
 
 In MPM, changed retained equations on any rank force all ranks to rebuild
-the compact layout and KSP/PC. Compact matrix values are recreated every solve
-even when the PC is reused. A KSP rebuild restores its type, prefix and tolerances,
+the compact layout and KSP/PC. Compact matrix values are recreated every solve.
+When the KSP survives, `KSPSetReusePreconditioner(false)` still permits PC
+setup for the new operator. A KSP rebuild restores its type, prefix and tolerances,
 calls `ConfigureReducedPreconditioner()` to configure the physical PC, read
 options and initialize its declared field hierarchy.
 
-FEM retains the full operator. A scheduled rebuild disables PC reuse;
-`PCReset()` and reconfiguration are used only for `use_schur_fieldsplit=false`,
-preserving FieldSplit structure otherwise. Mesh/DLB reset releases both full
-and compact state.
+FEM retains the full operator. A scheduled rebuild disables PC reuse.
+`PetscObjectTypeCompare(..., PCFIELDSPLIT, ...)` checks the actual PC type:
+FieldSplit keeps its group definitions, while other PC types are reset and
+reconfigured through the owner. Between rebuilds the numerical PC is reused.
+Mesh/DLB reset releases both full and compact state.
 
 ---
 
@@ -485,18 +491,14 @@ and are reset when their mesh/numbering is rebuilt.
 
 ## 10. Current Settings by Solver
 
-| Setting | Pure MPM fluid | Implicit solid | Monolithic FSI |
-|---------|----------------|----------------|----------------|
-| Components | 4 | 3 | 10, with 37 stored blocks |
-| Equation compression | Shared `CrsMat` | Shared `CrsMat` | Shared `CrsMat` |
-| Native vector length | `nodec * 4` | `nodec * 3` | `nodec * 10` |
-| PC | Velocity/pressure Schur + BoomerAMG | ASM overlap 1 / ILU(1), shift `1e-3` | Fluid / [solid + lambda], nested SELFP/PCKSP; velocity/pressure ASM-ILU(2), solid FGMRES + ASM-ILU(2) |
-| Node activation | Absolute `nmass > mtol` | Absolute `nmass > mtol` | Relative phase mean times `1e-4` by default, plus wet multiplier test |
-| PC cadence | 1 step | 1 step | 1 step |
-
-The FSI launch configuration omits the absolute-mass override. Existing
-processes retain the options with which they were started. See the
-[FSI guide](../../work/src_fsi/MPM_MPM/README.md).
+| Setting | Pure MPM fluid | Implicit solid |
+|---------|----------------|----------------|
+| Components | 4 | 3 |
+| Equation compression | Shared `CrsMat` | Shared `CrsMat` |
+| Native vector length | `nodec * 4` | `nodec * 3` |
+| PC | Velocity/pressure Schur + BoomerAMG | ASM overlap 1 / ILU(1), shift `1e-3` |
+| Node activation | Absolute `nmass > mtol` | Absolute `nmass > mtol` |
+| Reconfiguration cadence | 1 step | 1 step |
 
 ## Current Convergence Limitations
 
@@ -507,10 +509,12 @@ The relative value is `rkr/r0r` when `r0r > 1e-30`, otherwise zero.
 The current acceptance rule is:
 
 ```cpp
-rtr_ref < 1e-8 || r0r < 1e-10 || rtr_abs < 1e-12
+rtr_ref < 1e-8 || rtr_abs < 1e-12
 ```
 
-The initial-norm branch can accept iteration zero without a linear solve.
+There is no separate acceptance branch based only on `r0r`. Iteration zero
+can still pass the RMS threshold; a reference norm at or below `1e-30` also
+makes the implemented relative value zero.
 Absolute thresholds depend on units, mesh and model scale. Mixed fluid momentum and
 continuity entries are combined without field scaling. These limitations matter
 when interpreting convergence; a small norm is not by itself an accuracy study.

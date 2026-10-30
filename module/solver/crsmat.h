@@ -29,9 +29,6 @@ class CrsMat {
     // Natural-order ownership metadata and PETSc-local numbering.
     std::vector<int> owned_natural_ids;
     std::vector<int> ghost_natural_ids;
-    std::vector<char> natural_is_owned;
-    std::vector<int> natural_to_owned_pos;
-    std::vector<int> natural_to_ghost_pos;
     std::vector<int> natural_to_petsc_local;
     std::vector<int> petsc_local_to_natural;
 
@@ -152,7 +149,7 @@ class CrsMat {
      * @note Call after assembling at the current iterate and before solving its
      * correction. This function does not reassemble the residual or compute b-A*x.
      * @warning Failure at the maximum iteration calls MPI_Abort. Absolute thresholds
-     * depend on residual units and scale; the initial-norm criterion can accept iteration zero.
+     * depend on residual units and scale; iteration zero may pass the RMS threshold.
      */
     bool CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r);
 
@@ -174,8 +171,8 @@ class CrsMat {
     VecScatter scatter_to_all = nullptr; // local scatter: petsc_x → seq_x
     Vec seq_x = nullptr;                 // sequential copy of solution on this rank
 
-    // AMG lifecycle state (local to this solver, independent of other solvers)
-    int amg_rebuild_freq = 1; // rebuild preconditioner every N steps
+    // Per-solver preconditioner state
+    int rebuild_freq = 1;    // preconditioner refresh cadence
     int prev_ksp_its_ = -1;   // KSP iterations of the previous solve
     bool force_rebuild_next_ = false;
     bool rebuild_on_iteration_growth = true; // optional forced PC rebuild
@@ -183,11 +180,7 @@ class CrsMat {
     std::vector<PetscInt> petsc_indices_buf;
     std::vector<PetscScalar> petsc_values_buf;
 
-    // Reusable column buffer for matrix assembly (size = max_row_nnz * ndof)
-    std::vector<PetscInt> petsc_cols_buf;
-
     bool use_petsc = true;
-    bool use_schur_fieldsplit = false;
 
     std::vector<char> active_row_mask;
 
@@ -287,7 +280,7 @@ class CrsMat {
      * @brief Solve with PETSc and recover the full native x_lhs, including ghosts.
      * @note MPM systems solve a compressed system internally. Native assembly, RHS,
      * boundary values and solution arrays retain their nodec * ndof layout.
-     * @param NR_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
+     * @param NR_it Current Newton–Raphson iteration controlling preconditioner reconfiguration.
      * @return Number of KSP iterations, including when KSP reports divergence.
      * @warning A negative KSP convergence reason is logged on rank zero; the
      * solution is still scattered and no failure sentinel is returned.
@@ -304,22 +297,17 @@ class CrsMat {
     int SolveSystem(int NR_it = -1);
 
     /**
-     * @brief Select a physical field in the solver's current equation numbering.
+     * @brief Select a physical field in the reduced equation numbering.
      * @param pc Preconditioner receiving the field's equation index set.
      * @param name PETSc split name used in runtime options.
      * @param components Physical components in the original nodal ordering.
      * @param parent_components Components of the enclosing split; empty means the whole system.
      * @return PETSc configuration status.
+     * @pre The reduced equation map has been initialized.
      * @note Compressed indices are derived from original global IDs, never index modulo ndof.
      */
     PetscErrorCode SetFieldSplitComponents(PC pc, const char *name, const std::vector<int> &components,
                                            const std::vector<int> &parent_components = {}) const;
-
-    /**
-     * @brief Expose original global equation IDs for physical preconditioner metadata.
-     * @return Retained IDs in rank-local compressed order; valid after reduced setup starts.
-     */
-    const std::vector<PetscInt> &RetainedDofIds() const { return this->retained_dof_gids_; }
 
     /** @brief Report whether the current solver has a compressed equation layout. */
     bool HasReducedLayout() const { return this->reduced_active_is_ != nullptr; }
@@ -382,8 +370,8 @@ class CrsMat {
     void ResetReducedSystem();
 
     /**
-     * @brief Decide whether this solve must rebuild its preconditioner.
-     * @param NR_it Newton iteration; later iterations normally reuse the preconditioner.
+     * @brief Decide whether this solve requests preconditioner reconfiguration.
+     * @param NR_it Newton iteration; the regular step cadence is checked at iteration zero.
      * @return Whether the configured cadence or previous iteration growth requests rebuilding.
      */
     bool NeedsPreconditionerRebuild(int NR_it);

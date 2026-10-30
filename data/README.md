@@ -105,3 +105,18 @@ Each divider reads the matching generator outputs through the per-variant
 `para_input_data.txt` copied next to the binary (rank topology, input paths,
 and output prefix such as `./myrank_data_column/`), and writes rank-split
 `griddata*.txt` / `pointdata*.txt` files under that prefix.
+
+## Runtime parameters and reconfiguration
+
+CMake copies generator parameter files such as `input.txt` from the source
+directories into the matching `build/data/generate/` directories using
+`configure_file(... COPYONLY)`. Reconfiguring can overwrite edits made only to
+those runtime copies. Check the first active parameter block, time step,
+restart mode and start step after configuration and before launching a solver.
+
+The solver reads paths from `build/file.dat`; keep them inside `build/`.
+Fresh runs use initial point data, while restart modes read the existing
+per-rank restart files. Restart files are outputs of the solver, not products
+of rerunning a partitioner. Rebuilding executables alone does not regenerate
+the grid or initial particles; run the data tools explicitly when those inputs
+need to change.

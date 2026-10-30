@@ -48,14 +48,6 @@ PetscErrorCode CrsMat::SetFieldSplitComponents(PC pc, const char *name, const st
     const auto contains = [](const std::vector<int> &fields, int component) {
         return std::find(fields.begin(), fields.end(), component) != fields.end();
     };
-    if (!this->HasReducedLayout()) {
-        PetscCheck(parent_components.empty(), MPI_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE,
-                   "Nested component splits require an initialized reduced layout");
-        std::vector<PetscInt> fields(components.begin(), components.end());
-        PetscCall(PCFieldSplitSetFields(pc, name, fields.size(), fields.data(), fields.data()));
-        PetscFunctionReturn(PETSC_SUCCESS);
-    }
-
     PetscInt parent_count = 0;
     std::vector<PetscInt> indices;
     for (PetscInt original : this->retained_dof_gids_) {

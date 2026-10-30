@@ -33,9 +33,8 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         this->SM_.block_row = {0, 0, 0, 1, 1, 1, 2, 2, 2};
         this->SM_.block_col = {0, 1, 2, 0, 1, 2, 0, 1, 2};
         this->SM_.use_petsc = true;
-        this->SM_.use_schur_fieldsplit = false;
         this->SM_.FEM_flag = false;
-        this->SM_.amg_rebuild_freq = 1; // rebuild AMG each step
+        this->SM_.rebuild_freq = 1; // refresh each step start
         this->SM_.owner_ = this;
     }
 

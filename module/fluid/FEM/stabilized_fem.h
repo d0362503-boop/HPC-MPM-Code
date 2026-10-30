@@ -46,13 +46,12 @@ class StabilizedFEM : public MaterialPoint {
         this->PF_.ndof = 1;
         this->PF_.block_row = {0};
         this->PF_.block_col = {0};
-        this->NS_.use_schur_fieldsplit = true;
         this->NS_.FEM_flag = true;
         this->PF_.FEM_flag = true;
         this->NS_.use_petsc = true;
         this->PF_.use_petsc = true;
-        this->NS_.amg_rebuild_freq = 20; // rebuild AMG every 20 steps
-        this->PF_.amg_rebuild_freq = 20;
+        this->NS_.rebuild_freq = 20; // scheduled PC refresh interval
+        this->PF_.rebuild_freq = 20;
         this->NS_.owner_ = this;
         this->PF_.owner_ = this;
     }

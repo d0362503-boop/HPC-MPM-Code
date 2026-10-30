@@ -22,6 +22,11 @@ using namespace stabilizedfem;
 
 void StabilizedFEM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 
+    if (mat.ndof == 1) {
+        this->MaterialPoint::ConfigurePreconditioner(mat, pc);
+        return;
+    }
+
     const PetscInt velocity_fields[] = {0, 1, 2};
     const PetscInt pressure_field = 3;
 

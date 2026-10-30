@@ -1,8 +1,8 @@
 # `module/DLB/` — Dynamic Load Balancing
 
 > Runtime repartitioning of the background mesh across MPI ranks, driven by the
-> material-point distribution. Currently wired into the standalone fluid MPM solver
-> (`src_fluid/MPM`); solid and FSI keep `do_dlb = false`.
+> material-point distribution. The calling material owner selects whether and
+> when to enable repartitioning through `do_dlb` and `ApplyDLB()`.
 
 ---
 
@@ -43,12 +43,9 @@ void UpdateDLBRegions(const std::vector<Region> &);    // apply + rebuild overla
 
 ## 3. Activation and Call Sites
 
-- `do_dlb` is the second token of the first parameter line of `input.txt`
-  (`<solswitch, do_dlb, rstflag, nlstep>`), read in
-  `work/src_fluid/MPM/datain_para.cpp`. Solid/FSI hardcode `do_dlb = false` in their
-  constructors.
-- The main loop (`work/src_fluid/MPM/main.cpp`) replaces `MoveParticle()` with
-  `ApplyDLB()` when `do_dlb && istep % iout == 0` (and `nprocs > 1`):
+- The caller sets `do_dlb` and selects a collective repartitioning cadence.
+- One possible caller policy replaces ordinary migration at output steps
+  when DLB is enabled and more than one rank participates:
 
 ```cpp
 const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
@@ -191,6 +188,8 @@ with the new overlap tables), `RebuildBC()` (§10), and the physics
 class rebuilds its `CrsMat` — with `use_petsc`, `BuildCrsMat` first calls
 `ResetPetscSolver()` to destroy the old `Mat/Vec/KSP/lgmap/scatter` (all handles are
 `nullptr`-initialized, so the first call is a safe no-op).
+This reset also releases the reduced matrix and retained-equation index set.
+Neither compact numbering nor the old KSP can survive a partition-layout change.
 
 Nodal *state* is intentionally not preserved: the fluid MPM rebuilds all nodal fields
 from particles at the next `Particle2Node()` anyway (arrays are re-`VectorAssign`ed

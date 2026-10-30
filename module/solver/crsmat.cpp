@@ -231,9 +231,6 @@ void CrsMat::BuildNaturalGlobalMaps(const std::vector<int> &node_l2g) {
 void CrsMat::BuildOwnershipMetadata(const std::vector<int> &node_l2g) {
     this->owned_natural_ids.clear();
     this->ghost_natural_ids.clear();
-    this->natural_is_owned.assign(nodec, 0);
-    this->natural_to_owned_pos.assign(nodec, -1);
-    this->natural_to_ghost_pos.assign(nodec, -1);
 
     std::vector<int> all_aelemmin(nprocs * 3);
     std::vector<int> all_aelemmax(nprocs * 3);
@@ -278,11 +275,8 @@ void CrsMat::BuildOwnershipMetadata(const std::vector<int> &node_l2g) {
         }
 
         if (is_owned) {
-            this->natural_is_owned[n] = 1;
-            this->natural_to_owned_pos[n] = static_cast<int>(this->owned_natural_ids.size());
             this->owned_natural_ids.push_back(n);
         } else {
-            this->natural_to_ghost_pos[n] = static_cast<int>(this->ghost_natural_ids.size());
             this->ghost_natural_ids.push_back(n);
         }
     }
@@ -409,8 +403,6 @@ void CrsMat::BuildPetscMat() {
 
     VecZeroEntries(this->petsc_b);
     VecZeroEntries(this->petsc_x);
-
-    this->petsc_cols_buf.resize(static_cast<size_t>(max_row_nnz) * this->ndof);
 
     // Block-oriented buffers for the optional blocked assembly path.
     this->petsc_block_cols_buf.resize(static_cast<size_t>(max_row_nnz));
@@ -616,9 +608,11 @@ int CrsMat::SolveWithPetsc(int NR_it) {
         KSPGetPC(this->ksp, &pc);
         const bool need_rebuild = this->NeedsPreconditionerRebuild(NR_it);
         if (need_rebuild) {
-            if (!this->use_schur_fieldsplit) { PCReset(pc); }
+            PetscBool is_fieldsplit;
+            PetscObjectTypeCompare((PetscObject)pc, PCFIELDSPLIT, &is_fieldsplit);
+            if (!is_fieldsplit) { PCReset(pc); }
             KSPSetOperators(this->ksp, solve_mat, solve_mat);
-            if (!this->use_schur_fieldsplit) { this->ConfigurePreconditioner(pc); }
+            if (!is_fieldsplit) { this->ConfigurePreconditioner(pc); }
             PCSetReusePreconditioner(pc, PETSC_FALSE);
         } else {
             KSPSetOperators(this->ksp, solve_mat, solve_mat);
@@ -654,7 +648,7 @@ bool CrsMat::NeedsPreconditionerRebuild(int NR_it) {
     const bool force_rebuild = this->force_rebuild_next_;
     this->force_rebuild_next_ = false;
     if (NR_it > 0 && !force_rebuild) return false;
-    return force_rebuild || (this->amg_rebuild_freq > 0 && istep % this->amg_rebuild_freq == 0);
+    return force_rebuild || (this->rebuild_freq > 0 && istep % this->rebuild_freq == 0);
 }
 
 void CrsMat::RecoverSolution() {

@@ -88,23 +88,25 @@ for NR_it = 0 .. iter_max
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
 - `NR_flag = false` → linear elasticity (0 NR iterations, single linear solve)
 
-### 3. Linear solver and compression (2026-10-13)
+### 3. Linear solver and reduced equations
 
 The standalone PETSc configuration is FGMRES, restart 200, with ASM overlap 1.
 Local sub-solvers apply PREONLY + ILU(1), nonzero shift `1e-3`, through the
 `-solid_field_sub_*` options.
-Standalone outer defaults are `rtol=1e-10`, `atol=1e-15` and `max_it=1000`;
-FSI's inner solid `rtol=0.1/max_it=100` describes a different solver.
+Standalone outer defaults are `rtol=1e-10`, `atol=1e-15` and `max_it=1000`.
 
 `SM_.ndof=3` is assigned in the constructor. Assembly and `x_lhs` remain
 `nodec * SM_.ndof`. `CrsMat` removes exact zero-increment identity equations
 after BC elimination, solves the compact system from zero and recovers the full
-owned/ghost vector. Generic single-phase node activation remains `nmass > mtol`;
-it is independent of FSI's relative-mass rule.
+owned/ghost vector. Node activation uses the absolute `nmass > mtol` test.
+The solve copy first discards explicit zero entries. Compact values update
+each correction; layout changes or scheduled rebuilding recreate the KSP,
+while other corrections retain it and refresh its numerical PC.
 
 The solid override selects its physical PC without declaring field groups.
 `CrsMat::ConfigureReducedPreconditioner()` supplies the same compact setup
-entry used by fluid and FSI, followed by solution recovery. Full CSR/assembly storage is still allocated. See the
+entry used by the other PETSc MPM systems, followed by solution recovery.
+Full CSR/assembly storage is still allocated. See the
 [shared solver guide](../../solver/README.md) for interfaces and rebuild policy.
 
 ### 4. System Assembly (`AssembleSystem`)

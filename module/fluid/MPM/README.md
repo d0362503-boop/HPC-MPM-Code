@@ -18,7 +18,8 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 Shared helpers live outside this directory:
 
 - `module/particle_shifting.cpp` — `DeltaCorrectionPST()` and `PairwiseRepulsivePST()`.
-- `module/generalized_alpha_integrator.cpp` — `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`.
+- `module/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
+- `module/material_point.cpp` — `CommitNodalKinematics`, closed-boundary position helpers, and `CommitImplicitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
 ## Class Architecture
@@ -40,14 +41,14 @@ MaterialPoint (base)
 | `ode_order`                | `2` (displacement/velocity/acceleration) | `1` (velocity only)              |
 | `NS_.FEM_flag`             | `false`                                  | `true`                           |
 | `NS_.use_petsc`            | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
-| `NS_.use_schur_fieldsplit` | `true`                                   | `true`                           |
+| NS preconditioner         | `PCFIELDSPLIT`                           | `PCFIELDSPLIT`                   |
 | Pressure Pmat              | PETSc `SELFP`                            | PETSc `SELFP`                    |
 | PETSc equation layout      | Internally compressed; full native vectors | Full system                     |
-| `NS_.amg_rebuild_freq`     | `1`                                      | `20`                             |
+| `NS_.rebuild_freq`         | `1`                                      | `20`                             |
 
 ## Driver Flow
 
-The standalone MPM fluid driver is `work/src_fluid/MPM/main.cpp`:
+The module's time-step operations are called in this order:
 
 ```
 DataInput()
@@ -143,11 +144,13 @@ After overlap communication (`NodeVarComm`), nodal velocity and acceleration are
 
 For each particle:
 
-1. Evaluate shape functions and gradients at the particle position.
-2. Apply `ImplicitDsfCorr` to correct gradients for the deformed configuration.
-3. Interpolate velocity, acceleration, pressure, and pressure gradient to the α-level using `alpha_f` / `alpha_m`.
-4. Compute the total stress tensor `stress_k` from the velocity gradient: the deviatoric part plus `-pres_k` on the diagonal.
-5. Accumulate the 4×4 block matrix into `NS_.amat` and the RHS into `NS_.b_rhs`.
+1. Evaluate shape functions and gradients at the particle's step-start position.
+2. Interpolate velocity, acceleration, pressure, and pressure gradient to the α-level using `alpha_f` / `alpha_m`.
+3. Compute the total stress tensor `stress_k` from the velocity gradient: the deviatoric part plus `-pres_k` on the diagonal.
+4. Accumulate the 4×4 block matrix into `NS_.amat` and the RHS into `NS_.b_rhs`.
+
+This fluid assembly uses the gradients from `MakeSF` directly; it does not call
+the solid's `ImplicitDsfCorr` during NR assembly.
 
 The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `AddInertialForceToRHS` adds the inertial contribution.
 
@@ -163,12 +166,13 @@ Both child PCs use PREONLY + HYPRE/BoomerAMG; PETSc SELFP supplies the pressure 
 PETSc uses its default scalar diagonal approximation for `A_00`, with no
 additional pressure shift. FEM also uses unshifted SELFP and its own PC cadence.
 
-#### Shared equation layout (2026-10-13)
+#### Shared reduced equation layout
 
 The constructor sets `NS_.ndof=4`. Native assembly, RHS and `x_lhs` keep their
 full `nodec * NS_.ndof` component-major layout. `CrsMat` internally compresses
 exact zero-increment identity equations after BC elimination, solves from zero
-and restores the full vector, including ghosts.
+and restores the full vector, including ghosts. Explicit zeros are removed
+from a solve copy before selecting retained equations.
 
 `ConfigurePreconditioner()` declares velocity `{0,1,2}` and pressure `{3}`
 in `mat.field_splits`. `CrsMat::ConfigureReducedPreconditioner()` converts
@@ -178,7 +182,9 @@ Do not infer a field from `compact_index % 4`. Single-phase node activation
 remains the absolute `nmass > mtol` test.
 
 The physics assembly callback is `AssemblePetscMat(CrsMat &mat)`; it reads
-`mat.ndof`. Pure fluid uses the same shared setup entry as solid and FSI.
+`mat.ndof`. The compact operator is recreated each correction. Retained-layout
+changes or the configured cadence recreate the KSP; otherwise its operator
+and numerical PC are refreshed without recreating the KSP.
 Full CSR storage and full assembly communication are still present. See the
 [shared solver guide](../../solver/README.md) for lifecycle and field mapping.
 Set `NS_.use_petsc=false` to use the native solver.
@@ -191,6 +197,12 @@ Set `NS_.use_petsc=false` to use the native solver.
 4. Recompute APIC `inv_Dmat` if needed.
 5. Compute a particle-shifting correction (`PairwiseRepulsivePST` is currently active; `DeltaCorrectionPST` is available but commented out in `Node2Particle`).
 6. Commit particle kinematics (`CommitImplicitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
+
+The shared commit currently leaves its closed-face coordinate-protection calls
+commented out. Applying nodal velocity/displacement BCs does not by itself
+guarantee that a finite PIC displacement stays inside the domain. Particle
+migration removes globally out-of-domain points; open-face outflow must be
+distinguished from closed-face crossings when reviewing results.
 
 ## Particle Shifting
 
@@ -222,7 +234,7 @@ Inflow generation follows the same three-layer dispatch as before (`InflowMeshis
 - `module/solver/crsmat.h`: generic sparse-matrix wrapper; BC hooks injected through virtual overrides declared in `stabilized_mpm.h`.
 - `module/map_and_interpolate.*`: PIC/FLIP/TPIC/APIC transfer logic.
 - `module/material_point.h`: base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`, and the virtual BC/inflow hooks. Linear solve dispatch belongs to `CrsMat::SolveSystem`.
-- `module/nonlinear_time_integration.cpp`: shared Newmark-β / generalized-α helpers.
+- `module/generalized_alpha_integrator.h` / `.cpp`: shared Newmark-β / generalized-α parameters and kinematics.
 - `module/particle_shifting.cpp`: shared particle-shifting implementations.
 - `module/mpi_data.h`: particle migration and overlap-node communication.
 
