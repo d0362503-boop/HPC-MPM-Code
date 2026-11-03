@@ -99,12 +99,6 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
-    double active_dof = 0.0e0;
-    for (int n = 0; n < nodec; n++) {
-        if (this->nlm_lump[n] > 0.0e0) active_dof = 1.0e0;
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     double ref_tol = 1.0e-8;
     double abs_tol = 1.0e-15;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;

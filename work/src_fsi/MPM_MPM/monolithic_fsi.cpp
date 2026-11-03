@@ -149,20 +149,13 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm
         converged = converged && stats[field] <= tolerance;
     }
 
-    if (converged) {
-        if (myrank == 0) {
-            std::cout << "Monolithic_converge: " << std::setw(15) << NR_it << std::setw(15) << solver_it //
-                      << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1]       //
-                      << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
-        }
-        return true;
+    if (myrank == 0) {
+        const char *prefix = converged ? "Monolithic_converge: " : "Monolithic_NR: ";
+        std::cout << prefix << std::setw(15) << NR_it << std::setw(15) << solver_it << std::scientific << std::setw(15)
+                  << stats[0] << std::setw(15) << stats[1] << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
     }
 
-    if (myrank == 0) {
-        std::cout << "Monolithic_NR: " << std::setw(15) << NR_it << std::setw(15) << solver_it //
-                  << std::scientific << std::setw(15) << stats[0] << std::setw(15) << stats[1] //
-                  << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
-    }
+    if (converged) { return true; }
 
     if (NR_it == this->max_NR_it) {
         if (myrank == 0) { std::cout << "Monolithic Newton did not converge" << "\n"; }

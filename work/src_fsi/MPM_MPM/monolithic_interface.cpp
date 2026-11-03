@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cmath>
 #include <mpi.h>
 #include <utility>
 #include <vector>
@@ -164,111 +163,12 @@ MPMMPMMonolithicFSI::BuildSolidInterface(const std::vector<double> &solid_phi) c
     return this->GatherInterfaceGeometry(surface);
 }
 
-std::vector<std::array<double, 4>> MPMMPMMonolithicFSI::BuildFluidSupportParticles() const {
-
-    std::vector<double> packed;
-
-    for (int cell = 0; cell < nelem; ++cell) {
-        double solid_support = 0.0;
-        for (int node_id : ncc[cell]) { solid_support = std::max(solid_support, this->solid_.nphi[node_id]); }
-        if (solid_support == 0.0) continue;
-
-        int pid = this->fluid_.idepf[cell];
-        while (pid != -1) {
-            packed.insert(packed.end(), this->fluid_.coord[pid].begin(), this->fluid_.coord[pid].end());
-            packed.push_back(this->fluid_.vol[pid]);
-
-            pid = this->fluid_.idp2p[pid];
-        }
-    }
-
-    const int local_count = packed.size();
-    std::vector<int> counts(nprocs), offsets(nprocs);
-    MPI_Allgather(&local_count, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-    for (int rank = 1; rank < nprocs; ++rank) { offsets[rank] = offsets[rank - 1] + counts[rank - 1]; }
-
-    std::vector<double> gathered(offsets.back() + counts.back());
-    MPI_Allgatherv(packed.data(), local_count, MPI_DOUBLE, gathered.data(), counts.data(), offsets.data(), MPI_DOUBLE,
-                   MPI_COMM_WORLD);
-
-    std::vector<std::array<double, 4>> particles(gathered.size() / 4);
-    for (std::size_t p = 0; p < particles.size(); p++) {
-        for (int d = 0; d < 4; d++) { particles[p][d] = gathered[4 * p + d]; }
-    }
-
-    return particles;
-}
-
-std::map<std::array<int, 3>, std::vector<std::size_t>>
-MPMMPMMonolithicFSI::IndexFluidSupportParticles(const std::vector<std::array<double, 4>> &particles) const {
-
-    std::map<std::array<int, 3>, std::vector<std::size_t>> bins;
-    const double pi = std::acos(-1.0);
-    for (std::size_t particle_id = 0; particle_id < particles.size(); particle_id++) {
-        const std::array<double, 4> &particle = particles[particle_id];
-        const double diameter = std::cbrt(6.0 * particle[3] / pi);
-        std::array<int, 3> lower, upper;
-        for (int d = 0; d < 3; d++) {
-            lower[d] = int(std::floor((particle[d] - diameter) / dxy[d]));
-            upper[d] = int(std::floor((particle[d] + diameter) / dxy[d]));
-        }
-
-        for (int k = lower[2]; k <= upper[2]; k++) {
-            for (int j = lower[1]; j <= upper[1]; j++) {
-                for (int i = lower[0]; i <= upper[0]; i++) { bins[{i, j, k}].push_back(particle_id); }
-            }
-        }
-    }
-
-    return bins;
-}
-
-double MPMMPMMonolithicFSI::WetInterfaceAreaDensity(const std::array<double, 3> &point,
-                                                    const interface_geometry::InterfaceSDF &interface,
-                                                    const std::vector<std::array<double, 4>> &particles,
-                                                    const std::map<std::array<int, 3>, std::vector<std::size_t>> &bins) const {
-
-    std::array<double, 3> surface_point, normal;
-    double signed_distance;
-    if (!interface.FindSurfacePoint(point, surface_point, signed_distance, normal)) return 0.0;
-
-    std::array<double, 3> normal_spacing;
-    for (int d = 0; d < 3; d++) { normal_spacing[d] = normal[d] * dxy[d]; }
-
-    const double band_width = NormVec3(normal_spacing);
-    if (std::abs(signed_distance) >= band_width) return 0.0;
-
-    const std::array<int, 3> cell{int(std::floor(surface_point[0] / dxy[0])), int(std::floor(surface_point[1] / dxy[1])),
-                                  int(std::floor(surface_point[2] / dxy[2]))};
-    const auto fluid_bin = bins.find(cell);
-    if (fluid_bin == bins.end()) return 0.0;
-
-    const double pi = std::acos(-1.0);
-    for (std::size_t particle_id : fluid_bin->second) {
-        const std::array<double, 4> &particle = particles[particle_id];
-        const double diameter = std::cbrt(6.0 * particle[3] / pi);
-        std::array<double, 3> separation;
-        for (int d = 0; d < 3; d++) { separation[d] = surface_point[d] - particle[d]; }
-
-        if (DotVec3(separation, separation) <= diameter * diameter) {
-            return (1.0 + std::cos(pi * signed_distance / band_width)) / (2.0 * band_width);
-        }
-    }
-
-    return 0.0;
-}
-
 void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 
-    std::vector<std::array<std::array<double, 3>, 3>> surface = this->BuildSolidInterface(this->solid_.nphi);
-    const std::vector<std::array<double, 4>> fluid_particles = this->BuildFluidSupportParticles();
-    const std::map<std::array<int, 3>, std::vector<std::size_t>> fluid_bins = this->IndexFluidSupportParticles(fluid_particles);
-    interface_geometry::InterfaceSDF interface(std::move(surface), {dxy[0], dxy[1], dxy[2]});
+    std::array<std::array<double, 3>, 6> dec2p;
+    GaussianDistribution(dec2p);
 
-    std::array<std::array<double, 3>, 6> quadrature_offset;
-    GaussianDistribution(quadrature_offset);
-
-    const double quadrature_volume = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
+    double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
 
     int nenode;
     std::vector<int> ncm;
@@ -279,30 +179,50 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
     for (int m = 0; m < nelem; m++) {
         const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
-        std::array<double, 3> cell_center, xyg;
-        for (int d = 0; d < 3; d++) { cell_center[d] = xymin[d] + dxy[d] * (double(ijk[d]) + 0.5); }
-
+        std::array<double, 3> xye, xyp;
+        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
+        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
+        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
         for (int iz = 0; iz < npxye[2]; iz++) {
-            xyg[2] = cell_center[2] + quadrature_offset[iz][2];
+            xyp[2] = xye[2] + dec2p[iz][2];
             for (int iy = 0; iy < npxye[1]; iy++) {
-                xyg[1] = cell_center[1] + quadrature_offset[iy][1];
+                xyp[1] = xye[1] + dec2p[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
-                    xyg[0] = cell_center[0] + quadrature_offset[ix][0];
-                    const double area_density = this->WetInterfaceAreaDensity(xyg, interface, fluid_particles, fluid_bins);
-                    if (area_density == 0.0) continue;
+                    xyp[0] = xye[0] + dec2p[ix][0];
+                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
-                    MakeSF(m, xyg, idimc, xynodec, ncm, nenode, sf, dsf);
+                    double phi_f = 0.0e0, phi_s = 0.0e0;
+                    std::array<double, 3> grad_phi_f{}, grad_phi_s{};
+                    for (int ni = 0; ni < nenode; ni++) {
+                        int nid = ncm[ni];
+                        double sfi = sf[ni];
+                        double dsfi1 = dsf[ni][0];
+                        double dsfi2 = dsf[ni][1];
+                        double dsfi3 = dsf[ni][2];
+                        phi_f += sfi * this->fluid_.nphi[nid];
+                        phi_s += sfi * this->solid_.nphi[nid];
+                        grad_phi_f[0] += dsfi1 * this->fluid_.nphi[nid];
+                        grad_phi_f[1] += dsfi2 * this->fluid_.nphi[nid];
+                        grad_phi_f[2] += dsfi3 * this->fluid_.nphi[nid];
+                        grad_phi_s[0] += dsfi1 * this->solid_.nphi[nid];
+                        grad_phi_s[1] += dsfi2 * this->solid_.nphi[nid];
+                        grad_phi_s[2] += dsfi3 * this->solid_.nphi[nid];
+                    }
+                    std::array<double, 3> grad_phi;
+                    for (int i = 0; i < 3; i++) { grad_phi[i] = phi_s * grad_phi_f[i] - phi_f * grad_phi_s[i]; }
+                    double norm_grad_phi = NormVec3(grad_phi);
 
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];
-                        this->nlm_lump_local[nid] += sfi * quadrature_volume * area_density;
+                        this->nlm_lump_local[nid] += sfi * volp * norm_grad_phi;
                     }
                 }
             }
         }
     }
 
+    VectorAssign(nodec, this->nlm_lump);
     this->nlm_lump = this->nlm_lump_local;
 
     NodeVarComm(this->nlm_lump, 0);

@@ -462,13 +462,10 @@ void CrsMat::ComputeResidualNormSq(double &ref_tol, double &abs_tol) {
 bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
 
     double rkr, rtr_abs;
-    if (NR_it == 0) {
-        this->ComputeResidualNormSq(r0r, rtr_abs);
-        rkr = r0r;
-    } else {
-        this->ComputeResidualNormSq(rkr, rtr_abs);
-    }
-    double rtr_ref = (r0r > 1.0e-30) ? (rkr / r0r) : 0.0e0;
+    this->ComputeResidualNormSq(rkr, rtr_abs);
+    if (NR_it == 0) { r0r = rkr; }
+
+    const double rtr_ref = (r0r > 1.0e-30) ? (rkr / r0r) : 0.0e0;
 
     if (rtr_ref < 1.0e-8 || rtr_abs < 1.0e-12) {
         if (myrank == 0) {

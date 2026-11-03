@@ -2,16 +2,11 @@
 
 #include <array>
 #include <cstddef>
-#include <map>
 #include <vector>
 
 #include "module/bc.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
-
-namespace interface_geometry {
-class InterfaceSDF;
-}
 
 namespace mpm_mpm_monolithic_fsi {
 
@@ -155,7 +150,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     bool CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it);
 
     // Interface geometry.
-    /** @brief Integrate the wet solid-surface distance delta into lumped nodal interface-area weights. */
+    /** @brief Integrate the two-phase volume-fraction gradient measure into lumped nodal interface-area weights. */
     void LumpedLagrangeMultiplier();
 
     /**
@@ -203,32 +198,6 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      * @note Uses xyn and nc for geometry only; field variables remain on control points.
      */
     std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface(const std::vector<double> &solid_phi) const;
-
-    /**
-     * @brief Exchange nearby fluid centers and current particle volumes.
-     * @return Globally available records containing x, y, z and particle volume.
-     */
-    std::vector<std::array<double, 4>> BuildFluidSupportParticles() const;
-
-    /**
-     * @brief Index each fluid center within one equivalent particle diameter.
-     * @param particles Fluid records containing x, y, z and current volume.
-     * @return Spatial bins covering each particle-centered spherical search region.
-     */
-    std::map<std::array<int, 3>, std::vector<std::size_t>>
-    IndexFluidSupportParticles(const std::vector<std::array<double, 4>> &particles) const;
-
-    /**
-     * @brief Evaluate wet-interface area density chi_w * delta_epsilon(d_s).
-     * @param point Current volume quadrature position.
-     * @param interface Indexed solid surface in the current configuration.
-     * @param particles Fluid records containing x, y, z and current volume, used to compute equivalent diameters.
-     * @param bins Candidate fluid particles within one diameter of the projected surface point.
-     * @return Interface area per volume [1/m], zero outside the band or on dry surfaces.
-     */
-    double WetInterfaceAreaDensity(const std::array<double, 3> &point, const interface_geometry::InterfaceSDF &interface,
-                                   const std::vector<std::array<double, 4>> &particles,
-                                   const std::map<std::array<int, 3>, std::vector<std::size_t>> &bins) const;
 };
 
 } // namespace mpm_mpm_monolithic_fsi

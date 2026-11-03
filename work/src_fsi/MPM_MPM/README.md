@@ -16,7 +16,7 @@ solid displacement (3), and interface multipliers (3), stored in 37 scalar block
 | Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 200, restart 100; velocity/pressure lower Schur; velocity and pressure PREONLY + ASM/local ILU(1), RCM ordering, nonzero shift 1e-3 |
 | Preconditioner refresh | `rebuild_freq=1` recreates KSP/groups at NR0; layout changes also recreate them; other corrections retain KSP but refresh its numerical PC |
 | Solid block | FGMRES with CGS refinement always, `restart=30`, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1), RCM ordering, nonzero shift `1e-3` |
-| Mass activation | Each phase uses absolute `nmass > mtol`; wet-interface and physical constraints determine active multiplier components |
+| Mass activation | Each phase uses absolute `nmass > mtol`; interface weights and physical constraints determine active multiplier components |
 
 ```text
 Outer FGMRES: fluid / [solid + lambda], lower Schur split
@@ -191,7 +191,7 @@ all remaining steps will satisfy the same limits.
 | `datain_para.cpp` | Coupled case parameters and phase input |
 | `monolithic_fsi.cpp` | Coupled lifecycle, Newton loop, increments, and convergence |
 | `monolithic_assembly.cpp` | Fluid, solid, and multiplier contributions; 37-block PETSc insertion |
-| `monolithic_interface.cpp` | Solid contour, wet-interface weights, and particle correction |
+| `monolithic_interface.cpp` | Solid contour, volume-fraction gradient weights, and particle correction |
 | `monolithic_solver.cpp` | Active components, constraints, scaling, linear correction, and physical preconditioner configuration |
 | `monolithic_fsi.h` | Class declarations and function documentation |
 | `../../../module/interface_sdf.h` / `.cpp` | Indexed finite-triangle distance queries |
@@ -200,7 +200,7 @@ The class header exposes driver operations and the physics callbacks used by
 `CrsMat`. Assembly, scaling, convergence and geometry helpers are private.
 `fsi_sys.ndof` is the single coupled dimension (10); `kStoredBlocks` defines its 37 stored blocks;
 the constructor configures it in `monolithic_fsi.cpp`. `InterfaceSDF` accepts
-oriented triangles and bin spacing; wet-interface activation remains in FSI.
+oriented triangles and bin spacing for particle penetration correction.
 
 CMake collects this directory's `.cpp` files automatically. After adding or
 removing one, run `cmake -S . -B build` from the repository root, then build the
@@ -346,9 +346,10 @@ generated. The extracted `phi = 0.5` triangles are oriented outward and exchange
 across MPI ranks. Evaluating the interpolation as `0.5 + sum(N * (phi - 0.5))`
 preserves the constant contour level at partition faces without snapping values.
 Mesh vertices are used for geometry only; the coupled fields
-and interface-area weights remain on control points. `LumpedLagrangeMultiplier()` uses
-the step-start `solid_.nphi` and nearby volume-based fluid-particle supports to integrate
-wet-interface area into `nlm_lump_local`; `NodeVarComm` produces `nlm_lump`.
+and interface-area weights remain on control points. `LumpedLagrangeMultiplier()`
+interpolates both step-start volume fractions and their gradients at each
+quadrature point. It integrates `||phi_s * grad(phi_f) - phi_f * grad(phi_s)||`
+into `nlm_lump_local`. `NodeVarComm` sums the weights into `nlm_lump`.
 Local weights assemble matrix contributions, and synchronized weights enter
 the RHS and activation decisions.
 
