@@ -62,48 +62,41 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
         disp_corr[n][0] = -b_0 * geup[n][0];
         disp_corr[n][1] = -b_0 * geup[n][1];
         disp_corr[n][2] = -b_0 * geup[n][2];
+        this->ConstrainPSTBoundaryDisplacement(this->coord[n], disp_corr[n]);
     }
 
     return disp_corr;
 }
 
-void MaterialPoint::ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord,
-                                             const std::array<double, 3> &interface_normal, bool surface_particle,
-                                             std::array<double, 3> &disp_corr) const {
-
-    std::array<std::array<double, 3>, 4> constraints{};
-    int constraint_count = 0;
-    if (surface_particle) { constraints[constraint_count++] = interface_normal; }
+void MaterialPoint::ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord,
+                                                     std::array<double, 3> &disp_corr) const {
 
     for (int i = 0; i < 3; i++) {
         const bool near_lower_wall = particle_coord[i] - xyminw[i] < dxy[i];
         const bool near_upper_wall = xymaxw[i] - particle_coord[i] < dxy[i];
-        if (near_lower_wall || near_upper_wall) { constraints[constraint_count++][i] = 1.0e0; }
+        if (near_lower_wall || near_upper_wall) { disp_corr[i] = 0.0e0; }
     }
 
-    std::array<std::array<double, 3>, 3> normal_basis{};
-    int basis_count = 0;
-    for (int n = 0; n < constraint_count; n++) {
-        if (basis_count == 3) { break; }
+    return;
+}
 
-        std::array<double, 3> normal = constraints[n];
-        for (int j = 0; j < basis_count; j++) {
-            double projection = 0.0e0;
-            for (int i = 0; i < 3; i++) { projection += normal[i] * normal_basis[j][i]; }
-            for (int i = 0; i < 3; i++) { normal[i] -= projection * normal_basis[j][i]; }
-        }
+void MaterialPoint::ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord,
+                                                    const std::array<double, 3> &surface_normal,
+                                                    std::array<double, 3> &disp_corr) const {
 
-        const double normal_norm = NormVec3(normal);
-        if (normal_norm > mtol) {
-            for (int i = 0; i < 3; i++) { normal_basis[basis_count][i] = normal[i] / normal_norm; }
-            basis_count++;
-        }
+    std::array<double, 3> tangent_normal = surface_normal;
+    for (int i = 0; i < 3; i++) {
+        const bool near_lower_wall = particle_coord[i] - xyminw[i] < dxy[i];
+        const bool near_upper_wall = xymaxw[i] - particle_coord[i] < dxy[i];
+        if (near_lower_wall || near_upper_wall) { tangent_normal[i] = 0.0e0; }
     }
 
-    for (int n = 0; n < basis_count; n++) {
+    const double normal_norm = NormVec3(tangent_normal);
+    if (normal_norm > mtol) {
         double normal_shift = 0.0e0;
-        for (int i = 0; i < 3; i++) { normal_shift += disp_corr[i] * normal_basis[n][i]; }
-        for (int i = 0; i < 3; i++) { disp_corr[i] -= normal_shift * normal_basis[n][i]; }
+        for (int i = 0; i < 3; i++) { normal_shift += disp_corr[i] * tangent_normal[i]; }
+        normal_shift /= normal_norm * normal_norm;
+        for (int i = 0; i < 3; i++) { disp_corr[i] -= normal_shift * tangent_normal[i]; }
     }
 
     return;
@@ -315,8 +308,11 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     // 5. Interface and wall tangential projection
     // -------------------------------------------------------------------------
     for (int n = 0; n < this->num; n++) {
+        this->ConstrainPSTBoundaryDisplacement(this->coord[n], disp_corr[n]);
         const bool surface_particle = surface_weight[n] >= 0.3e0 && surface_weight[n] <= 0.7e0;
-        this->ConstrainPSTDisplacement(this->coord[n], particle_normal[n], surface_particle, disp_corr[n]);
+        if (surface_particle) {
+            this->ConstrainPSTSurfaceDisplacement(this->coord[n], particle_normal[n], disp_corr[n]);
+        }
 
         const double shift_norm = NormVec3(disp_corr[n]);
         const double max_shift = dxy[0] / 10.0e0;

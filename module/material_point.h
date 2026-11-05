@@ -461,14 +461,22 @@ class MaterialPoint {
                         const std::vector<std::array<double, 3>> &dsf) const noexcept;
 
     /**
-     * @brief Project particle shifts onto wall and tagged surface tangents.
+     * @brief Remove Cartesian boundary-normal shifts within one cell of the domain faces.
      * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
-     * @param interface_normal Unit material-interface normal interpolated at the material point.
-     * @param surface_particle Whether the particle satisfies the surface criterion and needs interface-normal removal.
-     * @param disp_corr Particle-shifting displacement replaced by its constrained value.
+     * @param disp_corr Particle-shifting displacement with boundary-normal components removed in place.
      */
-    void ConstrainPSTDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &interface_normal,
-                                  bool surface_particle, std::array<double, 3> &disp_corr) const;
+    void ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord,
+                                         std::array<double, 3> &disp_corr) const;
+
+    /**
+     * @brief Remove a surface-normal shift while preserving previously applied Cartesian boundary constraints.
+     * @param particle_coord Current material-point position used to restrict the surface projection near domain faces.
+     * @param surface_normal Material-surface unit normal interpolated at the particle.
+     * @param disp_corr Particle shift projected onto the surface tangent; apply Cartesian boundary constraints first.
+     */
+    void ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord,
+                                        const std::array<double, 3> &surface_normal,
+                                        std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
@@ -477,7 +485,7 @@ class MaterialPoint {
      * "Stabilized mixed material point method for incompressible fluid flow analysis,"
      * Computer Methods in Applied Mechanics and Engineering, 419, 116644, 2024.
      *
-     * @return Correction displacement vector for each particle.
+     * @return Correction displacement for each particle, with Cartesian boundary-normal components removed.
      */
     std::vector<std::array<double, 3>> DeltaCorrectionPST() const;
 
