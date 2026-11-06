@@ -43,24 +43,28 @@ void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &nvel_k,
     return;
 }
 
-void MPMMPMMonolithicFSI::AssembleInterfaceSystem() {
+void MPMMPMMonolithicFSI::AssembleInterfaceSystem(const std::vector<double> &nvel_f,
+                                                 const std::vector<double> &nvel_s) {
+
+    const double cf = this->fluid_.integrator_.nb_para[0];
+    const double cs = this->solid_.integrator_.nb_para[0];
 
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);
         const double lm = this->nlm_lump_local[n];
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[31]] -= lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[33]] -= lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[35]] -= lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[32]] += lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[34]] += lm;
-        this->fsi_sys.amat[ida + this->fsi_sys.block_id[36]] += lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[31]] -= cf * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[33]] -= cf * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[35]] -= cf * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[32]] += cs * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[34]] += cs * lm;
+        this->fsi_sys.amat[ida + this->fsi_sys.block_id[36]] += cs * lm;
     }
 
     for (int n = 0; n < nodec; n++) {
-        this->fsi_sys.b_rhs[n + nodec * 7] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nuc] - this->solid_.ndispl[n + nuc]);
-        this->fsi_sys.b_rhs[n + nodec * 8] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nvc] - this->solid_.ndispl[n + nvc]);
-        this->fsi_sys.b_rhs[n + nodec * 9] = this->nlm_lump[n] * (this->fluid_.ndispl[n + nwc] - this->solid_.ndispl[n + nwc]);
+        this->fsi_sys.b_rhs[n + nodec * 7] = this->nlm_lump[n] * (nvel_f[n + nuc] - nvel_s[n + nuc]);
+        this->fsi_sys.b_rhs[n + nodec * 8] = this->nlm_lump[n] * (nvel_f[n + nvc] - nvel_s[n + nvc]);
+        this->fsi_sys.b_rhs[n + nodec * 9] = this->nlm_lump[n] * (nvel_f[n + nwc] - nvel_s[n + nwc]);
     }
 
     return;

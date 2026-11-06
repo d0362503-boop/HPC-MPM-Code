@@ -166,6 +166,8 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
     const double af0 = 1.0e0 - af;
     const double am = this->integrator_.alpha_m;
     const double am0 = 1.0e0 - am;
+    const double cv = this->integrator_.nb_para[0];
+    const double ca = this->integrator_.nb_para[3];
 
     std::vector<double> nvel_af(nodec * 3), naccel_am(nodec * 3);
     for (int n = 0; n < nodec * 3; n++) {
@@ -291,24 +293,21 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
                         mat.amat[ida + mat.block_id[this->blocks[5]]] += am * emd_lu;
                         mat.amat[ida + mat.block_id[this->blocks[10]]] += am * emd_lu;
                     }
-                    mat.amat[ida + mat.block_id[this->blocks[0]]] += this->integrator_.nb_para[0] * af * (su + scu);
-                    mat.amat[ida + mat.block_id[this->blocks[1]]] += this->integrator_.nb_para[0] * af * (suv + scuv);
-                    mat.amat[ida + mat.block_id[this->blocks[2]]] += this->integrator_.nb_para[0] * af * (suw + scuw);
+                    mat.amat[ida + mat.block_id[this->blocks[0]]] += cv * af * (su + scu);
+                    mat.amat[ida + mat.block_id[this->blocks[1]]] += cv * af * (suv + scuv);
+                    mat.amat[ida + mat.block_id[this->blocks[2]]] += cv * af * (suw + scuw);
                     mat.amat[ida + mat.block_id[this->blocks[3]]] -= af * esgx;
-                    mat.amat[ida + mat.block_id[this->blocks[4]]] += this->integrator_.nb_para[0] * af * (svu + scvu);
-                    mat.amat[ida + mat.block_id[this->blocks[5]]] += this->integrator_.nb_para[0] * af * (sv + scv);
-                    mat.amat[ida + mat.block_id[this->blocks[6]]] += this->integrator_.nb_para[0] * af * (svw + scvw);
+                    mat.amat[ida + mat.block_id[this->blocks[4]]] += cv * af * (svu + scvu);
+                    mat.amat[ida + mat.block_id[this->blocks[5]]] += cv * af * (sv + scv);
+                    mat.amat[ida + mat.block_id[this->blocks[6]]] += cv * af * (svw + scvw);
                     mat.amat[ida + mat.block_id[this->blocks[7]]] -= af * esgy;
-                    mat.amat[ida + mat.block_id[this->blocks[8]]] += this->integrator_.nb_para[0] * af * (swu + scwu);
-                    mat.amat[ida + mat.block_id[this->blocks[9]]] += this->integrator_.nb_para[0] * af * (swv + scwv);
-                    mat.amat[ida + mat.block_id[this->blocks[10]]] += this->integrator_.nb_para[0] * af * (sw + scw);
+                    mat.amat[ida + mat.block_id[this->blocks[8]]] += cv * af * (swu + scwu);
+                    mat.amat[ida + mat.block_id[this->blocks[9]]] += cv * af * (swv + scwv);
+                    mat.amat[ida + mat.block_id[this->blocks[10]]] += cv * af * (sw + scw);
                     mat.amat[ida + mat.block_id[this->blocks[11]]] -= af * esgz;
-                    mat.amat[ida + mat.block_id[this->blocks[12]]] += this->integrator_.nb_para[0] * af * Cow1 //
-                                                                      + this->integrator_.nb_para[3] * am * egtx;
-                    mat.amat[ida + mat.block_id[this->blocks[13]]] += this->integrator_.nb_para[0] * af * Cow2 //
-                                                                      + this->integrator_.nb_para[3] * am * egty;
-                    mat.amat[ida + mat.block_id[this->blocks[14]]] += this->integrator_.nb_para[0] * af * Cow3 //
-                                                                      + this->integrator_.nb_para[3] * am * egtz;
+                    mat.amat[ida + mat.block_id[this->blocks[12]]] += cv * af * Cow1 + ca * am * egtx;
+                    mat.amat[ida + mat.block_id[this->blocks[13]]] += cv * af * Cow2 + ca * am * egty;
+                    mat.amat[ida + mat.block_id[this->blocks[14]]] += cv * af * Cow3 + ca * am * egtz;
                     mat.amat[ida + mat.block_id[this->blocks[15]]] += af * elt;
                 }
 

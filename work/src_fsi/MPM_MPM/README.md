@@ -300,13 +300,21 @@ once at the beginning of the time step. Each Newton iteration then performs:
 1. Clear the coupled matrix and RHS.
 2. Apply phase boundary values and compute trial nodal velocity/acceleration.
 3. Assemble fluid, solid, and interface contributions once.
-4. Check the current nonlinear RHS and interface displacement difference.
+4. Check the current nonlinear RHS and interface endpoint-velocity difference.
 5. If unconverged, solve a zero-initialized correction and update the unknowns.
 
 The next iteration evaluates the updated state through the same assembly path.
 `ComputeNRResidualNorms()` reads the unscaled, overlap-synchronized `b_rhs` for
-fluid momentum, continuity, and solid momentum. The fourth field is the direct
-`solid_.ndispl - fluid_.ndispl` difference, without lumped interface-area weights.
+fluid momentum, continuity, and solid momentum. The fourth field divides the
+interface RHS by its positive active `nlm_lump` weight to measure the endpoint
+velocity difference in m/s without interface-area weights.
+
+The interface equation is `v_s^(n+1) = v_f^(n+1)`, using the endpoint velocities
+already computed from the phase displacement iterates. It is not imposed at
+`n+alpha_f`. The fluid and solid constraint-row Jacobians contain
+`-nlm_lump_local * gamma_f/(beta_f*dt)` and
+`+nlm_lump_local * gamma_s/(beta_s*dt)`, respectively. Row scaling uses these
+velocity derivatives; multiplier-column scaling retains the phase force weights.
 
 Each field uses an RMS over globally owned, unconstrained active components.
 For the interface, the denominator is the active multiplier-component count,
@@ -317,8 +325,8 @@ once. A field with no active components has zero RMS.
 |-------|----------|----------------------|
 | Fluid momentum | Nonlinear momentum RHS [N] | `max(1e-10, 1e-5 * initial_norm[0])` |
 | Continuity | Nonlinear continuity RHS [m^3/s] | `max(1e-13, 1e-5 * initial_norm[1])` |
-| Solid momentum | Nonlinear momentum RHS [N] | `max(1e-10, 1e-5 * initial_norm[2])` |
-| Interface | Displacement-increment difference [m] | `1e-10` |
+| Solid momentum | Nonlinear momentum RHS [N] | `max(1e-8, 1e-5 * initial_norm[2])` |
+| Interface | Endpoint-velocity difference [m/s] | `1e-10` |
 
 The first three references are saved inside `CheckNRConvergence()` at
 `NR_it == 0`. All four RMS comparisons must meet their thresholds.
@@ -371,7 +379,7 @@ not call the generic `CrsMat::BuildActiveRowMask()`.
 
 Changing `mtol` changes the phase activity tests. It does not create interface
 weights at control points where `nlm_lump` is zero. The assembled multiplier
-equations enforce nodal displacement-increment continuity; their convergence
+equations enforce nodal endpoint-velocity continuity; their convergence
 alone does not establish particle nonpenetration.
 
 ## Particle penetration correction

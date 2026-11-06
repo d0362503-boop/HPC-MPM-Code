@@ -39,7 +39,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     void DataInput();
 
-    /** @brief Solve the coupled fields with interface displacement-increment continuity. */
+    /** @brief Solve the coupled fields with interface endpoint-velocity continuity. */
     void SolveFSISystem();
 
     /**
@@ -102,10 +102,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
                              std::vector<std::array<double, 6>> &stress_k);
 
     /**
-     * @brief Constrain the fluid and solid nodal displacement increments to agree on the wet interface.
-     * @note Uses the current time-step ndispl fields, not accumulated particle coordinates.
+     * @brief Constrain the fluid and solid nodal velocities to agree at the current time-step endpoint.
+     * @param nvel_f Fluid nodal velocity at the current endpoint iterate.
+     * @param nvel_s Solid nodal velocity at the current endpoint iterate.
      */
-    void AssembleInterfaceSystem();
+    void AssembleInterfaceSystem(const std::vector<double> &nvel_f, const std::vector<double> &nvel_s);
 
     /**
      * @brief Add interface multiplier forces to the fluid or solid momentum RHS.
@@ -132,20 +133,20 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
     // Nonlinear residuals.
     /**
-     * @brief Measure the nonlinear field RHS and direct interface displacement difference on globally owned active components.
-     * @return RMS fluid momentum [N], continuity [m^3/s], solid momentum [N] and unweighted interface displacement [m] residuals.
+     * @brief Measure the nonlinear field RHS and interface endpoint-velocity difference on globally owned active components.
+     * @return RMS fluid momentum [N], continuity [m^3/s], solid momentum [N] and unweighted interface velocity [m/s] residuals.
      * @note Requires initialized PETSc row ownership and an unscaled, overlap-synchronized RHS.
      */
     std::array<double, 4> ComputeNRResidualNorms();
 
     /**
-     * @brief Check the updated nonlinear RHS and direct solid-fluid displacement-increment continuity.
+     * @brief Check the updated nonlinear RHS and solid-fluid endpoint-velocity continuity.
      * @param initial_norm Initial RMS residuals saved on iteration zero and used as relative references for the first three
      * fields.
      * @param NR_it Current Newton iteration.
      * @param solver_it Krylov iterations in the last coupled linear solve.
      * @return Whether all field residuals meet tolerance.
-     * @note Call after reassembly, before row scaling. The interface test uses solid_.ndispl-fluid_.ndispl without area weights.
+     * @note Call after reassembly, before row scaling. The interface test divides its RHS by the active nodal area weight.
      */
     bool CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it);
 

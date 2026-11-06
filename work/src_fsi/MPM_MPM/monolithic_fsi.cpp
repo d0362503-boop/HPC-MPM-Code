@@ -65,7 +65,7 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
 
         this->AssembleFluidSystem(nvel_f, naccel_f);
         this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
-        this->AssembleInterfaceSystem();
+        this->AssembleInterfaceSystem(nvel_f, nvel_s);
 
         if (this->CheckNRConvergence(initial_norm, NR_it, solver_it)) { break; }
 
@@ -97,7 +97,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
     // stats[0]: fluid momentum residual
     // stats[1]: fluid continuity residual
     // stats[2]: solid momentum residual
-    // stats[3]: displacement increment difference
+    // stats[3]: endpoint velocity difference
     // stats[4..7]: corresponding active-component counts.
     std::array<double, 8> stats{};
 
@@ -113,14 +113,13 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
                 field = 1;
             } else if (d < 7) { // Solid momentum
                 field = 2;
-            } else { // Interface displacement
+            } else { // Interface velocity
                 field = 3;
             }
 
             double residual = this->fsi_sys.b_rhs[index];
             if (field == 3) {
-                const int index = n + (d - 7) * nodec;
-                residual = this->solid_.ndispl[index] - this->fluid_.ndispl[index];
+                residual /= this->nlm_lump[n];
             }
             stats[field] += residual * residual;
             stats[field + 4] += 1.0;
@@ -141,7 +140,7 @@ bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
     // Fields 0..2: max(absolute_tol, 1e-5 * initial nonlinear residual RMS).
-    // Field 3: displacement-increment RMS <= 1e-10 m, without interface weights.
+    // Field 3: endpoint velocity RMS <= 1e-10 m/s, without interface weights.
     bool converged = true;
     for (int field = 0; field < 4; field++) {
         if (NR_it == 0 && field < 3) { initial_norm[field] = stats[field]; }
