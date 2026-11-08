@@ -100,9 +100,9 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     this->ScaleSystem();
 
     double ref_tol = 1.0e-8;
-    double abs_tol = 1.0e-15;
+    double abs_tol = 1.0e-13;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
-    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 500);
+    KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 300);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
 
     KSPConvergedReason reason;
