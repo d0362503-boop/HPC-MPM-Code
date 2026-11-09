@@ -27,6 +27,10 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 Paths inside `file.dat` should point to files under `build/` such as `./data/generate/...`, `./data/divide/...`, and `./res/...`.
 Do not point `file.dat` back at source-tree paths under `../data/...`.
 
+**Checkpoint restarts:** Use the output prefix already set for the selected case in `build/file.dat`. Change the prefix or output directory only when the user explicitly requests a different destination.
+
+**User approval:** Obtain explicit user approval before changing any content in `file.dat` or creating any directory.
+
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.

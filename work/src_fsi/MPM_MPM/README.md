@@ -250,8 +250,10 @@ final correction. `BuildInterfaceSchur` remains removed.
 `SolveSystem(NR_it)` preserves the unscaled physical RHS, zeros the native
 correction, scales the matrix/RHS and solves through `CrsMat`. It then multiplies
 the recovered correction by `column_scale` and restores the physical RHS.
-The outer settings are `rtol=1e-8`, `atol=1e-15` and maximum 500, independent
-of whether the current interface weights are positive.
+The outer KSP uses `rtol=1e-6` and `atol=1e-13` when any control point
+across all ranks has both phase masses greater than `mtol` and a positive
+`nlm_lump`. Otherwise it uses `rtol=1e-8` and `atol=1e-15`.
+The outer iteration limit is 300.
 The divergence tolerance is `1e6` on the first Newton correction and
 `PETSC_UNLIMITED` later. A logged negative reason remains a failed linear solve;
 current code does not automatically abort or retry it.

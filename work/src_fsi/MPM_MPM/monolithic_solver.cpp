@@ -99,8 +99,19 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
-    double ref_tol = 1.0e-8;
-    double abs_tol = 1.0e-13;
+    bool has_contact = false;
+    for (int n = 0; n < nodec; n++) {
+        if (this->fluid_.nmass[n] > mtol && //
+            this->solid_.nmass[n] > mtol && //
+            this->nlm_lump[n] > 0.0e0) {
+            has_contact = true;
+            break;
+        }
+    }
+    MPI_Allreduce(MPI_IN_PLACE, &has_contact, 1, MPI_CXX_BOOL, MPI_LOR, MPI_COMM_WORLD);
+
+    const double ref_tol = has_contact ? 1.0e-6 : 1.0e-8;
+    const double abs_tol = has_contact ? 1.0e-13 : 1.0e-15;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
     KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 300);
     const int iter = this->fsi_sys.SolveSystem(NR_it);
