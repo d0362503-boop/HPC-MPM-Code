@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "module/cal_mat.h"
+#include "module/DLB/mpm_dlb.h"
 #include "module/dataset.h"
 #include "module/interface_sdf.h"
 #include "module/mesh.h"
@@ -13,155 +14,6 @@
 #include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 
 using namespace mpm_mpm_monolithic_fsi;
-
-template <size_t vertex_count>
-std::vector<std::array<std::array<double, 3>, vertex_count>>
-MPMMPMMonolithicFSI::GatherInterfaceGeometry(const std::vector<std::array<std::array<double, 3>, vertex_count>> &local_geometry)
-    const {
-    std::vector<double> packed;
-    for (const auto &element : local_geometry) {
-        for (const auto &vertex : element) { packed.insert(packed.end(), vertex.begin(), vertex.end()); }
-    }
-
-    const int local_count = packed.size();
-    std::vector<int> counts(nprocs), offsets(nprocs);
-    MPI_Allgather(&local_count, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-    for (int rank = 1; rank < nprocs; ++rank) { offsets[rank] = offsets[rank - 1] + counts[rank - 1]; }
-
-    std::vector<double> gathered(offsets.back() + counts.back());
-    MPI_Allgatherv(packed.data(), local_count, MPI_DOUBLE, gathered.data(), counts.data(), offsets.data(), MPI_DOUBLE,
-                   MPI_COMM_WORLD);
-
-    std::vector<std::array<std::array<double, 3>, vertex_count>> geometry(gathered.size() / (3 * vertex_count));
-    size_t index = 0;
-    for (auto &element : geometry) {
-        for (auto &vertex : element) {
-            for (double &coordinate : vertex) { coordinate = gathered[index++]; }
-        }
-    }
-
-    return geometry;
-}
-
-std::array<double, 3> MPMMPMMonolithicFSI::ContourIntersection(const std::array<std::array<double, 3>, 4> &vertices,
-                                                               const std::array<double, 4> &level, int i, int j) const {
-
-    const double fraction = level[i] / (level[i] - level[j]);
-    std::array<double, 3> point;
-    for (int d = 0; d < 3; d++) { point[d] = vertices[i][d] + fraction * (vertices[j][d] - vertices[i][d]); }
-
-    return point;
-}
-
-void MPMMPMMonolithicFSI::AppendInterfaceTriangle(std::array<std::array<double, 3>, 3> triangle,
-                                                  const std::array<double, 3> &outward,
-                                                  std::vector<std::array<std::array<double, 3>, 3>> &surface) const {
-
-    const std::array<double, 3> normal =
-        CrossVec3(DifferenceVec3(triangle[1], triangle[0]), DifferenceVec3(triangle[2], triangle[0]));
-
-    // A contour through a vertex can produce a zero-area triangle.
-    if (DotVec3(normal, normal) == 0.0) return;
-    if (DotVec3(normal, outward) < 0.0) { std::swap(triangle[1], triangle[2]); }
-
-    surface.push_back(triangle);
-
-    return;
-}
-
-void MPMMPMMonolithicFSI::AppendSolidContour(const std::array<std::array<double, 3>, 4> &vertices,
-                                             const std::array<double, 4> &level,
-                                             std::vector<std::array<std::array<double, 3>, 3>> &surface) const {
-
-    std::vector<int> inside, outside;
-    for (int i = 0; i < 4; i++) {
-        if (level[i] < 0.0) {
-            inside.push_back(i);
-        } else {
-            outside.push_back(i);
-        }
-    }
-    if (inside.empty() || outside.empty()) return;
-
-    std::array<double, 3> outward{};
-    for (int d = 0; d < 3; d++) {
-        for (int i : outside) { outward[d] += vertices[i][d] / outside.size(); }
-        for (int i : inside) { outward[d] -= vertices[i][d] / inside.size(); }
-    }
-
-    if (inside.size() == 3) { inside.swap(outside); }
-
-    if (inside.size() == 1) {
-        std::array<std::array<double, 3>, 3> triangle;
-        for (int i = 0; i < 3; i++) { triangle[i] = this->ContourIntersection(vertices, level, inside[0], outside[i]); }
-
-        this->AppendInterfaceTriangle(triangle, outward, surface);
-    } else {
-        const std::array<double, 3> ac = this->ContourIntersection(vertices, level, inside[0], outside[0]);
-        const std::array<double, 3> ad = this->ContourIntersection(vertices, level, inside[0], outside[1]);
-        const std::array<double, 3> bc = this->ContourIntersection(vertices, level, inside[1], outside[0]);
-        const std::array<double, 3> bd = this->ContourIntersection(vertices, level, inside[1], outside[1]);
-
-        this->AppendInterfaceTriangle({ac, ad, bc}, outward, surface);
-        this->AppendInterfaceTriangle({ad, bd, bc}, outward, surface);
-    }
-
-    return;
-}
-
-std::vector<std::array<std::array<double, 3>, 3>>
-MPMMPMMonolithicFSI::BuildSolidInterface(const std::vector<double> &solid_phi) const {
-
-    // Tetrahedra follow the nc corner order.
-    const std::array<std::array<int, 4>, 6> tetrahedra{
-        {{0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6}, {0, 7, 4, 6}, {0, 4, 5, 6}, {0, 5, 1, 6}}};
-    std::vector<std::array<std::array<double, 3>, 3>> surface;
-    std::vector<double> node_phi(node, 0.0e0);
-
-    int nenode;
-    std::vector<int> ncm;
-    std::vector<double> sf;
-    std::vector<std::array<double, 3>> dsf;
-
-    for (int m = 0; m < nelem; m++) {
-        for (int n = 0; n < 8; n++) {
-            const int id = nc[m][n];
-            MakeSF(m, xyn[id], idimc, xynodec, ncm, nenode, sf, dsf);
-
-            // Interpolate relative to the contour.
-            node_phi[id] = 0.0e0;
-            for (int ni = 0; ni < nenode; ni++) {
-                const int nid = ncm[ni];
-                const double sfi = sf[ni];
-                node_phi[id] += sfi * (solid_phi[nid] - 0.5);
-            }
-            node_phi[id] += 0.5;
-        }
-    }
-
-    for (int m = 0; m < nelem; m++) {
-        double minimum_phi = 1.0, maximum_phi = 0.0;
-        for (int id : nc[m]) {
-            minimum_phi = std::min(minimum_phi, node_phi[id]);
-            maximum_phi = std::max(maximum_phi, node_phi[id]);
-        }
-        if (minimum_phi > 0.5 || maximum_phi <= 0.5) continue;
-
-        for (const std::array<int, 4> &tetrahedron : tetrahedra) {
-            std::array<std::array<double, 3>, 4> positions;
-            std::array<double, 4> level;
-            for (int corner = 0; corner < 4; corner++) {
-                const int id = nc[m][tetrahedron[corner]];
-                positions[corner] = xyn[id];
-                level[corner] = 0.5 - node_phi[id];
-            }
-
-            this->AppendSolidContour(positions, level, surface);
-        }
-    }
-
-    return this->GatherInterfaceGeometry(surface);
-}
 
 void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 
@@ -241,7 +93,7 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
     for (int pid = 0; pid < this->solid_.num; pid++) {
         int cell;
         std::array<double, 3> xyp = this->solid_.coord[pid];
-        LocateLocalElement(xyp, cell);
+        if (!LocateLocalElement(xyp, cell)) continue;
         MakeSF(cell, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
         for (int ni = 0; ni < nenode; ni++) {
             const int nid = ncm[ni];
@@ -252,16 +104,63 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
 
     NodeVarComm(final_phi, 0);
 
-    for (int n = 0; n < nodec; n++) { final_phi[n] = std::clamp(final_phi[n] / nvol[n], 0.0e0, 1.0e0); }
+    for (int n = 0; n < nodec; ++n) { final_phi[n] = std::clamp(final_phi[n] / nvol[n], 0.0, 1.0); }
+    const interface_geometry::InterfaceSDF interface(std::move(final_phi));
 
-    interface_geometry::InterfaceSDF interface(this->BuildSolidInterface(final_phi), {dxy[0], dxy[1], dxy[2]});
+    const auto &regions = mpm_dlb::CurrentRegions();
+    std::vector<std::vector<int>> send_ids(nprocs);
+    for (int pid = 0; pid < this->fluid_.num; ++pid) {
+        auto &point = this->fluid_.coord[pid];
+        int cell;
+        if (LocateLocalElement(point, cell)) {
+            std::array<double, 3> surface_point;
+            if (interface.FindSurfacePoint(point, surface_point)) { point = surface_point; }
+            continue;
+        }
+        std::array<int, 3> global_cell;
+        if (!LocateGlobalElement(point, global_cell)) continue;
+        for (int rank = 0; rank < nprocs; ++rank) {
+            const auto &region = regions[rank];
+            if (global_cell[0] >= region.elem_min[0] && global_cell[0] <= region.elem_max[0] &&
+                global_cell[1] >= region.elem_min[1] && global_cell[1] <= region.elem_max[1] &&
+                global_cell[2] >= region.elem_min[2] && global_cell[2] <= region.elem_max[2]) {
+                send_ids[rank].push_back(pid);
+                break;
+            }
+        }
+    }
 
-    for (int pid = 0; pid < this->fluid_.num; pid++) {
-        std::array<double, 3> surface_point, normal;
-        double signed_distance;
-        if (!interface.FindSurfacePoint(this->fluid_.coord[pid], surface_point, signed_distance, normal) ||
-            signed_distance >= 0.0) continue;
-        this->fluid_.coord[pid] = surface_point;
+    ParticleCommunication query_comm;
+    query_comm.nsp.resize(nprocs);
+    query_comm.nrp.resize(nprocs);
+    for (int rank = 0; rank < nprocs; ++rank) {
+        query_comm.comm_ranks.push_back(rank);
+        query_comm.nsp[rank] = send_ids[rank].size();
+    }
+    MPI_Alltoall(query_comm.nsp.data(), 1, MPI_INT, query_comm.nrp.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+    std::vector<int> query_particles;
+    std::vector<std::array<double, 3>> send, receive;
+    int receive_count = 0;
+    for (int rank = 0; rank < nprocs; ++rank) {
+        for (int pid : send_ids[rank]) {
+            query_particles.push_back(pid);
+            send.push_back(this->fluid_.coord[pid]);
+        }
+        receive_count += query_comm.nrp[rank];
+    }
+    receive.resize(receive_count);
+    query_comm.PointVarSendrecv(send, receive, 1);
+    for (auto &point : receive) {
+        std::array<double, 3> surface_point;
+        if (interface.FindSurfacePoint(point, surface_point)) { point = surface_point; }
+    }
+
+    // Reply in the same peer order, with the communication counts reversed.
+    std::swap(query_comm.nsp, query_comm.nrp);
+    query_comm.PointVarSendrecv(receive, send, 1);
+    for (std::size_t i = 0; i < query_particles.size(); ++i) {
+        this->fluid_.coord[query_particles[i]] = send[i];
     }
 
     return;

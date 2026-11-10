@@ -57,6 +57,16 @@ inline std::array<int, 3> IndexToIJK(int m, const std::vector<int> &ne) {
 }
 
 /**
+ * @brief Flatten per-direction background element indices into a linear index.
+ * @param ijk Element indices along x/y/z.
+ * @param ne Number of background elements along x/y/z.
+ * @return Linear element index with x varying fastest, then y, then z.
+ */
+inline int IJKToIndex(const std::array<int, 3> &ijk, const std::vector<int> &ne) {
+    return ijk[0] + ne[0] * (ijk[1] + ne[1] * ijk[2]);
+}
+
+/**
  * @brief Compute Gaussian quadrature points and weights for hexahedral elements.
  * @param dec2p Output array of quadrature data.
  */

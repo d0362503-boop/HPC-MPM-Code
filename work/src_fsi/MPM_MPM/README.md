@@ -3,6 +3,9 @@
 `MPMMPMMonolithicFSI` assembles fluid, solid, and interface multipliers into one
 PETSc system. The ten components are fluid displacement (3), fluid pressure (1),
 solid displacement (3), and interface multipliers (3), stored in 37 scalar blocks.
+The multipliers enforce continuity of the phase endpoint velocities. After the
+solve, a separate geometric correction moves fluid centres toward the final
+solid volume-fraction interface.
 
 ## Current solver strategy
 
@@ -191,16 +194,15 @@ all remaining steps will satisfy the same limits.
 | `datain_para.cpp` | Coupled case parameters and phase input |
 | `monolithic_fsi.cpp` | Coupled lifecycle, Newton loop, increments, and convergence |
 | `monolithic_assembly.cpp` | Fluid, solid, and multiplier contributions; 37-block PETSc insertion |
-| `monolithic_interface.cpp` | Solid contour, volume-fraction gradient weights, and particle correction |
+| `monolithic_interface.cpp` | Lumped interface weights, final solid phase mapping, and fluid coordinate correction |
 | `monolithic_solver.cpp` | Active components, constraints, scaling, linear correction, and physical preconditioner configuration |
 | `monolithic_fsi.h` | Class declarations and function documentation |
-| `../../../module/interface_sdf.h` / `.cpp` | Indexed finite-triangle distance queries |
+| `../../../module/interface_sdf.h` / `.cpp` | Local solid phase interpolation and one normal correction toward the 0.5 level set |
 
 The class header exposes driver operations and the physics callbacks used by
 `CrsMat`. Assembly, scaling, convergence and geometry helpers are private.
 `fsi_sys.ndof` is the single coupled dimension (10); `kStoredBlocks` defines its 37 stored blocks;
-the constructor configures it in `monolithic_fsi.cpp`. `InterfaceSDF` accepts
-oriented triangles and bin spacing for particle penetration correction.
+the constructor configures it in `monolithic_fsi.cpp`.
 
 CMake collects this directory's `.cpp` files automatically. After adding or
 removing one, run `cmake -S . -B build` from the repository root, then build the
@@ -348,20 +350,13 @@ the trial deformation gradient.
 
 ## Interface activation
 
-`BuildSolidInterface(solid_phi)` interpolates the supplied control-point phase
-field to the existing mesh vertices, using the scalar interpolation from
-`Cp2NodeVTK()` without its display cutoffs. Each `nc` hexahedron is split into
-six tetrahedra around its `0--6` body diagonal; no extra subcell vertices are
-generated. The extracted `phi = 0.5` triangles are oriented outward and exchanged
-across MPI ranks. Evaluating the interpolation as `0.5 + sum(N * (phi - 0.5))`
-preserves the constant contour level at partition faces without snapping values.
-Mesh vertices are used for geometry only; the coupled fields
-and interface-area weights remain on control points. `LumpedLagrangeMultiplier()`
-interpolates both step-start volume fractions and their gradients at each
-quadrature point. It integrates `||phi_s * grad(phi_f) - phi_f * grad(phi_s)||`
-into `nlm_lump_local`. `NodeVarComm` sums the weights into `nlm_lump`.
-Local weights assemble matrix contributions, and synchronized weights enter
-the RHS and activation decisions.
+`LumpedLagrangeMultiplier()` interpolates the step-start solid and fluid volume
+fractions and their gradients with `MakeSF()` at quadrature points. It integrates
+`||phi_s * grad(phi_f) - phi_f * grad(phi_s)||` against the shape functions
+to form `nlm_lump_local`. `NodeVarComm(..., 0)` sums the local contributions
+into `nlm_lump` at shared control points. The constraint-row Jacobian uses
+the local weight. The endpoint-velocity RHS and activation use the synchronized
+weight.
 
 `BuildActiveDOFs()` uses the absolute nodal-mass threshold directly:
 
@@ -402,34 +397,43 @@ data; the fluid version also handles inflow. Correcting between the two migratio
 calls makes the final solid particles available on their owning ranks and lets
 fluid ownership be determined from corrected coordinates.
 
-`CorrectFluidPenetration()` maps current solid particle volume with
-`LocateLocalElement`, `MakeSF`, and `StandardVarP2G` into a temporary nodal field.
-After `NodeVarComm`, it divides by `nvol` and clamps the volume fraction to
-`[0, 1]`. It passes this field to the existing `BuildSolidInterface()` routine;
-the step-start contour cannot represent the final solid configuration.
+After solid migration, `CorrectFluidPenetration()` maps the final solid particle
+volumes to control points with `LocateLocalElement()`, `MakeSF()` and
+`StandardVarP2G()`. It sums shared contributions with `NodeVarComm(..., 0)`,
+divides by `nvol`, and clamps the temporary solid phase coefficients to `[0, 1]`.
+This field represents the solid after the particle update and supplies the
+geometric interface at `phi_s = 0.5`.
 
-For each fluid centre, `InterfaceSDF::FindSurfacePoint()` queries the closest
-finite triangle within a band of `max(dxy)`. A negative signed distance causes
-one direct coordinate assignment to that surface point. There is no iterative
-retreat or fluid particle-to-grid mapping in this query. Triangle-interior
-projection follows the normal; edge and vertex cases use the nearest finite
-surface point.
+`InterfaceSDF::Evaluate()` uses the same background shape functions to
+interpolate `phi_s(x) = 0.5 + sum_i N_i(x) * (phi_s,i - 0.5)` and its
+physical gradient `g = grad(phi_s)(x)`. Subtracting 0.5 before interpolation
+preserves a constant 0.5 field. For a centre with `phi_s(x) > 0.5` and a
+finite gradient with `||g|| > 1e-12 / min(dxy)`,
+`InterfaceSDF::FindSurfacePoint()` applies one update along decreasing solid phase.
 
-No extra outward normal offset is added: near the solid foot, such an offset
-can move an otherwise interior fluid centre through a closed domain wall.
+```text
+x_corrected = clamp(x - (phi_s(x) - 0.5) * g / dot(g, g), xyminw, xymaxw)
+```
 
-The correction changes fluid coordinates only, preserving velocity,
-acceleration, TPIC/APIC state, pressure, mass, and volume. It is a geometric
-remapping separate from PST and does not supply a contact reaction. The distance
-sign follows the nearest triangle rather than a global inside/outside test,
-and the reconstructed `phi = 0.5` surface differs from a particle material-domain
-boundary. Validation should identify which boundary and overlap measure it uses.
+The clamp bounds each corrected coordinate by the global mesh. The update
+linearizes the phase field at the original centre. Curvature or clipping can
+leave a residual at the corrected location. Centres on the fluid side, or
+with an unusable gradient, keep their coordinates.
 
-Outer-domain protection is separate from this solid-interface correction.
-The calls to `DetermineClosedBoundaryFaces()` and
-`ConstrainClosedBoundaryCoordinate()` in the shared implicit particle commit
-are currently commented out. Nodal fixed-DOF conditions still apply, but they
-do not enforce a finite-step particle gap constraint. `MoveParticle()` removes
-particles outside the global domain; an open face intentionally permits outflow.
-Temporary wall-trace diagnostics have been removed from the source. Running
-executables retain the code and options from their last build and launch.
+A rank evaluates centres inside its own elements locally. For a centre in the
+global mesh that belongs to another rank, the current partition regions identify
+the owner. An independent `ParticleCommunication` instance exchanges query
+counts with `MPI_Alltoall` and sends coordinates with `PointVarSendrecv()`.
+The owning rank evaluates each query and returns the resulting coordinates
+in the same order. The originating rank writes them back, then the driver's
+fluid `MoveParticle()` migrates full particle state using the resulting positions.
+
+The correction changes fluid coordinates only. Velocity, acceleration,
+TPIC/APIC state, pressure, mass and volume retain their transferred values.
+It is a geometric remap separate from PST and the multiplier solve. Validate
+it by checking centre locations against the final `phi_s = 0.5` level set.
+A particle's finite material domain can still overlap the solid.
+
+Nodal fixed-DOF conditions constrain nodal kinematics. The geometric clamp
+applies only to corrected centres. Fluid centres already outside the global
+mesh are skipped by the correction and removed by `MoveParticle()`.

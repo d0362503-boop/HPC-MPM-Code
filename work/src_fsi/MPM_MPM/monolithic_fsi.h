@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <vector>
 
 #include "module/bc.h"
@@ -43,13 +42,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     void SolveFSISystem();
 
     /**
-     * @brief Move penetrated fluid centres onto the final solid phi=0.5 surface.
-     * @note Call after both Node2Particle updates and solid MoveParticle, before fluid MoveParticle. Reuses the solid contour
-     * and finite-triangle distance routines with an updated temporary phase field. The extra offset follows
-     * the solid outward unit normal; the signed-distance<0 trigger is unchanged. Projection is normal
-     * to a triangle interior, or to its nearest edge/vertex. Queries use the existing one-grid-spacing
-     * surface band and nearest-triangle sign. Velocity, acceleration, TPIC state, pressure, mass and volume are preserved.
-     * This is geometric remapping, not a physical contact-force or momentum correction.
+     * @brief Apply one final-phase normal correction to penetrated fluid centres.
+     * @note Call after both Node2Particle updates and solid MoveParticle, before fluid MoveParticle.
+     * Corrects phi>0.5 centres with a usable gradient once toward phi=0.5, within the global mesh.
+     * Flat-gradient centres are skipped. Curved interfaces retain the single-update approximation error.
      */
     void CorrectFluidPenetration();
 
@@ -153,52 +149,6 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     // Interface geometry.
     /** @brief Integrate the two-phase volume-fraction gradient measure into lumped nodal interface-area weights. */
     void LumpedLagrangeMultiplier();
-
-    /**
-     * @brief Exchange current interface geometry across MPI ranks.
-     * @param local_geometry Rank-local solid triangles in physical coordinates.
-     * @return Physical geometry available to all ranks in the current configuration.
-     */
-    template <size_t vertex_count>
-    std::vector<std::array<std::array<double, 3>, vertex_count>>
-    GatherInterfaceGeometry(const std::vector<std::array<std::array<double, 3>, vertex_count>> &local_geometry) const;
-
-    /**
-     * @brief Locate the zero contour on a tetrahedron edge by linear interpolation.
-     * @param vertices Physical tetrahedron vertices in the current configuration.
-     * @param level Signed phase values at the vertices: negative inside the solid.
-     * @param i Index of the edge's first vertex.
-     * @param j Index of the edge's second vertex.
-     * @return Physical position where the interpolated phase value is zero.
-     */
-    std::array<double, 3> ContourIntersection(const std::array<std::array<double, 3>, 4> &vertices,
-                                              const std::array<double, 4> &level, int i, int j) const;
-
-    /**
-     * @brief Orient a nonzero-area contour triangle toward the exterior and append it.
-     * @param triangle Physical vertices of the reconstructed solid contour.
-     * @param outward Direction from the tetrahedron's inside vertices to its outside vertices.
-     * @param surface Boundary triangles receiving the oriented contour.
-     */
-    void AppendInterfaceTriangle(std::array<std::array<double, 3>, 3> triangle, const std::array<double, 3> &outward,
-                                 std::vector<std::array<std::array<double, 3>, 3>> &surface) const;
-
-    /**
-     * @brief Extract the solid zero contour inside one tetrahedron.
-     * @param vertices Physical tetrahedron vertices sampled from the current background cell.
-     * @param level Signed phase values: negative inside the solid, positive outside.
-     * @param surface Boundary triangles receiving the outward-oriented contour.
-     */
-    void AppendSolidContour(const std::array<std::array<double, 3>, 4> &vertices, const std::array<double, 4> &level,
-                            std::vector<std::array<std::array<double, 3>, 3>> &surface) const;
-
-    /**
-     * @brief Interpolate solid phi to mesh vertices and reconstruct its phi=0.5 boundary without subcell sampling.
-     * @param solid_phi Control-point solid volume fraction in the configuration to reconstruct.
-     * @return Globally available, outward-oriented triangles in physical coordinates.
-     * @note Uses xyn and nc for geometry only; field variables remain on control points.
-     */
-    std::vector<std::array<std::array<double, 3>, 3>> BuildSolidInterface(const std::vector<double> &solid_phi) const;
 };
 
 } // namespace mpm_mpm_monolithic_fsi
