@@ -303,7 +303,9 @@ void CrsMat::BuildPetscLocalMaps() {
         const int natural_id = this->petsc_local_to_natural[pos];
         const PetscInt global_node = this->natural_block_gids[natural_id];
         this->petsc_local_block_gids[pos] = global_node;
-        for (int var = 0; var < this->ndof; ++var) { this->petsc_local_var_gids[pos + var * nodec] = global_node * this->ndof + var; }
+        for (int var = 0; var < this->ndof; ++var) {
+            this->petsc_local_var_gids[pos + var * nodec] = global_node * this->ndof + var;
+        }
     }
 
     return;
@@ -477,7 +479,7 @@ void CrsMat::InitPetscSolver() {
 
     this->BuildPetscMat();
 
-    BuildKSPSolver();
+    this->BuildKSPSolver();
 
     IS from_is = nullptr;
     IS to_is = nullptr;
@@ -652,15 +654,13 @@ int CrsMat::SolveWithPetsc(int NR_it) {
 
     // If KSP iterations grew by more than 2x compared with the previous step,
     // force a rebuild on the next step.  This applies to both fluid and solid.
-    if (this->rebuild_on_iteration_growth && this->prev_ksp_its_ >= 0 &&
-        static_cast<double>(its) > this->prev_ksp_its_ * 2.0) {
+    if (this->rebuild_on_iteration_growth && this->prev_ksp_its_ >= 0 && static_cast<double>(its) > this->prev_ksp_its_ * 2.0) {
         this->force_rebuild_next_ = true;
     }
     this->prev_ksp_its_ = static_cast<int>(its);
 
     return static_cast<int>(its);
 }
-
 
 bool CrsMat::NeedsPreconditionerRebuild(int NR_it) {
     const bool force_rebuild = this->force_rebuild_next_;
@@ -681,5 +681,4 @@ void CrsMat::RecoverSolution() {
         for (int var = 0; var < this->ndof; ++var) { this->x_lhs[n + var * nodec] = seq_x_arr[n + var * nodec]; }
     }
     VecRestoreArrayRead(this->seq_x, &seq_x_arr);
-
 }

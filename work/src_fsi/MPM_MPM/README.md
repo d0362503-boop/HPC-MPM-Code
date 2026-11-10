@@ -250,9 +250,9 @@ final correction. `BuildInterfaceSchur` remains removed.
 `SolveSystem(NR_it)` preserves the unscaled physical RHS, zeros the native
 correction, scales the matrix/RHS and solves through `CrsMat`. It then multiplies
 the recovered correction by `column_scale` and restores the physical RHS.
-The outer KSP uses `rtol=1e-6` and `atol=1e-13` when any control point
+The outer KSP uses `rtol=1e-8` and `atol=1e-13` when any control point
 across all ranks has both phase masses greater than `mtol` and a positive
-`nlm_lump`. Otherwise it uses `rtol=1e-8` and `atol=1e-15`.
+`nlm_lump`. Otherwise it uses `rtol=1e-10` and `atol=1e-15`.
 The outer iteration limit is 300.
 The divergence tolerance is `1e6` on the first Newton correction and
 `PETSC_UNLIMITED` later. A logged negative reason remains a failed linear solve;
@@ -328,7 +328,7 @@ once. A field with no active components has zero RMS.
 | Fluid momentum | Nonlinear momentum RHS [N] | `max(1e-10, 1e-5 * initial_norm[0])` |
 | Continuity | Nonlinear continuity RHS [m^3/s] | `max(1e-13, 1e-5 * initial_norm[1])` |
 | Solid momentum | Nonlinear momentum RHS [N] | `max(1e-8, 1e-5 * initial_norm[2])` |
-| Interface | Endpoint-velocity difference [m/s] | `1e-10` |
+| Interface | Endpoint-velocity difference [m/s] | `1e-8` |
 
 The first three references are saved inside `CheckNRConvergence()` at
 `NR_it == 0`. All four RMS comparisons must meet their thresholds.

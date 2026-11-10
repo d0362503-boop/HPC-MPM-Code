@@ -110,7 +110,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     }
     MPI_Allreduce(MPI_IN_PLACE, &has_contact, 1, MPI_CXX_BOOL, MPI_LOR, MPI_COMM_WORLD);
 
-    const double ref_tol = has_contact ? 1.0e-6 : 1.0e-8;
+    const double ref_tol = has_contact ? 1.0e-8 : 1.0e-10;
     const double abs_tol = has_contact ? 1.0e-13 : 1.0e-15;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
     KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 300);
