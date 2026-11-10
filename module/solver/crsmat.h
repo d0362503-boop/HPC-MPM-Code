@@ -32,7 +32,7 @@ class CrsMat {
     std::vector<int> natural_to_petsc_local;
     std::vector<int> petsc_local_to_natural;
 
-    // PETSc global IDs in natural local node order.
+    // Natural-order global IDs: index with natural local node id.
     std::vector<PetscInt> natural_block_gids;
     std::vector<PetscInt> natural_var_gids;
 
@@ -196,14 +196,14 @@ class CrsMat {
 
     /**
      * @brief Build natural-order global ID maps from the local node-to-global mapping.
-     * @param node_l2g Global PETSc block ID for each natural local control point.
+     * @param node_l2g Natural local node id to global node id mapping.
      */
     void BuildNaturalGlobalMaps(const std::vector<int> &node_l2g);
 
     /**
      * @brief Classify natural local nodes into owned and ghost sets using the
      *        aelemmin tie-break rule.
-     * @param node_l2g Geometric global ID for each natural local control point.
+     * @param node_l2g Natural local node id to global node id mapping.
      */
     void BuildOwnershipMetadata(const std::vector<int> &node_l2g);
 
