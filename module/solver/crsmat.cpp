@@ -342,10 +342,28 @@ void CrsMat::BuildLGMAP() {
         }
     }
 
+    this->BuildOwnershipMetadata(node_l2g);
+
+    int first_owned = 0;
+    PetscCallMPIAbort(MPI_COMM_WORLD, MPI_Exscan(&this->local_node, &first_owned, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+    if (myrank == 0) { first_owned = 0; }
+
+    const int global_nodes = xynodecw[0] * xynodecw[1] * xynodecw[2];
+    std::vector<int> geometric_to_petsc(global_nodes, 0); // Zero marks missing IDs.
+    for (int i = 0; i < this->local_node; ++i) {
+        const int natural_id = this->owned_natural_ids[i];
+        geometric_to_petsc[node_l2g[natural_id]] = first_owned + i + 1;
+    }
+    PetscCallMPIAbort(MPI_COMM_WORLD,
+                      MPI_Allreduce(MPI_IN_PLACE, geometric_to_petsc.data(), global_nodes, MPI_INT, MPI_MAX, MPI_COMM_WORLD));
+    for (int &node_gid : node_l2g) {
+        node_gid = geometric_to_petsc[node_gid] - 1;
+        PetscCheckAbort(node_gid >= 0, MPI_COMM_WORLD, PETSC_ERR_PLIB, "Missing PETSc control-point ID");
+    }
+
     this->BuildNaturalGlobalMaps(node_l2g);
-    BuildOwnershipMetadata(node_l2g);
     this->BuildPetscLocalMaps();
-    CheckOwnershipMetadata();
+    this->CheckOwnershipMetadata();
 
     return;
 }
