@@ -167,22 +167,16 @@ assembly index; `petsc_local_to_natural` provides the inverse ordering.
 
 Ghost control points are still assembled, because remote element contributions may live there before PETSc redistributes them during `MatAssemblyEnd`.
 
-`BuildLGMAP()` uses `BuildPetscLocalMaps()` to place physically owned control
-points before ghosts in `petsc_local_to_natural`. The associated LGMAP maps
-those assembly indices to geometric global node IDs; it does not assign PETSc
-matrix row ownership.
+For both MPM and FEM, `BuildLGMAP()` classifies ownership using geometric IDs,
+then assigns contiguous PETSc block IDs in rank order. Each rank starts at the
+prefix sum of the owned control-point counts. An `MPI_Allreduce` distributes
+the assigned IDs so that ghost copies use their owner's numbering.
 
-`MatSetSizes()` determines each rank's contiguous PETSc global row interval.
-With geometric global numbering, that interval need not contain the global IDs
-of the control points physically owned by the same rank. Off-process assembly
-routes contributions to the correct matrix row owner; solution recovery scatters
-them back to the original control points. `CheckOwnershipMetadata()` validates
-the physical owned/ghost maps independently.
-
-Consequently, a rank with particles can own no retained fluid matrix rows after
-compression. This is distinct from having no fluid particles or dropping fluid
-equations. Solver-row load balance and particle/assembly load balance must be
-measured separately.
+`MatSetSizes()` uses the same owned counts multiplied by `ndof`, so its row
+interval matches the physically owned control points. The local assembly maps
+put owned points first and ghosts after them. PETSc routes ghost contributions
+to their owners, and solution recovery scatters the values back to the original
+control-point order.
 
 ### 3.2 Matrix setup
 

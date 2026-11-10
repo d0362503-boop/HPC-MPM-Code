@@ -303,7 +303,9 @@ void CrsMat::BuildPetscLocalMaps() {
         const int natural_id = this->petsc_local_to_natural[pos];
         const PetscInt global_node = this->natural_block_gids[natural_id];
         this->petsc_local_block_gids[pos] = global_node;
-        for (int var = 0; var < this->ndof; ++var) { this->petsc_local_var_gids[pos + var * nodec] = global_node * this->ndof + var; }
+        for (int var = 0; var < this->ndof; ++var) {
+            this->petsc_local_var_gids[pos + var * nodec] = global_node * this->ndof + var;
+        }
     }
 
     return;
@@ -342,10 +344,28 @@ void CrsMat::BuildLGMAP() {
         }
     }
 
+    this->BuildOwnershipMetadata(node_l2g);
+
+    int first_owned = 0;
+    PetscCallMPIAbort(MPI_COMM_WORLD, MPI_Exscan(&this->local_node, &first_owned, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+    if (myrank == 0) { first_owned = 0; }
+
+    const int global_nodes = xynodecw[0] * xynodecw[1] * xynodecw[2];
+    std::vector<int> geometric_to_petsc(global_nodes, 0); // Zero marks missing IDs.
+    for (int i = 0; i < this->local_node; ++i) {
+        const int natural_id = this->owned_natural_ids[i];
+        geometric_to_petsc[node_l2g[natural_id]] = first_owned + i + 1;
+    }
+    PetscCallMPIAbort(MPI_COMM_WORLD,
+                      MPI_Allreduce(MPI_IN_PLACE, geometric_to_petsc.data(), global_nodes, MPI_INT, MPI_MAX, MPI_COMM_WORLD));
+    for (int &node_gid : node_l2g) {
+        node_gid = geometric_to_petsc[node_gid] - 1;
+        PetscCheckAbort(node_gid >= 0, MPI_COMM_WORLD, PETSC_ERR_PLIB, "Missing PETSc control-point ID");
+    }
+
     this->BuildNaturalGlobalMaps(node_l2g);
-    BuildOwnershipMetadata(node_l2g);
     this->BuildPetscLocalMaps();
-    CheckOwnershipMetadata();
+    this->CheckOwnershipMetadata();
 
     return;
 }
@@ -459,7 +479,7 @@ void CrsMat::InitPetscSolver() {
 
     this->BuildPetscMat();
 
-    BuildKSPSolver();
+    this->BuildKSPSolver();
 
     IS from_is = nullptr;
     IS to_is = nullptr;
@@ -634,15 +654,13 @@ int CrsMat::SolveWithPetsc(int NR_it) {
 
     // If KSP iterations grew by more than 2x compared with the previous step,
     // force a rebuild on the next step.  This applies to both fluid and solid.
-    if (this->rebuild_on_iteration_growth && this->prev_ksp_its_ >= 0 &&
-        static_cast<double>(its) > this->prev_ksp_its_ * 2.0) {
+    if (this->rebuild_on_iteration_growth && this->prev_ksp_its_ >= 0 && static_cast<double>(its) > this->prev_ksp_its_ * 2.0) {
         this->force_rebuild_next_ = true;
     }
     this->prev_ksp_its_ = static_cast<int>(its);
 
     return static_cast<int>(its);
 }
-
 
 bool CrsMat::NeedsPreconditionerRebuild(int NR_it) {
     const bool force_rebuild = this->force_rebuild_next_;
@@ -663,5 +681,4 @@ void CrsMat::RecoverSolution() {
         for (int var = 0; var < this->ndof; ++var) { this->x_lhs[n + var * nodec] = seq_x_arr[n + var * nodec]; }
     }
     VecRestoreArrayRead(this->seq_x, &seq_x_arr);
-
 }
