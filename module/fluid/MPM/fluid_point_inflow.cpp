@@ -180,9 +180,6 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];
-                        double dsfi1 = dsf[ni][0];
-                        double dsfi2 = dsf[ni][1];
-                        double dsfi3 = dsf[ni][2];
                         ifp.pic.VarG2P(ifp.num, nid, sfi, ifp.pres, this->npres);
                         ifp.pic.VarG2P(ifp.num, nid, sfi, ifp.accel, this->naccel);
                         if (this->solswitch != MapScheme::FLIP) {

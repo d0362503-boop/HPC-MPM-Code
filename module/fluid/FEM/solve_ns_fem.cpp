@@ -169,7 +169,7 @@ void StabilizedFEM::AssembleSystem(const std::vector<double> &adv_vel) {
     const double af0 = 1.0e0 - af;
     const double am0 = 1.0e0 - am;
 
-    double G_Weight = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
+    double weight = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
 
     int nenode;
     std::vector<int> ncm;
@@ -211,9 +211,9 @@ void StabilizedFEM::AssembleSystem(const std::vector<double> &adv_vel) {
                 double dsfi3 = dsf[ni][2];
                 double ust_ni = (dsfi1 * adv_vel_k[0] + dsfi2 * adv_vel_k[1] + dsfi3 * adv_vel_k[2]);
                 // --- Force (Galerkin+SUPG) ---
-                double fg = (sfi + ust_ni * t1) * G_Weight * rhof;
+                double fg = (sfi + ust_ni * t1) * weight * rhof;
                 // --- Force (PSPG) ---
-                double fp = (dsfi1 * fx + dsfi2 * fy + dsfi3 * fz) * G_Weight * t1;
+                double fp = (dsfi1 * fx + dsfi2 * fy + dsfi3 * fz) * weight * t1;
 
                 int ncol = 0;
                 for (int nj = 0; nj < nenode; nj++) {
@@ -227,47 +227,47 @@ void StabilizedFEM::AssembleSystem(const std::vector<double> &adv_vel) {
                     int ida = this->NS_.FindIndex(nid, njd, ncol);
 
                     // --- Mass Matrix (Galerkin+SUPG) ---
-                    double emd = G_Weight * (sfi + ust_ni * t1) * sfj * rhof;
+                    double emd = weight * (sfi + ust_ni * t1) * sfj * rhof;
                     // --- Mass Matrix (PSPG) ---
-                    double egtu = G_Weight * dsfi1 * sfj * t1;
-                    double egtv = G_Weight * dsfi2 * sfj * t1;
-                    double egtw = G_Weight * dsfi3 * sfj * t1;
+                    double egtu = weight * dsfi1 * sfj * t1;
+                    double egtv = weight * dsfi2 * sfj * t1;
+                    double egtw = weight * dsfi3 * sfj * t1;
                     // --- Advection Matrix (Galerkin+SUPG) ---
-                    double akg = G_Weight * (sfi + ust_ni * t1) * ust_nj * rhof;
+                    double akg = weight * (sfi + ust_ni * t1) * ust_nj * rhof;
                     // --- Advection Matrix (PSPG) ---
-                    double akpu = G_Weight * dsfi1 * ust_nj * t1;
-                    double akpv = G_Weight * dsfi2 * ust_nj * t1;
-                    double akpw = G_Weight * dsfi3 * ust_nj * t1;
+                    double akpu = weight * dsfi1 * ust_nj * t1;
+                    double akpv = weight * dsfi2 * ust_nj * t1;
+                    double akpw = weight * dsfi3 * ust_nj * t1;
                     // --- Diffusion Matrix (Galerkin part) ---
-                    double su = G_Weight * (2.0e0 * dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
-                    double sv = G_Weight * (dsfi1 * dsfj1 + 2.0e0 * dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
-                    double sw = G_Weight * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + 2.0e0 * dsfi3 * dsfj3) * rmuf;
-                    double suv = G_Weight * (dsfi2 * dsfj1) * rmuf;
-                    double suw = G_Weight * (dsfi3 * dsfj1) * rmuf;
-                    double svu = G_Weight * (dsfi1 * dsfj2) * rmuf;
-                    double svw = G_Weight * (dsfi3 * dsfj2) * rmuf;
-                    double swu = G_Weight * (dsfi1 * dsfj3) * rmuf;
-                    double swv = G_Weight * (dsfi2 * dsfj3) * rmuf;
+                    double su = weight * (2.0e0 * dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
+                    double sv = weight * (dsfi1 * dsfj1 + 2.0e0 * dsfi2 * dsfj2 + dsfi3 * dsfj3) * rmuf;
+                    double sw = weight * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + 2.0e0 * dsfi3 * dsfj3) * rmuf;
+                    double suv = weight * (dsfi2 * dsfj1) * rmuf;
+                    double suw = weight * (dsfi3 * dsfj1) * rmuf;
+                    double svu = weight * (dsfi1 * dsfj2) * rmuf;
+                    double svw = weight * (dsfi3 * dsfj2) * rmuf;
+                    double swu = weight * (dsfi1 * dsfj3) * rmuf;
+                    double swv = weight * (dsfi2 * dsfj3) * rmuf;
                     // --- Pressure Matrix (SUPG-Galerkin) ---
-                    double esgu = G_Weight * (ust_ni * dsfj1 * t1 - dsfi1 * sfj);
-                    double esgv = G_Weight * (ust_ni * dsfj2 * t1 - dsfi2 * sfj);
-                    double esgw = G_Weight * (ust_ni * dsfj3 * t1 - dsfi3 * sfj);
+                    double esgu = weight * (ust_ni * dsfj1 * t1 - dsfi1 * sfj);
+                    double esgv = weight * (ust_ni * dsfj2 * t1 - dsfi2 * sfj);
+                    double esgw = weight * (ust_ni * dsfj3 * t1 - dsfi3 * sfj);
                     // --- Pressure Matrix (PSPG) ---
-                    double elt = G_Weight * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) / rhof * t1;
+                    double elt = weight * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) / rhof * t1;
                     // --- Continuity (Galerkin part) ---
-                    double Cowu = G_Weight * sfi * dsfj1;
-                    double Cowv = G_Weight * sfi * dsfj2;
-                    double Coww = G_Weight * sfi * dsfj3;
+                    double Cowu = weight * sfi * dsfj1;
+                    double Cowv = weight * sfi * dsfj2;
+                    double Coww = weight * sfi * dsfj3;
                     // --- Shock Capturing ---
-                    double scu = G_Weight * dsfi1 * dsfj1 * rhof * t2;
-                    double scv = G_Weight * dsfi2 * dsfj2 * rhof * t2;
-                    double scw = G_Weight * dsfi3 * dsfj3 * rhof * t2;
-                    double scuv = G_Weight * dsfi1 * dsfj2 * rhof * t2;
-                    double scuw = G_Weight * dsfi1 * dsfj3 * rhof * t2;
-                    double scvu = G_Weight * dsfi2 * dsfj1 * rhof * t2;
-                    double scvw = G_Weight * dsfi2 * dsfj3 * rhof * t2;
-                    double scwu = G_Weight * dsfi3 * dsfj1 * rhof * t2;
-                    double scwv = G_Weight * dsfi3 * dsfj2 * rhof * t2;
+                    double scu = weight * dsfi1 * dsfj1 * rhof * t2;
+                    double scv = weight * dsfi2 * dsfj2 * rhof * t2;
+                    double scw = weight * dsfi3 * dsfj3 * rhof * t2;
+                    double scuv = weight * dsfi1 * dsfj2 * rhof * t2;
+                    double scuw = weight * dsfi1 * dsfj3 * rhof * t2;
+                    double scvu = weight * dsfi2 * dsfj1 * rhof * t2;
+                    double scvw = weight * dsfi2 * dsfj3 * rhof * t2;
+                    double scwu = weight * dsfi3 * dsfj1 * rhof * t2;
+                    double scwv = weight * dsfi3 * dsfj2 * rhof * t2;
 
                     this->NS_.amat[ida + this->NS_.block_id[0]] += dti * am * emd + af * (akg + su + scu);
                     this->NS_.amat[ida + this->NS_.block_id[1]] += af * (suv + scuv);
