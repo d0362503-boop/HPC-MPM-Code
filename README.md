@@ -6,16 +6,17 @@ Supported solver modes:
 
 - `FLUID` — MPM or FEM fluid solver
 - `SOLID` — explicit or implicit MPM solid solver
-- `FSI` — partitioned strong-coupling fluid–solid interaction
+- `FSI` — partitioned MPM–FEM or monolithic MPM–MPM fluid–solid interaction
 
 ## Features
 
 - C++17 with MPI parallelism
 - Dynamic load balancing (DLB) for fluid MPM via particle-coordinate sampling (`module/DLB/`)
 - PETSc-backed sparse linear algebra
+- Generalized-alpha/Newmark parameters and kinematics in `GeneralizedAlphaIntegrator`, owned by each `MaterialPoint`
 - Fluid: FEM or MPM
 - Solid: explicit or implicit MPM
-- Partitioned FSI with block iterations
+- Partitioned MPM–FEM FSI and monolithic MPM–MPM FSI with interface multipliers
 - CMake-based build with bundled PETSc/HDF5 bootstrap
 - Standalone input generators and partitioners under `data/`
 - VTK HDF5 output (`*.vtkhdf`)
@@ -25,7 +26,8 @@ Supported solver modes:
 ```bash
 cmake -S . -B build
 cmake --build build -j8
-mpirun -np 4 ./build/MPM
+cd build
+mpirun -np 4 ./MPM
 ```
 
 The CMake binary directory **must** be named `build`; anything else is rejected.
@@ -51,7 +53,7 @@ Key files:
 - `CMakeLists.txt` — root CMake entry
 - `cmake/options.cmake` — build options
 - `AGENTS.md` — engineering rules and pitfalls
-- `MPM_main.cpp` — solver entry point; dispatches to the selected driver
+- `work/**/main.cpp` — each solver's executable entry point; CMake selects one
 
 ## Dependencies
 
@@ -87,40 +89,51 @@ Active build options (most are defined in `cmake/options.cmake`; `MPM_ENABLE_NAT
 The active driver is selected by uncommenting **exactly one** `add_subdirectory(...)` line in `work/CMakeLists.txt`:
 
 ```cmake
-add_subdirectory(src_fluid)
+# add_subdirectory(src_fluid)
 # add_subdirectory(src_solid)
-# add_subdirectory(src_fsi)
+add_subdirectory(src_fsi)
 ```
 
-You must also keep `MPM_main.cpp` consistent. The checked-in configuration selects `src_fluid`:
+The selected solver's `main.cpp` supplies `main()` directly; there is no separate dispatch entry.
+Initialization and finalization are shared through `InitializeSimulation()` and `FinalizeSimulation()` in `module/dataset.h`.
 
-```cpp
-StabilizedMixedMPM();
-```
+For FSI, `work/src_fsi/CMakeLists.txt` selects either `MPM_FEM` or `MPM_MPM`.
+`work/src_solid/CMakeLists.txt` similarly selects `explicit` or `implicit`.
 
-`work/src_solid/CMakeLists.txt` also requires uncommenting exactly one subdirectory (`explicit` or `implicit`).
+The [MPM-MPM FSI guide](work/src_fsi/MPM_MPM/README.md) describes the coupled
+Newton loop, interface activation, particle correction, and the optimized
+solver strategy. Its nonlinear check is separate from the standalone
+`CrsMat` monitor.
+
+### Current linear-solver strategy
+
+| Change | Current behavior | Guide |
+|--------|------------------|-------|
+| One component count | Physics constructors set `CrsMat::ndof` once; matrix helpers and assembly callbacks read it | [Shared solver](module/solver/README.md) |
+| Shared MPM solve/setup | Pure fluid, implicit solid and FSI retain full `nodec * ndof` assembly/vectors; `CrsMat` configures declared field groups, compresses and recovers the full solution | [Shared solver](module/solver/README.md) |
+| Solid preconditioning | FGMRES with ASM overlap 1 and local PREONLY/ILU(1), nonzero shift `1e-3` | [Implicit solid](module/solid/implicit/README.md) |
+| Coupled FSI preconditioning | Fluid / [solid + lambda] Schur grouping; the coupled inner FGMRES uses PETSc's assembled `selfp` Pmat | [FSI strategy](work/src_fsi/MPM_MPM/README.md) |
+| Activity and logging | Absolute `nmass > mtol` phase activation; optional PETSc performance logging | [FSI configuration](work/src_fsi/MPM_MPM/README.md) |
+
+The current PETSc MPM path uses reduced equations after boundary elimination.
+It rebuilds the compact matrix values every linear solve. The KSP is recreated
+when retained equations change or the configured cadence requests it; otherwise
+the KSP is retained while its numerical preconditioner is refreshed. This is
+distinct from keeping the entire preconditioner unchanged between NR iterations.
 
 ### Selecting data tools
 
-Generators are selected in `data/generate/CMakeLists.txt`:
+`data/generate/CMakeLists.txt` and `data/divide/CMakeLists.txt` configure all
+standalone fluid/solid tools and both FSI variants by default. Build only the
+target needed for a case:
 
 ```cmake
-add_subdirectory(fluid)
-# add_subdirectory(solid)
-# add_subdirectory(fsi)
-```
-
-Partitioners are selected in `data/divide/CMakeLists.txt`:
-
-```cmake
-add_subdirectory(divide_fluid fluid)
-# add_subdirectory(divide_solid solid)
-# add_subdirectory(divide_fsi fsi)
+cmake --build build --target makinput_fsi_mpm_fem makdivide_fsi_mpm_fem -j8
 ```
 
 ## Build Examples
 
-Current fluid build:
+Current MPM--MPM FSI build (selected in `work/src_fsi/CMakeLists.txt`):
 
 ```bash
 cmake -S . -B build
@@ -141,7 +154,7 @@ cmake -S . -B build
 cmake --build build -j8
 ```
 
-Current fluid data generator:
+Example fluid data generator:
 
 ```bash
 cmake --build build --target makinput_fluid -j8
@@ -150,7 +163,8 @@ cmake --build build --target makinput_fluid -j8
 ## Running the Solver
 
 ```bash
-mpirun -np 4 ./build/MPM
+cd build
+mpirun -np 4 ./MPM
 ```
 
 At runtime the solver reads an orchestration file, conventionally `file.dat`, with four lines:
@@ -162,6 +176,11 @@ At runtime the solver reads an orchestration file, conventionally `file.dat`, wi
 
 Per-rank input files follow the prefix with the rank number, e.g. `griddata0.txt`, `pointdata0.txt`.
 
+`file.dat` is read from the `build/` working directory. Its paths should refer to
+generated files under `build/`, such as `./data/divide/...` and `./res/...`, not
+source-tree paths under `../data/`. The MPI process count must match the partition
+topology, and the input mesh dimensions must match the generated partition data.
+
 A convenience script is available at `build/run.sh`:
 
 ```bash
@@ -169,20 +188,36 @@ cd build
 sh run.sh [NP]
 ```
 
-`NP` resolves in this order:
+Supply the partition count as an argument (`sh run.sh 16`) or through `NP`.
+The local script falls back to `nproc` when neither is supplied, which is suitable
+only when the generated partition count matches. Launcher copies are host-local:
+cluster versions may instead require `NP` and select apparently idle physical
+cores. Inspect the installed script for its binding policy.
 
-1. Command-line argument: `sh run.sh 16`
-2. Environment variable: `NP=8 sh run.sh`
-3. Default: all logical CPUs (`nproc`)
-
-It launches `./MPM` with `mpirun` under `nohup` in the background (hyper-threading aware via `--use-hwthread-cpus --bind-to hwthread`) and redirects output to:
+Output goes to:
 
 - `stdout/out_<PID>_<NP>.log`
 - `stderr/err_<PID>_<NP>.log`
 
+The launcher prints only the process count, background PID, stdout path and
+stderr path. It inherits `PETSC_OPTIONS`. For optional PETSc event timings:
+
+```bash
+PETSC_OPTIONS="-log_view" sh run.sh 16
+```
+
+PETSc writes the performance summary to stdout at normal finalization. Setup,
+preconditioner, and solve event times can overlap; do not add them as independent
+costs. Ordinary NR records report residuals and iteration counts, not separate
+KSP setup/solve times. Options and rebuilt code affect new processes only.
+
 `build/run.sh` is gitignored; copy it elsewhere if you want to version a customized version.
 
 > **Do not delete `build/`**: it contains generated runtime files, partitioned input data, and job outputs. If a clean CMake configure is needed, remove only `build/CMakeCache.txt` and `build/CMakeFiles/`.
+
+CMake copies some parameter files from `data/` into `build/data/` during
+configuration. After reconfiguring, check the selected parameter block and
+restart settings before launching; local runtime edits may have been overwritten.
 
 ## Data Generator / Partitioner Workflow
 
@@ -204,20 +239,14 @@ cd build/data/divide/fluid
 
 The partitioner writes rank-split data under `myrank_data/`.
 
-For solid cases, the generated `spdata.txt` / partitioned `spdata*.txt`
-records now store each particle as:
-
-1. coordinate triplet
-2. `id`
-3. `matid`
-4. `surf_point`
-5. `mass`
-6. `vol0`
+For solid cases, each particle section stores a count, then all coordinate
+triplets, then one `id matid surf_point mass vol0` row per particle. Coordinates
+and attributes are separate blocks, not interleaved particle records.
 
 ## Output
 
 - Visualization: VTK HDF5 (`grid.vtkhdf`, `wp.vtkhdf`, `sp.vtkhdf`)
-- Text inputs/outputs: `griddata*.txt`, `wpdata*.txt`, `spdata*.txt`, `pointdata*.txt`
+- Text inputs/outputs: `griddata*.txt`, `pointdata*.txt`
 - Restart: per-rank `*_re.txt` files
 
 ## Important Notes

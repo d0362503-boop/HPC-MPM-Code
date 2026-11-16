@@ -17,8 +17,9 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 
 Shared helpers live outside this directory:
 
-- `module/particle_shifting.cpp` — `DeltaCorrectionParticleShifting()` and `PairwiseRepulsiveParticleShifting()`.
-- `module/nonlinear_time_integration.cpp` — `PredictNewmarkBetaVelAndAccel`, `CommitNodalKinematics`, `CommitParticleKinematics`.
+- `module/particle_shifting.cpp` — `DeltaCorrectionPST()` and `PairwiseRepulsivePST()`.
+- `module/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
+- `module/material_point.cpp` — `CommitNodalKinematics`, closed-boundary position helpers, and `CommitImplicitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
 ## Class Architecture
@@ -40,13 +41,14 @@ MaterialPoint (base)
 | `ode_order`                | `2` (displacement/velocity/acceleration) | `1` (velocity only)              |
 | `NS_.FEM_flag`             | `false`                                  | `true`                           |
 | `NS_.use_petsc`            | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
-| `NS_.use_schur_fieldsplit` | `true`                                   | `true`                           |
-| Pressure Pmat              | PETSc `SELFP + epsilon I`                | PETSc `SELFP`                    |
-| `NS_.amg_rebuild_freq`     | `1`                                      | `20`                             |
+| NS preconditioner         | `PCFIELDSPLIT`                           | `PCFIELDSPLIT`                   |
+| Pressure Pmat              | PETSc `SELFP`                            | PETSc `SELFP`                    |
+| PETSc equation layout      | Internally compressed; full native vectors | Full system                     |
+| `NS_.rebuild_freq`         | `1`                                      | `20`                             |
 
 ## Driver Flow
 
-The standalone MPM fluid driver is `work/src_fluid/MPM/main.cpp`:
+The module's time-step operations are called in this order:
 
 ```
 DataInput()
@@ -54,7 +56,7 @@ RestartInput()          (if rstflag == 1 or 3)
 BuildMesh()
 BuildControlPoint()
 NS_.BuildCrsMat(16)
-MakNodalVol()
+ComputeNodalVol()
 for istep = ista .. iend
     MeshPointLinklist()
     Particle2Node()
@@ -73,12 +75,26 @@ See `module/DLB/README.md` for the full pipeline and its invariants.
 
 ## Time Integration
 
+`CommitImplicitParticleKinematics()` uses each particle object's own normal
+velocity and inflow BCs. A whole box face is closed only when every face control
+point prescribes zero normal velocity and no normal inflow is marked. Shared
+control points are counted with `dbc`; reductions combine face counts and inflow flags.
+After displacement and PST, closed-face overshoots are moved `0.01*dxy[i]` inside.
+Other faces allow outflow. The same rule applies to implicit solid commits;
+velocity, acceleration and constitutive state are unchanged. This is a geometric
+restriction for whole faces, not a wall-reaction model or a local-opening treatment.
+
 ### 1. Newmark-β / Generalized-α predictor
+
+Time-integration parameters belong to `MaterialPoint::integrator_`
+(`GeneralizedAlphaIntegrator`). Existing kinematic helper methods forward the
+particle object's nodal arrays to this independent component; particle commits
+and FLIP updates remain in `MaterialPoint`.
 
 At the start of each NR iteration the nodal displacement increment `ndispl` is used to predict velocity and acceleration:
 
 ```cpp
-PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k);
+ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
 ```
 
 Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `GeneralizedAlphaParaSet` / `NewmarkBetaParaSet` in the base class.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
@@ -88,14 +104,20 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad`
 ```cpp
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet displacement/pressure values
-    PredictNewmarkBetaVelAndAccel(...);     // predictor
-    AssembleNSSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
+    ComputeNodeVelAccelFromDispl(...);     // predictor
+    AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
+    if CheckNRConvergence(...) break;       // check current physical RHS
+    zero NS_.x_lhs;                        // new correction starts from zero
     iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
-    if CheckNRConvergence(...) break;
 ```
 
 `CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise. PETSc divergence is reported by the KSP reason; it does not automatically switch solvers.
+
+The NR monitor checks the assembled `b_rhs` before solving. After an increment,
+the next pass reassembles at the updated state; each pass assembles only once.
+Iteration zero saves the reference norm. For normalization and threshold caveats, see the
+[solver limitations](../../solver/README.md#current-convergence-limitations).
 
 ## Numerical Method
 
@@ -111,22 +133,24 @@ For each particle inside each element:
 
 After overlap communication (`NodeVarComm`), nodal velocity and acceleration are obtained by `CutOffSmallNodalVar`, and velocity/acceleration BCs are applied.
 
-### Stabilization coefficients (`MakNSStabCoeff`)
+### Stabilization coefficients (`MakeNSStabCoeff`)
 
 `tau1` and `tau2` are computed at each particle from the local velocity magnitude and element size.  The compile-time selector chooses between:
 
 - `StabCoeff::VMS` (default) — VMS-style `τ`.
 - `StabCoeff::PSPG` — PSPG-style `τ`.
 
-### System assembly (`AssembleNSSystem`)
+### System assembly (`AssembleSystem`)
 
 For each particle:
 
-1. Evaluate shape functions and gradients at the particle position.
-2. Apply `ImplicitDsfCorr` to correct gradients for the deformed configuration.
-3. Interpolate velocity, acceleration, pressure, and pressure gradient to the α-level using `alpha_f` / `alpha_m`.
-4. Compute the total stress tensor `stress_k` from the velocity gradient: the deviatoric part plus `-pres_k` on the diagonal.
-5. Accumulate the 4×4 block matrix into `NS_.amat` and the RHS into `NS_.b_rhs`.
+1. Evaluate shape functions and gradients at the particle's step-start position.
+2. Interpolate velocity, acceleration, pressure, and pressure gradient to the α-level using `alpha_f` / `alpha_m`.
+3. Compute the total stress tensor `stress_k` from the velocity gradient: the deviatoric part plus `-pres_k` on the diagonal.
+4. Accumulate the 4×4 block matrix into `NS_.amat` and the RHS into `NS_.b_rhs`.
+
+This fluid assembly uses the gradients from `MakeSF` directly; it does not call
+the solid's `ImplicitDsfCorr` during NR assembly.
 
 The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `AddInertialForceToRHS` adds the inertial contribution.
 
@@ -137,19 +161,33 @@ if (NS_.use_petsc)  →  PETSc KSP
 else                 →  GPBiCGAR (native iterative solver)
 ```
 
-The MPM fluid default is PETSc with `use_schur_fieldsplit = true`. Its monolithic (u,p)
-system is preconditioned by a lower Schur-complement field split: velocity and pressure
-blocks each get an HYPRE/BoomerAMG hierarchy, with `SELFP` as the Schur preconditioner.
-Its `A_00` inverse approximation is PETSc's 3x3 `(u,v,w)` `blockdiag`, rather than a
-scalar diagonal.
-Because its `FEM_flag` is false, the MPM pressure Pmat is the regularized `SELFP + epsilon I`, with
-`epsilon = 1.0e-4 * abs(trace_active(SELFP)) / n_active`; inactive identity rows are excluded from
-the scale. The code keeps PETSc's `PC_FIELDSPLIT_SCHUR_PRE_SELFP` selection and shifts its internally
-built pressure Pmat in place after field-split setup; it does not switch to `SCHUR_PRE_USER`. The outer
-FGMRES system remains unchanged.
-The FEM fluid `NS_` system uses unshifted `SELFP` through `FEM_flag == true`; the MPM and FEM
-rebuild frequencies differ.
-Set `NS_.use_petsc = false` to fall back to the native solver.
+The MPM fluid default is PETSc/FGMRES with a lower velocity/pressure Schur split.
+Both child PCs use PREONLY + HYPRE/BoomerAMG; PETSc SELFP supplies the pressure Pmat.
+PETSc uses its default scalar diagonal approximation for `A_00`, with no
+additional pressure shift. FEM also uses unshifted SELFP and its own PC cadence.
+
+#### Shared reduced equation layout
+
+The constructor sets `NS_.ndof=4`. Native assembly, RHS and `x_lhs` keep their
+full `nodec * NS_.ndof` component-major layout. `CrsMat` internally compresses
+exact zero-increment identity equations after BC elimination, solves from zero
+and restores the full vector, including ghosts. Explicit zeros are removed
+from a solve copy before selecting retained equations.
+
+`ConfigurePreconditioner()` declares velocity `{0,1,2}` and pressure `{3}`
+in `mat.field_splits`. `CrsMat::ConfigureReducedPreconditioner()` converts
+them to explicit compact index sets and performs PETSc setup.
+FieldSplit block size is 1 in the reduced layout.
+Do not infer a field from `compact_index % 4`. Single-phase node activation
+remains the absolute `nmass > mtol` test.
+
+The physics assembly callback is `AssemblePetscMat(CrsMat &mat)`; it reads
+`mat.ndof`. The compact operator is recreated each correction. Retained-layout
+changes or the configured cadence recreate the KSP; otherwise its operator
+and numerical PC are refreshed without recreating the KSP.
+Full CSR storage and full assembly communication are still present. See the
+[shared solver guide](../../solver/README.md) for lifecycle and field mapping.
+Set `NS_.use_petsc=false` to use the native solver.
 
 ### G2P and particle motion (`Node2Particle`)
 
@@ -157,15 +195,21 @@ Set `NS_.use_petsc = false` to fall back to the native solver.
 2. Reset particle velocity/acceleration and TPIC/APIC state.
 3. Interpolate pressure, displacement, acceleration, and velocity back to particles (scheme-aware).
 4. Recompute APIC `inv_Dmat` if needed.
-5. Compute a particle-shifting correction (`PairwiseRepulsiveParticleShifting` is currently active; `DeltaCorrectionParticleShifting` is available but commented out in `Node2Particle`).
-6. Commit particle kinematics (`CommitParticleKinematics`), which updates FLIP velocity, advects positions, and optionally applies the shifting correction while rejecting shifts that cross the domain boundary.
+5. Compute a particle-shifting correction (`PairwiseRepulsivePST` is currently active; `DeltaCorrectionPST` is available but commented out in `Node2Particle`).
+6. Commit particle kinematics (`CommitImplicitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
+
+The shared commit currently leaves its closed-face coordinate-protection calls
+commented out. Applying nodal velocity/displacement BCs does not by itself
+guarantee that a finite PIC displacement stays inside the domain. Particle
+migration removes globally out-of-domain points; open-face outflow must be
+distinguished from closed-face crossings when reviewing results.
 
 ## Particle Shifting
 
 Two particle-shifting strategies are implemented in `module/particle_shifting.cpp`:
 
-- **`PairwiseRepulsiveParticleShifting()`** — currently active in `Node2Particle`.  Computes a pairwise repulsive correction between neighboring particles within a local support radius and returns a correction displacement.  It uses a uniform spatial-hash grid with cell size `dxy` and a 3×3×3 cell neighbor search to avoid the $O(N^2)$ all-pairs cost; per-particle `support = cbrt(vol[ip])` is still used for the actual distance filter and for deciding which boundary particles to send as MPI ghosts.
-- **`DeltaCorrectionParticleShifting()`** — alternative.  Builds a volume-deficit field on control points and returns a correction displacement that pushes particles away from over-dense regions.  Currently commented out in `Node2Particle`.
+- **`PairwiseRepulsivePST()`** — currently active in `Node2Particle`.  Computes a pairwise repulsive correction between neighboring particles within a local support radius and returns a correction displacement.  It uses a uniform spatial-hash grid with cell size `dxy` and a 3×3×3 cell neighbor search to avoid the $O(N^2)$ all-pairs cost; per-particle `support = cbrt(vol[ip])` is still used for the actual distance filter and for deciding which boundary particles to send as MPI ghosts.
+- **`DeltaCorrectionPST()`** — alternative.  Builds a volume-deficit field on control points and returns a correction displacement that pushes particles away from over-dense regions.  Currently commented out in `Node2Particle`.
 
 ## Inflow Particles
 
@@ -189,8 +233,8 @@ Inflow generation follows the same three-layer dispatch as before (`InflowMeshis
 
 - `module/solver/crsmat.h`: generic sparse-matrix wrapper; BC hooks injected through virtual overrides declared in `stabilized_mpm.h`.
 - `module/map_and_interpolate.*`: PIC/FLIP/TPIC/APIC transfer logic.
-- `module/material_point.h`: base class providing `PredictNewmarkBetaVelAndAccel`, `CommitNodalKinematics`, `CommitParticleKinematics`, `SolveSystem`, and the virtual BC/inflow hooks.
-- `module/nonlinear_time_integration.cpp`: shared Newmark-β / generalized-α helpers.
+- `module/material_point.h`: base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`, and the virtual BC/inflow hooks. Linear solve dispatch belongs to `CrsMat::SolveSystem`.
+- `module/generalized_alpha_integrator.h` / `.cpp`: shared Newmark-β / generalized-α parameters and kinematics.
 - `module/particle_shifting.cpp`: shared particle-shifting implementations.
 - `module/mpi_data.h`: particle migration and overlap-node communication.
 

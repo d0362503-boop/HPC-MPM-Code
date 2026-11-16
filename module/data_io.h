@@ -69,7 +69,7 @@ void InputVector(std::ifstream &infile, const int size0, std::vector<std::array<
  */
 template <typename T> void OutputVector(std::ofstream &outfile, const int size0, std::vector<T> &variable) {
 
-    for (int i = 0; i < size0; i++) { outfile << std::setw(15) << variable[i] << "\n"; }
+    for (int i = 0; i < size0; i++) { outfile << std::setw(static_cast<int>(outfile.precision()) + 9) << variable[i] << "\n"; }
     return;
 }
 
@@ -85,9 +85,9 @@ void OutputVector(std::ofstream &outfile, const int size0, std::vector<std::arra
     for (int i = 0; i < size0; i++) {
         for (int j = 0; j < N; j++) {
             if constexpr (std::is_arithmetic_v<T>) {
-                outfile << std::setw(15) << variable[i][j];
+                outfile << std::setw(static_cast<int>(outfile.precision()) + 9) << variable[i][j];
             } else {
-                for (size_t k = 0; k < variable[i][j].size(); k++) { outfile << std::setw(15) << variable[i][j][k]; }
+                for (size_t k = 0; k < variable[i][j].size(); k++) { outfile << std::setw(static_cast<int>(outfile.precision()) + 9) << variable[i][j][k]; }
             }
         }
         outfile << "\n";

@@ -13,7 +13,35 @@
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 
+void MaterialPoint::CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k) {
+
+    std::copy(nvel_k.begin(), nvel_k.end(), this->nvel.begin());
+    std::copy(naccel_k.begin(), naccel_k.end(), this->naccel.begin());
+
+    return;
+}
+
+void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
+                                                     const std::vector<std::array<double, 3>> &disp,
+                                                     const std::vector<std::array<double, 3>> &disp_corr) {
+
+    const bool has_shift = !disp_corr.empty();
+    for (int n = 0; n < this->num; n++) {
+        for (int i = 0; i < 3; i++) {
+            if (this->solswitch == MapScheme::FLIP) {
+                this->vel[n][i] += dt * ((1.0e0 - this->integrator_.gamma_nb) * accel_old[n][i] //
+                                         + this->integrator_.gamma_nb * this->accel[n][i]);
+            }
+            this->coord[n][i] += disp[n][i];
+            if (has_shift) this->coord[n][i] += disp_corr[n][i];
+        }
+    }
+
+    return;
+}
+
 void MaterialPoint::BuildGaussianPoint() {
+
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
 
@@ -21,7 +49,7 @@ void MaterialPoint::BuildGaussianPoint() {
     VectorAssign(nelem * npe, this->coord);
 
     for (int m = 0; m < nelem; m++) {
-        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         std::array<double, 3> xye, xyp;
         xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
@@ -46,6 +74,7 @@ void MaterialPoint::BuildGaussianPoint() {
 }
 
 void MaterialPoint::MeshPointLinklist() {
+
     std::vector<int> idepl(nelem, -1);
     VectorAssign(nelem, this->numep);
     VectorAssign(nelem, this->idepf, -1);
@@ -73,7 +102,8 @@ void MaterialPoint::MeshPointLinklist() {
     return;
 }
 
-void MaterialPoint::CalPointUnitNormal() {
+void MaterialPoint::CalNodalUnitNormal() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -84,7 +114,7 @@ void MaterialPoint::CalPointUnitNormal() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double dsfi1 = dsf[ni][0];
@@ -115,15 +145,47 @@ void MaterialPoint::CalPointUnitNormal() {
         }
     }
 
-    // --- TO DO ---
-    // --- Need unit normal BC setting ---
+    return;
+}
+
+void MaterialPoint::CalPointUnitNormal(std::vector<std::array<double, 3>> &particle_normal, std::vector<double> &surface_weight) {
+
+    int nenode;
+    std::vector<int> ncm;
+    std::vector<double> sf;
+    std::vector<std::array<double, 3>> dsf;
+
+    VectorAssign(this->num, particle_normal);
+    VectorAssign(this->num, surface_weight);
+    for (int m = 0; m < nelem; m++) {
+        int pid = this->idepf[m];
+        while (pid != -1) {
+            MakeSF(m, this->coord[pid], idimc, xynodec, ncm, nenode, sf, dsf);
+
+            for (int ni = 0; ni < nenode; ni++) {
+                const int nid = ncm[ni];
+                const double sfi = sf[ni];
+                const double phi = this->nphi[nid];
+                surface_weight[pid] += sfi * phi;
+                particle_normal[pid][0] += sfi * this->nnormal[nid + nuc];
+                particle_normal[pid][1] += sfi * this->nnormal[nid + nvc];
+                particle_normal[pid][2] += sfi * this->nnormal[nid + nwc];
+            }
+
+            const std::array<double, 3> normal = particle_normal[pid];
+            double normal_norm = NormVec3(normal);
+            for (int i = 0; i < 3; i++) { particle_normal[pid][i] /= normal_norm; }
+
+            pid = this->idp2p[pid];
+        }
+    }
 
     return;
 }
 
 std::array<std::array<double, 3>, 3>
-MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, double af_coeff,
-                                   const std::vector<std::array<double, 3>> &dsf) const noexcept {
+MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, //
+                                   double af_coeff, const std::vector<std::array<double, 3>> &dsf) const noexcept {
 
     std::array<std::array<double, 3>, 3> ddg{};
     for (int ni = 0; ni < nenode; ni++) {
@@ -141,17 +203,17 @@ MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, doubl
         ddg[2][1] += dsfi2 * af_coeff * this->ndispl[nid + nwc];
         ddg[2][2] += dsfi3 * af_coeff * this->ndispl[nid + nwc];
     }
-    ++ddg[0][0];
-    ++ddg[1][1];
-    ++ddg[2][2];
+
+    for (int i = 0; i < 3; i++) { ++ddg[i][i]; }
 
     return ddg;
 }
 
 void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
                                     std::vector<std::array<double, 3>> &dsf) const noexcept {
+
     std::array<std::array<double, 3>, 3> def_grad{};
-    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->alpha_f, dsf);
+    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->integrator_.alpha_f, dsf);
 
     std::array<std::array<double, 3>, 3> def_grad_inv;
     def_grad_inv = InvMat3(def_grad);

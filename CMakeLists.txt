@@ -100,7 +100,8 @@ add_subdirectory(work)
 # ----------------------------------------------------------------------------
 # Main executable
 # ----------------------------------------------------------------------------
-add_executable(MPM MPM_main.cpp)
+add_executable(MPM)
+# The selected work object library provides main().
 
 target_include_directories(MPM PRIVATE ${CMAKE_SOURCE_DIR}/module)
 

@@ -27,18 +27,31 @@ class StabilizedFEM : public MaterialPoint {
     CrsMat NS_;
     // Phase-field system matrix
     CrsMat PF_;
+    std::vector<int> blocks; // target scalar block indices
+    int rhs_start;           // first target component index
+    /**
+     * @brief Configure Schur field splitting for NS and BoomerAMG for other systems.
+     * @param mat Fluid or phase-field linear system being configured.
+     * @param pc PETSc preconditioner associated with the system solver.
+     */
+    void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
 
     StabilizedFEM() {
-        this->ode_order = 1;
+        this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+        this->rhs_start = 0;
+        this->integrator_.ode_order = 1;
         this->NS_.ndof = 4;
+        this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
+        this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
         this->PF_.ndof = 1;
+        this->PF_.block_row = {0};
+        this->PF_.block_col = {0};
         this->NS_.FEM_flag = true;
         this->PF_.FEM_flag = true;
         this->NS_.use_petsc = true;
-        this->NS_.use_schur_fieldsplit = false;
         this->PF_.use_petsc = true;
-        this->NS_.amg_rebuild_freq = 20; // rebuild AMG every 20 steps
-        this->PF_.amg_rebuild_freq = 20;
+        this->NS_.rebuild_freq = 20; // scheduled PC refresh interval
+        this->PF_.rebuild_freq = 20;
         this->NS_.owner_ = this;
         this->PF_.owner_ = this;
     }
@@ -65,7 +78,12 @@ class StabilizedFEM : public MaterialPoint {
     /** @brief Solve the stabilized Navier-Stokes system. */
     void SolveNS();
 
-    /** @brief Advance nodal velocity/pressure history arrays. */
+    /**
+     * @brief Move nodal velocity/pressure history down one time level at the end of a step.
+     *
+     * Copies `nvel_old` to `nvel_older`, `nvel` to `nvel_old`, and `npres` to `npres_old`,
+     * preparing the history buffers for the next time step.
+     */
     void UpdateNodalVar();
 
     /** @brief Project particle liquid/gas indicator to control points. */
@@ -132,7 +150,7 @@ class StabilizedFEM : public MaterialPoint {
         return;
     };
 
-  private:
+    //   private:
     /**
      * @brief Generalized-alpha advection velocity.
      * @return Advection velocity vector.
@@ -143,13 +161,13 @@ class StabilizedFEM : public MaterialPoint {
      * @brief Compute SUPG/PSPG/LSIC stabilization coefficients.
      * @param adv_vel Advection velocity vector.
      */
-    void MakNSStabCoeff(const std::vector<double> &adv_vel);
+    void MakeNSStabCoeff(const std::vector<double> &adv_vel);
 
     /**
      * @brief Assemble stabilized Navier-Stokes matrix and RHS.
      * @param adv_vel Advection velocity vector.
      */
-    void AssembleNSSystem(const std::vector<double> &adv_vel);
+    virtual void AssembleSystem(const std::vector<double> &adv_vel);
 };
 
 } // namespace stabilizedfem

@@ -1,11 +1,11 @@
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 #include "module/solver/crsmat.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include <array>
 #include <cmath>
 #include <iomanip>
@@ -16,6 +16,28 @@
 #include <vector>
 
 using namespace stabilizedmpm;
+
+void StabilizedMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
+
+    PCSetType(pc, PCFIELDSPLIT);
+    PCFieldSplitSetBlockSize(pc, mat.HasReducedLayout() ? 1 : mat.ndof);
+    mat.field_splits = {{"velocity", {0, 1, 2}}, {"pressure", {3}}};
+    PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+    PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
+    PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
+
+    PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
+    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
+
+    return;
+}
 
 void StabilizedMPM::UpdateNRIncrement() {
     for (int n = 0; n < nodec * 3; n++) { this->ndispl[n] += this->NS_.x_lhs[n]; }
@@ -28,25 +50,30 @@ void StabilizedMPM::SolveNS() {
 
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
 
-    const int iter_max = 1000;
+    const int iter_max = 100;
+
+    this->MakeNSStabCoeff(this->nvel);
 
     VectorAssign(nodec * 3, this->ndispl);
     VectorAssign(nodec, this->npres);
-    VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
     double r0r = 0.0e0;
+    int iter = 0;
     for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
 
         this->BCNRSet();
 
-        this->PredictNewmarkBetaVelAndAccel(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
-        this->AssembleNSSystem(nvel_k, naccel_k);
-
-        int iter = this->NS_.SolveSystem(NR_it);
-
-        this->UpdateNRIncrement();
+        VectorAssign(this->NS_.nmata, this->NS_.amat);
+        VectorAssign(nodec * 4, this->NS_.b_rhs);
+        VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
+        this->AssembleSystem(this->NS_, nvel_k, naccel_k);
 
         if (this->NS_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
+
+        iter = this->NS_.SolveSystem(NR_it);
+
+        this->UpdateNRIncrement();
     }
 
     // --- Memory clear ---
@@ -58,11 +85,8 @@ void StabilizedMPM::SolveNS() {
     return;
 }
 
-void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
+void StabilizedMPM::MakeNSStabCoeff(const std::vector<double> &nvel_k) {
 
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
     double rnu = this->rmu / this->rho;
 
     int nenode;
@@ -76,7 +100,7 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             double uu = 0.0e0, vv = 0.0e0, ww = 0.0e0;
             for (int ni = 0; ni < nenode; ni++) {
@@ -124,8 +148,8 @@ void StabilizedMPM::MakNSStabCoeff(const std::vector<double> &nvel_k) {
     return;
 }
 
-void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
-                                     const std::vector<double> &naccel_k) {
+void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_k, //
+                                   const std::vector<double> &naccel_k) {
 
     // double A = 5.0e0 / 180.0e0 * M_PI;
     // double theta = A * std::sin(5.47e0 * real_time);
@@ -136,37 +160,36 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
     double fy = bb[1] * facl;
     double fz = bb[2] * facl;
 
-    const double af = this->alpha_f;
-    const double af0 = 1.0e0 - this->alpha_f;
-    const double am = this->alpha_m;
-    const double am0 = 1.0e0 - this->alpha_m;
+    const std::vector<int> offsets = this->RHSOffsets();
+
+    const double af = this->integrator_.alpha_f;
+    const double af0 = 1.0e0 - af;
+    const double am = this->integrator_.alpha_m;
+    const double am0 = 1.0e0 - am;
+    const double cv = this->integrator_.nb_para[0];
+    const double ca = this->integrator_.nb_para[3];
 
     std::vector<double> nvel_af(nodec * 3), naccel_am(nodec * 3);
     for (int n = 0; n < nodec * 3; n++) {
         naccel_am[n] = am0 * this->naccel[n] + am * naccel_k[n];
         nvel_af[n] = af0 * this->nvel[n] + af * nvel_k[n];
     }
+
     std::vector<double> npres_af(nodec);
     for (int n = 0; n < nodec; n++) { //
         npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
     }
-
-    this->MakNSStabCoeff(nvel_af); // ---- Stabilized coefficient ----
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(this->NS_.nmata, this->NS_.amat);
-    VectorAssign(nodec * 4, this->NS_.b_rhs);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
-
-            this->ImplicitDsfCorr(ncm, nenode, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
             double t1 = this->tau1[pid];
             double t2 = this->tau2[pid];
@@ -228,7 +251,7 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                     double dsfj2 = dsf[nj][1];
                     double dsfj3 = dsf[nj][2];
 
-                    int ida = this->NS_.FindIndex(nid, njd, ncol);
+                    int ida = mat.FindIndex(nid, njd, ncol);
 
                     // --- Mass Matrix (Stabilized part) ---
                     double egtx = massp * dsfi1 * sfj * t1;
@@ -266,59 +289,55 @@ void StabilizedMPM::AssembleNSSystem(const std::vector<double> &nvel_k, //
                     double scwv = volp * dsfi3 * dsfj2 * t2;
 
                     if (nid == njd) {
-                        this->NS_.amat[ida + this->NS_.block_id[0]] += am * emd_lu;
-                        this->NS_.amat[ida + this->NS_.block_id[5]] += am * emd_lu;
-                        this->NS_.amat[ida + this->NS_.block_id[10]] += am * emd_lu;
+                        mat.amat[ida + mat.block_id[this->blocks[0]]] += am * emd_lu;
+                        mat.amat[ida + mat.block_id[this->blocks[5]]] += am * emd_lu;
+                        mat.amat[ida + mat.block_id[this->blocks[10]]] += am * emd_lu;
                     }
-                    this->NS_.amat[ida + this->NS_.block_id[0]] += this->nb_para[0] * af * (su + scu);
-                    this->NS_.amat[ida + this->NS_.block_id[1]] += this->nb_para[0] * af * (suv + scuv);
-                    this->NS_.amat[ida + this->NS_.block_id[2]] += this->nb_para[0] * af * (suw + scuw);
-                    this->NS_.amat[ida + this->NS_.block_id[3]] -= af * esgx;
-                    this->NS_.amat[ida + this->NS_.block_id[4]] += this->nb_para[0] * af * (svu + scvu);
-                    this->NS_.amat[ida + this->NS_.block_id[5]] += this->nb_para[0] * af * (sv + scv);
-                    this->NS_.amat[ida + this->NS_.block_id[6]] += this->nb_para[0] * af * (svw + scvw);
-                    this->NS_.amat[ida + this->NS_.block_id[7]] -= af * esgy;
-                    this->NS_.amat[ida + this->NS_.block_id[8]] += this->nb_para[0] * af * (swu + scwu);
-                    this->NS_.amat[ida + this->NS_.block_id[9]] += this->nb_para[0] * af * (swv + scwv);
-                    this->NS_.amat[ida + this->NS_.block_id[10]] += this->nb_para[0] * af * (sw + scw);
-                    this->NS_.amat[ida + this->NS_.block_id[11]] -= af * esgz;
-                    this->NS_.amat[ida + this->NS_.block_id[12]] += this->nb_para[0] * af * Cow1 //
-                                                                    + this->nb_para[3] * am * egtx;
-                    this->NS_.amat[ida + this->NS_.block_id[13]] += this->nb_para[0] * af * Cow2 //
-                                                                    + this->nb_para[3] * am * egty;
-                    this->NS_.amat[ida + this->NS_.block_id[14]] += this->nb_para[0] * af * Cow3 //
-                                                                    + this->nb_para[3] * am * egtz;
-                    this->NS_.amat[ida + this->NS_.block_id[15]] += af * elt;
+                    mat.amat[ida + mat.block_id[this->blocks[0]]] += cv * af * (su + scu);
+                    mat.amat[ida + mat.block_id[this->blocks[1]]] += cv * af * (suv + scuv);
+                    mat.amat[ida + mat.block_id[this->blocks[2]]] += cv * af * (suw + scuw);
+                    mat.amat[ida + mat.block_id[this->blocks[3]]] -= af * esgx;
+                    mat.amat[ida + mat.block_id[this->blocks[4]]] += cv * af * (svu + scvu);
+                    mat.amat[ida + mat.block_id[this->blocks[5]]] += cv * af * (sv + scv);
+                    mat.amat[ida + mat.block_id[this->blocks[6]]] += cv * af * (svw + scvw);
+                    mat.amat[ida + mat.block_id[this->blocks[7]]] -= af * esgy;
+                    mat.amat[ida + mat.block_id[this->blocks[8]]] += cv * af * (swu + scwu);
+                    mat.amat[ida + mat.block_id[this->blocks[9]]] += cv * af * (swv + scwv);
+                    mat.amat[ida + mat.block_id[this->blocks[10]]] += cv * af * (sw + scw);
+                    mat.amat[ida + mat.block_id[this->blocks[11]]] -= af * esgz;
+                    mat.amat[ida + mat.block_id[this->blocks[12]]] += cv * af * Cow1 + ca * am * egtx;
+                    mat.amat[ida + mat.block_id[this->blocks[13]]] += cv * af * Cow2 + ca * am * egty;
+                    mat.amat[ida + mat.block_id[this->blocks[14]]] += cv * af * Cow3 + ca * am * egtz;
+                    mat.amat[ida + mat.block_id[this->blocks[15]]] += af * elt;
                 }
 
                 std::array<double, 4> RHS_G{}, RHS_S{};
                 RHS_G[0] = volp * (dsfi1 * stress_k[0][0] + dsfi2 * stress_k[0][1] + dsfi3 * stress_k[0][2]) //
-                           - sfi * massp * fx; // - volp * dsfi1 * pres_k;
+                           - sfi * massp * fx;
                 RHS_G[1] = volp * (dsfi1 * stress_k[1][0] + dsfi2 * stress_k[1][1] + dsfi3 * stress_k[1][2]) //
-                           - sfi * massp * fy; // - volp * dsfi2 * pres_k;
+                           - sfi * massp * fy;
                 RHS_G[2] = volp * (dsfi1 * stress_k[2][0] + dsfi2 * stress_k[2][1] + dsfi3 * stress_k[2][2]) //
-                           - sfi * massp * fz; // - volp * dsfi3 * pres_k;
+                           - sfi * massp * fz;
                 RHS_G[3] = volp * sfi * TraceMat3(grad_vel_k);
 
                 RHS_S[0] = volp * t2 * dsfi1 * TraceMat3(grad_vel_k);
                 RHS_S[1] = volp * t2 * dsfi2 * TraceMat3(grad_vel_k);
                 RHS_S[2] = volp * t2 * dsfi3 * TraceMat3(grad_vel_k);
-                RHS_S[3] =
-                    t1 * massp * (dsfi1 * (accel_k[0] - fx) + dsfi2 * (accel_k[1] - fy) + dsfi3 * (accel_k[2] - fz)) //
-                    + t1 * volp * (dsfi1 * grad_pres_k[0] + dsfi2 * grad_pres_k[1] + dsfi3 * grad_pres_k[2]);
+                RHS_S[3] = t1 * massp * (dsfi1 * (accel_k[0] - fx) + dsfi2 * (accel_k[1] - fy) + dsfi3 * (accel_k[2] - fz)) //
+                           + t1 * volp * (dsfi1 * grad_pres_k[0] + dsfi2 * grad_pres_k[1] + dsfi3 * grad_pres_k[2]);
 
-                this->NS_.b_rhs[nid + nuc] -= (RHS_G[0] + RHS_S[0]);
-                this->NS_.b_rhs[nid + nvc] -= (RHS_G[1] + RHS_S[1]);
-                this->NS_.b_rhs[nid + nwc] -= (RHS_G[2] + RHS_S[2]);
-                this->NS_.b_rhs[nid + npc] -= (RHS_G[3] + RHS_S[3]);
+                mat.b_rhs[nid + offsets[0]] -= (RHS_G[0] + RHS_S[0]);
+                mat.b_rhs[nid + offsets[1]] -= (RHS_G[1] + RHS_S[1]);
+                mat.b_rhs[nid + offsets[2]] -= (RHS_G[2] + RHS_S[2]);
+                mat.b_rhs[nid + offsets[3]] -= (RHS_G[3] + RHS_S[3]);
             }
             pid = this->idp2p[pid];
         }
     }
 
-    NodeVarComm(this->NS_.b_rhs, {nuc, nvc, nwc, npc});
+    NodeVarComm(mat.b_rhs, offsets);
 
-    this->AddInertialForceToRHS(this->NS_, naccel_am);
+    this->AddInertialForceToRHS(mat, naccel_am, offsets);
 
     return;
 }

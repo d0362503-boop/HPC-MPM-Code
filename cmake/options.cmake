@@ -4,8 +4,8 @@
 
 # Solver source selection.
 # The active solver source tree is selected by uncommenting exactly one
-# add_subdirectory(...) line in work/CMakeLists.txt. Keep that file in sync
-# with the function call that is uncommented in MPM_main.cpp.
+# add_subdirectory(...) line in work/CMakeLists.txt and its method subdirectory.
+# The selected work/main.cpp supplies the executable entry point.
 
 # Data generator / partitioner selection.
 # The active generator and partitioner cases are selected by uncommenting the

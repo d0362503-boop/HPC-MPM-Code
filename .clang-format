@@ -5,7 +5,11 @@
 BasedOnStyle: LLVM
 BreakBeforeBraces: Attach
 IndentWidth: 4
-ColumnLimit: 120
+ColumnLimit: 130
+AlignAfterOpenBracket: Align
+PenaltyBreakOpenParenthesis: 100000
+# Preserve existing blank lines after opening braces; does not insert them.
+KeepEmptyLinesAtTheStartOfBlocks: true
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortLoopsOnASingleLine: true
 AllowShortBlocksOnASingleLine: true

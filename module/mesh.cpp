@@ -1,5 +1,4 @@
 #include "module/mesh.h"
-#include "module/DLB/mpm_dlb.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
 #include "module/shape_function.h"
@@ -54,6 +53,7 @@ void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p) {
 }
 
 bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie_g) {
+
     for (int d = 0; d < 3; d++) {
         if (xq[d] < xyminw[d] || xq[d] > xymaxw[d]) { return false; }
 
@@ -66,6 +66,7 @@ bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie
 }
 
 bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local) {
+
     for (int d = 0; d < 3; d++) {
         if (ie_g[d] < aelemmin[d] || ie_g[d] > aelemmax[d]) { return false; }
     }
@@ -80,6 +81,7 @@ bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local) {
 }
 
 bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local) {
+
     std::array<int, 3> ie_g{};
     if (!LocateGlobalElement(xq, ie_g)) { return false; }
 
@@ -131,8 +133,6 @@ void BuildMesh() {
         }
     }
 
-    mpm_dlb::CollectCurrentRegions();
-
     return;
 }
 
@@ -147,7 +147,7 @@ void BuildControlPoint() {
     ncc.assign(nelem, std::vector<int>(nenode));
     for (int m = 0; m < nelem; m++) {
 
-        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         int ixyn[3];
         int id = 0;
@@ -187,7 +187,8 @@ void BuildControlPoint() {
     return;
 }
 
-void MakNodalVol() {
+void ComputeNodalVol() {
+
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
 
@@ -200,7 +201,7 @@ void MakNodalVol() {
 
     VectorAssign(nodec, nvol);
     for (int m = 0; m < nelem; m++) {
-        const std::array<int, 3> ijk = ElementIndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         std::array<double, 3> xye, xyp;
         xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
@@ -212,7 +213,7 @@ void MakNodalVol() {
                 xyp[1] = xye[1] + dec2p[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
                     xyp[0] = xye[0] + dec2p[ix][0];
-                    MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];

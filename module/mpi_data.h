@@ -119,10 +119,8 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<in
         ii = io + nsbc[i];
         int npro = naid[i];
         if (nsbc[i] != 0) {
-            MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD,
-                      &irqs[i]);
-            MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD,
-                      &irqr[i]);
+            MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
+            MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
         }
     }
     for (int i = 0; i < isb; i++) {
@@ -217,7 +215,7 @@ class ParticleCommunication {
      * @param bufs Send buffer packed by neighbor.
      * @param bufr Receive buffer packed by neighbor.
      * @param idm  Number of scalar values per particle.
-    */
+     */
     template <typename T> void PointVarSendrecv(std::vector<T> &bufs, std::vector<T> &bufr, const int idm) {
 
         const int npeer = int(this->comm_ranks.size());
@@ -232,12 +230,10 @@ class ParticleCommunication {
             int icounts = this->nsp[i] * idm;
             int icountr = this->nrp[i] * idm;
             if (icounts != 0) {
-                MPI_Isend(&bufs[sicounts], icounts, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD,
-                          &irqs[i]);
+                MPI_Isend(&bufs[sicounts], icounts, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD, &irqs[i]);
             }
             if (icountr != 0) {
-                MPI_Irecv(&bufr[sicountr], icountr, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD,
-                          &irqr[i]);
+                MPI_Irecv(&bufr[sicountr], icountr, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD, &irqr[i]);
             }
             sicounts += icounts;
             sicountr += icountr;
@@ -272,12 +268,12 @@ class ParticleCommunication {
             int icounts = this->nsp[i] * idm;
             int icountr = this->nrp[i] * idm;
             if (icounts != 0) {
-                MPI_Isend(bufs.data() + sicounts, icounts * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1,
-                          MPI_COMM_WORLD, &irqs[i]);
+                MPI_Isend(bufs.data() + sicounts, icounts * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1, MPI_COMM_WORLD,
+                          &irqs[i]);
             }
             if (icountr != 0) {
-                MPI_Irecv(bufr.data() + sicountr, icountr * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1,
-                          MPI_COMM_WORLD, &irqr[i]);
+                MPI_Irecv(bufr.data() + sicountr, icountr * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1, MPI_COMM_WORLD,
+                          &irqr[i]);
             }
             sicounts += icounts;
             sicountr += icountr;

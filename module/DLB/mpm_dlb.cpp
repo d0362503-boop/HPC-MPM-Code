@@ -40,6 +40,7 @@ void AbortDLB(const char *message) {
 }
 
 void CollectCurrentRegions() {
+
     Region local_region;
     for (int dir = 0; dir < 3; ++dir) {
         local_region.elem_min[dir] = aelemmin[dir];

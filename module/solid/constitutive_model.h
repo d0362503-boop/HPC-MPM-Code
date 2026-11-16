@@ -18,6 +18,10 @@ class ConstitutiveModel {
      * @param mat_prop   Material parameters for the selected model.
      * @param jac        Determinant of `F`.
      * @param jac_bar    F-bar corrected determinant.
+     * @pre Supply enough material parameters for the chosen model and physically
+     * admissible finite deformation gradients. Hyperelastic divisions require a
+     * positive `jac`; logarithmic models also require a positive `jac_bar`.
+     * @note This dispatcher does not reject invalid Jacobians or recover a failed trial state.
      */
     void UpdateStress(int model_type, std::array<double, 6> &stress, const std::array<std::array<double, 3>, 3> &F,
                       const std::array<std::array<double, 3>, 3> &dF, const std::vector<double> &mat_prop, double jac,

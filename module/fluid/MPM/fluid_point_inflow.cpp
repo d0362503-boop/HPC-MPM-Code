@@ -1,11 +1,11 @@
 #include "module/bc.h"
 #include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/map_and_interpolate.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -78,7 +78,7 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
         int row = this->inflow_row[m];
         if (row >= npxye[dir]) continue;
 
-        const std::array<int, 3> ie_indices = ElementIndexToIJK(mid, xyelem);
+        const std::array<int, 3> ie_indices = IndexToIJK(mid, xyelem);
         int sign = this->GetInflowSign(dir, ie_indices[dir]);
 
         std::array<double, 3> xye;
@@ -153,7 +153,7 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
 
         if (pid == -1) continue;
 
-        const std::array<int, 3> ie_indices = ElementIndexToIJK(ie, xyelem);
+        const std::array<int, 3> ie_indices = IndexToIJK(ie, xyelem);
 
         std::array<double, 3> xyr;
         std::array<int, 3> iexp{};
@@ -174,15 +174,12 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
                     ifp.coord[ifp.num][dir] -= double(sign) * dxy[dir] * offset_coeff[p];
 
                     std::array<double, 3> xyp = ifp.coord[ifp.num];
-                    MakSf(ie, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(ie, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
                     std::array<std::array<double, 3>, 3> ADp{};
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];
-                        double dsfi1 = dsf[ni][0];
-                        double dsfi2 = dsf[ni][1];
-                        double dsfi3 = dsf[ni][2];
                         ifp.pic.VarG2P(ifp.num, nid, sfi, ifp.pres, this->npres);
                         ifp.pic.VarG2P(ifp.num, nid, sfi, ifp.accel, this->naccel);
                         if (this->solswitch != MapScheme::FLIP) {

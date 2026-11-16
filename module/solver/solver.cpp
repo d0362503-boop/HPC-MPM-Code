@@ -15,10 +15,10 @@ int CrsMat::SolveSystem(int NR_it) {
 
     int iter;
     if (this->use_petsc) {
-        this->AssemblePetscMat(this->ndof);
-        iter = this->SolveWithPetsc(this->ndof, NR_it);
+        this->AssemblePetscMat();
+        iter = this->SolveWithPetsc(NR_it);
     } else {
-        this->BuildDiagonalPreconditioner(this->ndof);
+        this->BuildDiagonalPreconditioner();
         iter = GPBiCGAR(*this);
     }
 
@@ -398,146 +398,79 @@ int GPBiCG(CrsMat &mat) {
 
 std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
 
-    const int var_size = (int)this->x_lhs.size();
+    std::vector<double> rr(nodec * this->ndof, 0.0e0);
 
-    std::vector<double> rr(var_size, 0.0e0);
-
-    for (int i = 0; i < nodec; ++i) {
-        for (int j = this->matrow[i]; j < this->matrow[i + 1]; ++j) {
+    for (int i = 0; i < nodec; i++) {
+        for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
-
-            for (int m = 0; m < this->ndof; ++m) {
-                const int row_off = nodec * m;
-                const int block_base = m * this->ndof;
-
-                for (int n = 0; n < this->ndof; ++n) {
-                    rr[i + row_off] += this->amat[j + this->block_id[block_base + n]] * xx[col + nodec * n];
-                }
+            for (int b = 0; b < this->num_block; b++) {
+                rr[i + nodec * this->block_row[b]] += this->amat[j + this->block_id[b]] * xx[col + nodec * this->block_col[b]];
             }
         }
     }
 
     std::vector<int> offsets(this->ndof);
-    for (int n = 0; n < this->ndof; ++n) { offsets[n] = nodec * n; }
+    for (int n = 0; n < this->ndof; n++) { offsets[n] = nodec * n; }
     NodeVarComm(rr, offsets);
 
-    if (this->owner_) { this->owner_->BCResidualSet(rr); }
+    this->owner_->BCResidualSet(rr);
 
     return rr;
 }
 
-void CrsMat::ComputePetscResidualStats(double &res_norm, double &active_dof) {
-    Vec residual = nullptr;
-    Vec active_mask = nullptr;
+void CrsMat::ComputeResidualNormSq(double &ref_tol, double &abs_tol) {
 
-    VecDuplicate(this->petsc_x, &residual);
-    VecDuplicate(this->petsc_x, &active_mask);
+    const int var_size = int(this->x_lhs.size());
 
-    MatMult(this->petsc_mat, this->petsc_x, residual);
-    VecAYPX(residual, -1.0, this->petsc_b); // residual = petsc_b - petsc_mat * petsc_x
+    std::vector<double> free_dof(var_size, 1.0);
+    if (this->owner_) {
+        this->owner_->BCResidualSet(this->b_rhs);
+        this->owner_->BCResidualSet(free_dof);
+    }
 
-    VecZeroEntries(active_mask);
-
-    const PetscInt local_size = static_cast<PetscInt>(this->local_node) * this->ndof;
-    std::vector<PetscInt> indices(static_cast<size_t>(local_size));
-    std::vector<PetscScalar> values(static_cast<size_t>(local_size));
-
-    size_t idx = 0;
-    for (int i = 0; i < this->local_node; ++i) {
-        const int natural_id = this->owned_natural_ids[i];
-        const PetscScalar is_active = (this->FEM_flag || this->active_row_mask[natural_id] != 0) ? 1.0 : 0.0;
-        for (int var = 0; var < this->ndof; ++var) {
-            indices[idx] = this->NaturalNodeVarToPetscLocalScalar(natural_id, var);
-            values[idx] = is_active;
-            ++idx;
+    double rtr = 0.0e0, active_dof = 0.0e0;
+    for (int n = 0; n < var_size; n++) {
+        if (free_dof[n] == 0.0) { continue; }
+        int nid = n % nodec;
+        if (!this->FEM_flag) {
+            if (this->owner_->nmass[nid] > mtol) {
+                double r = this->b_rhs[n];
+                rtr += r * r * dbc[n];
+                active_dof += dbc[n];
+            }
+        } else {
+            double r = this->b_rhs[n];
+            rtr += r * r * dbc[n];
+            active_dof += dbc[n];
         }
     }
 
-    VecSetValuesLocal(active_mask, local_size, indices.data(), values.data(), INSERT_VALUES);
-    VecAssemblyBegin(active_mask);
-    VecAssemblyEnd(active_mask);
+    MPI_Allreduce(MPI_IN_PLACE, &rtr, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    VecPointwiseMult(residual, residual, active_mask);
-    VecNorm(residual, NORM_2, &res_norm);
-    VecSum(active_mask, &active_dof);
-
-    VecDestroy(&residual);
-    VecDestroy(&active_mask);
+    if (active_dof <= 0.0e0) {
+        abs_tol = 0.0e0;
+        ref_tol = 0.0e0;
+    } else {
+        abs_tol = std::sqrt(rtr / active_dof);
+        ref_tol = std::sqrt(rtr);
+    }
 
     return;
 }
 
-double CrsMat::ComputeNativeResidualNormSq() {
-    const int var_size = int(this->x_lhs.size());
-
-    if (this->owner_) { this->owner_->BCResidualSet(this->b_rhs); }
-
-    std::vector<double> x_pre(var_size);
-    for (int n = 0; n < var_size; n++) { x_pre[n] = (this->adiag[n] > mtol) ? this->x_lhs[n] / this->adiag[n] : 0.0e0; }
-
-    std::vector<double> Ax = this->MatVecMult(x_pre);
-
-    double rtr = 0.0e0;
-    for (int n = 0; n < var_size; n++) {
-        double Ax_phys = (this->adiag[n] > mtol) ? (Ax[n] / this->adiag[n]) : 0.0e0;
-        double r = this->b_rhs[n] - Ax_phys;
-        rtr += r * r * dbc[n];
-    }
-    MPI_Allreduce(MPI_IN_PLACE, &rtr, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    return rtr;
-}
-
-double CrsMat::ComputeRefResidual() {
-    if (this->use_petsc) {
-        double res_norm = 0.0e0;
-        double active_dof = 0.0e0;
-        this->ComputePetscResidualStats(res_norm, active_dof);
-        return res_norm;
-    }
-
-    return std::sqrt(this->ComputeNativeResidualNormSq());
-}
-
-double CrsMat::ComputeAbsResidual() {
-    if (this->use_petsc) {
-        double res_norm = 0.0e0;
-        double active_dof = 0.0e0;
-        this->ComputePetscResidualStats(res_norm, active_dof);
-        if (active_dof < 1.0e-12) { return 0.0e0; }
-        return res_norm / std::sqrt(active_dof);
-    }
-
-    const int var_size = int(this->x_lhs.size());
-    const double rtr = this->ComputeNativeResidualNormSq();
-
-    double idof = 0.0e0;
-    for (int n = 0; n < var_size; n++) {
-        if (this->adiag[n] > mtol) { idof += dbc[n]; }
-    }
-    MPI_Allreduce(MPI_IN_PLACE, &idof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    if (idof < 1.0e-12) { return 0.0e0; }
-    return std::sqrt(rtr / idof);
-}
-
 bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
 
-    double rkr;
-    if (NR_it == 0) {
-        r0r = this->ComputeRefResidual();
-        rkr = r0r;
-    } else {
-        rkr = this->ComputeRefResidual();
-    }
-    double rtr_abs = this->ComputeAbsResidual();
-    double rtr_ref = (r0r > 1.0e-30) ? (rkr / r0r) : 0.0e0;
+    double rkr, rtr_abs;
+    this->ComputeResidualNormSq(rkr, rtr_abs);
+    if (NR_it == 0) { r0r = rkr; }
 
-    if (rtr_ref < 1.0e-6 || r0r < 1.0e-6 || rtr_abs < 1.0e-8) {
+    const double rtr_ref = (r0r > 1.0e-30) ? (rkr / r0r) : 0.0e0;
+
+    if (rtr_ref < 1.0e-8 || rtr_abs < 1.0e-12) {
         if (myrank == 0) {
             std::cout << "NR_converge:" << std::setw(15) << NR_it << std::setw(15) << solver_it << std::setw(15)
-                      << std::scientific << rtr_ref << std::setw(15) << std::scientific << r0r << std::setw(15)
-                      << std::scientific << rtr_abs << "\n";
+                      << std::scientific << rtr_ref << std::setw(15) << r0r << std::setw(15) << rtr_abs << "\n";
         }
         return true;
     } else if (NR_it == NR_it_max) {

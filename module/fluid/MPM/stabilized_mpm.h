@@ -24,17 +24,22 @@ class StabilizedMPM : public MaterialPoint {
     std::vector<double> tau1, tau2;
     // Navier-Stokes system matrix
     CrsMat NS_;
+    std::vector<int> blocks; // target scalar block indices
+    int rhs_start;           // first target component index
 
     StabilizedMPM() {
+        this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+        this->rhs_start = 0;
         this->do_dlb = false;
-        this->gamma_nb = 1.0e0;
-        this->beta_nb = 0.5e0;
-        this->ode_order = 2;
+        this->integrator_.gamma_nb = 1.0e0;
+        this->integrator_.beta_nb = 0.5e0;
+        this->integrator_.ode_order = 2;
         this->NS_.ndof = 4;
+        this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
+        this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
         this->NS_.FEM_flag = false;
         this->NS_.use_petsc = true;
-        this->NS_.use_schur_fieldsplit = true;
-        this->NS_.amg_rebuild_freq = 1; // rebuild AMG every step
+        this->NS_.rebuild_freq = 1; // refresh each step start
         this->NS_.owner_ = this;
     }
 
@@ -61,6 +66,28 @@ class StabilizedMPM : public MaterialPoint {
 
     /** @brief Solve the stabilized Navier-Stokes system. */
     void SolveNS();
+
+    /**
+     * @brief Configure the velocity-pressure Schur field-split preconditioner.
+     * @param mat Fluid linear system and field-split selection.
+     * @param pc PETSc preconditioner associated with the fluid solver.
+     */
+    void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
+
+    /**
+     * @brief Get target RHS offsets for fluid momentum and pressure.
+     * @return Current control-point offsets for x, y, z momentum and pressure.
+     */
+    std::vector<int> RHSOffsets() const {
+        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2),
+                nodec * (this->rhs_start + 3)};
+    }
+
+    /**
+     * @brief Compute VMS/PSPG stabilization coefficients.
+     * @param nvel_k Nodal fluid velocity at the residual evaluation time level.
+     */
+    void MakeNSStabCoeff(const std::vector<double> &nvel_k);
 
     /**
      * @brief Read fluid point data from input stream.
@@ -97,7 +124,7 @@ class StabilizedMPM : public MaterialPoint {
     /** @brief Migrate all fluid particle state using the prepared MPI communication plan. */
     void MigrateParticleData() override;
 
-  private:
+    //   protected:
     /**
      * @brief Register constrained DOFs with PETSc matrix.
      * @param mat PETSc matrix.
@@ -126,26 +153,21 @@ class StabilizedMPM : public MaterialPoint {
 
     /** @brief Apply Dirichlet displacement increments for NR iteration. */
     void BCNRSet() override {
-        this->ubc.BCSetDt(nuc, this->ndispl);
-        this->vbc.BCSetDt(nvc, this->ndispl);
-        this->wbc.BCSetDt(nwc, this->ndispl);
+        this->ApplyDisplacementBC(this->ndispl);
         this->pbc.BCSetVal(0, this->npres);
 
         return;
     };
 
-    /** @brief Compute VMS/PSPG stabilization coefficients.
-     * @param nvel_k   Nodal velocity vector.
-     */
-    void MakNSStabCoeff(const std::vector<double> &nvel_k);
-
+    //   private:
     /**
      * @brief Assemble stabilized Navier-Stokes matrix and RHS.
-     * @param naccel_k Nodal acceleration vector.
-     * @param nvel_k   Nodal velocity vector.
+     * @param mat Target system, cleared by the caller before assembly.
+     * @param naccel_k Nodal acceleration at the current endpoint iterate.
+     * @param nvel_k Nodal velocity at the current endpoint iterate.
      */
-    void AssembleNSSystem(const std::vector<double> &nvel_k, //
-                          const std::vector<double> &naccel_k);
+    virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_k, //
+                                const std::vector<double> &naccel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;

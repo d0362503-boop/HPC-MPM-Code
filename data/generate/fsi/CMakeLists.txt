@@ -1,6 +1,6 @@
-mpm_add_data_tool(
-    TARGET makinput_fsi
-    SOURCES makinput.cpp fsi_generator.cpp
-)
+# ----------------------------------------------------------------------------
+# Solver source selection
+# ----------------------------------------------------------------------------
 
-configure_file(input.txt input.txt COPYONLY)
+add_subdirectory(MPM_MPM)
+add_subdirectory(MPM_FEM)

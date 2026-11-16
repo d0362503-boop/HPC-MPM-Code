@@ -20,16 +20,15 @@ class CrsMat {
     // false → MPM path (inactive nodes are skipped and later identity-filled).
     bool FEM_flag = true;
 
-    int ndof;        // degrees of freedom per node (fluid=4, solid=3)
-    int nmata, nmat; // total scalar entries in amat, and CSR entry count
+    int ndof;                              // components per control point
+    int num_block = 0;                     // stored scalar block count
+    std::vector<int> block_row, block_col; // component indices per block
+    int nmata, nmat;                       // total scalar entries in amat, and CSR entry count
     int local_node, ghost_node;
 
     // Natural-order ownership metadata and PETSc-local numbering.
     std::vector<int> owned_natural_ids;
     std::vector<int> ghost_natural_ids;
-    std::vector<char> natural_is_owned;
-    std::vector<int> natural_to_owned_pos;
-    std::vector<int> natural_to_ghost_pos;
     std::vector<int> natural_to_petsc_local;
     std::vector<int> petsc_local_to_natural;
 
@@ -47,13 +46,11 @@ class CrsMat {
     // CSR structure (fixed after BuildCrsMat).
     //   matrow[n]      → offset of row n in matcolid / amat.
     //   matcolid[j]    → natural column id of CSR entry j.
-    //   block_id[b]    → offset of scalar block b inside each CSR entry.
+    //   block_id[b]    → start of scalar block b in amat.
     std::vector<int> matcolid, matrow, block_id;
 
-    // Dense values stored in block-major order:
-    //   amat[j + block_id[row_var*ndof + col_var]]
-    // j       = CSR entry index (0 .. nmat-1)
-    // block_id= offset of the ndof*ndof dense block inside that entry.
+    // Stored blocks share one nodal CSR graph.
+    // amat[j + block_id[b]] couples block_row[b] to block_col[b].
     std::vector<double> amat, adiag, b_rhs, x_lhs;
 
     /**
@@ -70,6 +67,14 @@ class CrsMat {
      */
     void ResetPetscSolver();
 
+    /**
+     * @brief Locate a control-point pair in the local CSR row.
+     * @param nid Natural local control point receiving the equation contribution.
+     * @param njd Natural local control point supplying the coupled unknown.
+     * @param ncol In/out search offset within the row for successive ordered lookups.
+     * @return CSR entry index shared by all stored component blocks.
+     * @pre The requested column exists at or after the supplied search offset.
+     */
     inline int FindIndex(int nid, int njd, int &ncol) const {
         int cole = this->matrow[nid + 1] - 1;
         int cols = this->matrow[nid] + ncol;
@@ -83,27 +88,24 @@ class CrsMat {
 
     /**
      * @brief Extract the block-diagonal entries of `amat` into `adiag`.
-     * @param ndof Degrees of freedom per node.
      */
-    void ExtractDiagonal(int ndof);
+    void ExtractDiagonal();
 
     /**
      * @brief Compute `adiag[i] = 1 / sqrt(adiag[i])` for diagonal scaling.
-     * @param ndof Degrees of freedom per node.
      */
-    void ComputeDiagonalInverseSqrt(int ndof);
+    void ComputeDiagonalInverseSqrt();
 
     /**
      * @brief Apply left and right diagonal scaling to the CSR matrix.
-     * @param ndof Degrees of freedom per node.
      */
-    void ApplyDiagonalScaling(int ndof);
+    void ApplyDiagonalScaling();
 
     /**
      * @brief Build a diagonal preconditioner from `adiag`.
-     * @param ndof Degrees of freedom per node.
+     * Requires field diagonals; zero-diagonal multiplier rows need a separate preconditioner.
      */
-    void BuildDiagonalPreconditioner(int ndof);
+    void BuildDiagonalPreconditioner();
 
     /**
      * @brief Scale a vector by the diagonal scaling stored in `adiag`.
@@ -124,40 +126,30 @@ class CrsMat {
     std::vector<double> MatVecMult(const std::vector<double> &xx);
 
     /**
-     * @brief Compute the PETSc residual norm and active-DOF count for convergence monitoring.
-     * @param res_norm  Output L2 norm of the residual.
-     * @param active_dof Output number of active degrees of freedom.
+     * @brief Compute global L2 and RMS norms of the assembled physical RHS.
+     * @param ref_tol Output overlap-weighted L2 norm of the current equilibrium residual.
+     * @param abs_tol Output residual RMS over counted DOFs; not a stopping tolerance.
+     * @note Zeros constrained entries of b_rhs in place. MPM counts all components
+     * at nodes with nmass > mtol; FEM has no mass filter. Constrained DOFs are
+     * excluded from both norms and the count through BCResidualSet(). Both
+     * outputs are zero when no free active DOFs are counted.
      */
-    void ComputePetscResidualStats(double &res_norm, double &active_dof);
-
-    /**
-     * @brief Compute the squared L2 norm of the native (unscaled) residual.
-     * @return Global r^T r weighted by overlap ownership.
-     */
-    double ComputeNativeResidualNormSq();
-
-    /**
-     * @brief Compute a reference residual used for Newton-Raphson convergence checks.
-     * @return Reference residual value.
-     */
-    double ComputeRefResidual();
-
-    /**
-     * @brief Compute the absolute residual used for Newton-Raphson convergence checks.
-     * @return Absolute residual value.
-     */
-    double ComputeAbsResidual();
+    void ComputeResidualNormSq(double &ref_tol, double &abs_tol);
 
     /** @brief Mark low-mass MPM rows inactive. */
     void BuildActiveRowMask();
 
     /**
-     * @brief Check whether the Newton–Raphson iteration has converged.
+     * @brief Check NR convergence using the freshly assembled physical RHS.
      * @param NR_it     Current Newton–Raphson iteration index.
      * @param NR_it_max Maximum allowed Newton–Raphson iterations.
-     * @param solver_it Linear solver iteration count for the current NR step.
-     * @param r0r       Squared residual ratio (updated in-place).
-     * @return True if converged, false otherwise.
+     * @param solver_it Iteration count of the preceding linear solve, or zero initially.
+     * @param r0r Initial RHS L2 norm, saved on iteration zero and retained as reference.
+     * @return True when the current stopping thresholds pass, false to continue.
+     * @note Call after assembling at the current iterate and before solving its
+     * correction. This function does not reassemble the residual or compute b-A*x.
+     * @warning Failure at the maximum iteration calls MPI_Abort. Absolute thresholds
+     * depend on residual units and scale; iteration zero may pass the RMS threshold.
      */
     bool CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r);
 
@@ -166,24 +158,29 @@ class CrsMat {
     Vec petsc_b = nullptr;
     Vec petsc_x = nullptr;
     KSP ksp = nullptr;
+
+    struct FieldSplit {
+        const char *name;                 // PETSc field option name
+        std::vector<int> components;      // original physical component IDs
+        std::vector<FieldSplit> children; // nested physical field groups
+    };
+    std::vector<FieldSplit> field_splits; // physical preconditioner hierarchy
+
     std::vector<PetscInt> petsc_bc_gids; // cached global BC row/column IDs
 
     VecScatter scatter_to_all = nullptr; // local scatter: petsc_x → seq_x
     Vec seq_x = nullptr;                 // sequential copy of solution on this rank
 
-    // AMG lifecycle state (local to this solver, independent of other solvers)
-    int amg_rebuild_freq = 1; // rebuild preconditioner every N steps
+    // Per-solver preconditioner state
+    int rebuild_freq = 1;    // preconditioner refresh cadence
     int prev_ksp_its_ = -1;   // KSP iterations of the previous solve
     bool force_rebuild_next_ = false;
+    bool rebuild_on_iteration_growth = true; // optional forced PC rebuild
     // Reusable buffers for RHS / initial-guess insertion (size = local_node*ndof)
     std::vector<PetscInt> petsc_indices_buf;
     std::vector<PetscScalar> petsc_values_buf;
 
-    // Reusable column buffer for matrix assembly (size = max_row_nnz * ndof)
-    std::vector<PetscInt> petsc_cols_buf;
-
     bool use_petsc = true;
-    bool use_schur_fieldsplit = false;
 
     std::vector<char> active_row_mask;
 
@@ -194,16 +191,14 @@ class CrsMat {
 
     /**
      * @brief Build the PETSc local-to-global mapping for distributed vectors/matrices.
-     * @param ndof Degrees of freedom per node.
      */
-    void BuildLGMAP(int ndof);
+    void BuildLGMAP();
 
     /**
      * @brief Build natural-order global ID maps from the local node-to-global mapping.
-     * @param ndof Degrees of freedom per node.
      * @param node_l2g Natural local node id to global node id mapping.
      */
-    void BuildNaturalGlobalMaps(int ndof, const std::vector<int> &node_l2g);
+    void BuildNaturalGlobalMaps(const std::vector<int> &node_l2g);
 
     /**
      * @brief Classify natural local nodes into owned and ghost sets using the
@@ -215,28 +210,37 @@ class CrsMat {
     /**
      * @brief Build PETSc-local numbering (owned first, ghosts after) and the
      *        corresponding global ID arrays.
-     * @param ndof Degrees of freedom per node.
      */
-    void BuildPetscLocalMaps(int ndof);
+    void BuildPetscLocalMaps();
 
     /**
      * @brief Verify ownership metadata invariants before assembly.
      */
     void CheckOwnershipMetadata() const;
 
+    /**
+     * @brief Convert a mesh control point to its PETSc-local block index.
+     * @param natural_id Natural local control-point index, including ghosts.
+     * @return Owned-first block position in the local-to-global mapping.
+     */
     inline PetscInt NaturalNodeToPetscLocalBlock(int natural_id) const {
         return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id]);
     }
 
+    /**
+     * @brief Convert a control-point component to its PETSc-local scalar index.
+     * @param natural_id Natural local control-point index, including ghosts.
+     * @param var Physical field component in the system's component ordering.
+     * @return Component-major index into the scalar local-to-global mapping.
+     */
     inline PetscInt NaturalNodeVarToPetscLocalScalar(int natural_id, int var) const {
         return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id] + var * nodec);
     }
 
     /**
      * @brief Create the distributed PETSc matrix from the local CSR pattern.
-     * @param ndof Degrees of freedom per node.
      */
-    void BuildPetscMat(int ndof);
+    void BuildPetscMat();
 
     /**
      * @brief Create and configure the PETSc KSP solver object.
@@ -244,48 +248,44 @@ class CrsMat {
     void BuildKSPSolver();
 
     /**
-     * @brief Configure the PETSc preconditioner for this system.
-     *
-     * Default is `PCHYPRE`/BoomerAMG. Stabilized fluid systems that set
-     * `use_schur_fieldsplit` instead get a velocity-pressure lower Schur
-     * field split, where velocity is components 0--2 and pressure is 3.
-     * The split requires the 4-DOF block layout; any other `ndof` falls
-     * back to BoomerAMG.
+     * @brief Delegate preconditioner configuration to the owning physical field.
+     * Converts declared root groups into compact index sets when present.
      * @param pc PETSc preconditioner associated with `ksp`.
      */
     void ConfigurePreconditioner(PC pc);
 
     /**
-     * @brief Apply a diagonal shift to PETSc's SELFP pressure preconditioner.
-     * @param pc Configured velocity-pressure field-split preconditioner.
+     * @brief Set up the compact solver using the owner's physical field hierarchy.
+     * @return PETSc configuration status for the current retained equations.
+     * @note Handles empty systems, compact field indices and nested PCKSP operators.
      */
-    void UpdateShiftedSchurPreconditioner(PC pc);
+    PetscErrorCode ConfigureReducedPreconditioner();
 
     /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
-     * @param ndof Degrees of freedom per node.
      */
-    void InitPetscSolver(int ndof);
+    void InitPetscSolver();
 
     /**
      * @brief Assemble the local CSR matrix into the PETSc distributed matrix using block-level mappings.
-     * @param ndof Degrees of freedom per node.
      */
-    void AssemblePetscMat(int ndof);
+    void AssemblePetscMat();
 
     /**
      * @brief Copy the local RHS vector `b_rhs` into the PETSc RHS vector.
-     * @param ndof Degrees of freedom per node.
      */
-    void UpdatePetscRhs(int ndof);
+    void UpdatePetscRhs();
 
     /**
-     * @brief Solve the linear system with PETSc and scatter the solution back to `x_lhs`.
-     * @param ndof Degrees of freedom per node.
-     * @param NR_it Current Newton–Raphson iteration (used for AMG rebuild scheduling).
-     * @return Number of KSP iterations, or -1 on failure.
+     * @brief Solve with PETSc and recover the full native x_lhs, including ghosts.
+     * @note MPM systems solve a compressed system internally. Native assembly, RHS,
+     * boundary values and solution arrays retain their nodec * ndof layout.
+     * @param NR_it Current Newton–Raphson iteration controlling preconditioner reconfiguration.
+     * @return Number of KSP iterations, including when KSP reports divergence.
+     * @warning A negative KSP convergence reason is logged on rank zero; the
+     * solution is still scattered and no failure sentinel is returned.
      */
-    int SolveWithPetsc(int ndof, int NR_it = -1);
+    int SolveWithPetsc(int NR_it = -1);
 
     /**
      * @brief Solve this assembled linear system with PETSc or native GPBiCGAR.
@@ -295,6 +295,22 @@ class CrsMat {
      * `use_petsc` selects the PETSc or native path for the current solve.
      */
     int SolveSystem(int NR_it = -1);
+
+    /**
+     * @brief Select a physical field in the reduced equation numbering.
+     * @param pc Preconditioner receiving the field's equation index set.
+     * @param name PETSc split name used in runtime options.
+     * @param components Physical components in the original nodal ordering.
+     * @param parent_components Components of the enclosing split; empty means the whole system.
+     * @return PETSc configuration status.
+     * @pre The reduced equation map has been initialized.
+     * @note Compressed indices are derived from original global IDs, never index modulo ndof.
+     */
+    PetscErrorCode SetFieldSplitComponents(PC pc, const char *name, const std::vector<int> &components,
+                                           const std::vector<int> &parent_components = {}) const;
+
+    /** @brief Report whether the current solver has a compressed equation layout. */
+    bool HasReducedLayout() const { return this->reduced_active_is_ != nullptr; }
 
     /**
      * @brief Collect global IDs of Dirichlet boundary rows/columns into `petsc_bc_gids`.
@@ -317,4 +333,49 @@ class CrsMat {
 
         return;
     }
+
+  private:
+    IS reduced_active_is_ = nullptr; // original retained equation IDs
+    Mat reduced_matrix_ = nullptr;   // current compressed operator
+    std::vector<PetscInt> retained_dof_gids_;
+
+    /**
+     * @brief Rebuild the map excluding exact zero-increment identity equations.
+     * @param a Full constrained operator.
+     * @param b Full constrained force or continuity RHS.
+     * @param changed True on every rank when any rank's retained equations changed.
+     * @return PETSc mapping status.
+     */
+    PetscErrorCode BuildReducedDofMap(Mat a, Vec b, bool &changed);
+
+    /**
+     * @brief Compress, solve, and expand into the original full correction vector.
+     * @param a Full operator after physical boundary elimination.
+     * @param b Full RHS including prescribed nonzero boundary values.
+     * @param x Full solution receiving retained values and zeros at removed equations.
+     * @param NR_it Newton iteration controlling preconditioner reuse.
+     * @return PETSc solve status; the convergence reason remains on ksp.
+     */
+    PetscErrorCode SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it);
+
+    /**
+     * @brief Configure nested physical groups on already-created PETSc sub-solvers.
+     * @param solver Solver for the enclosing physical group.
+     * @param splits Original component groups and their nested subdivisions.
+     * @return PETSc nested preconditioner setup status.
+     */
+    PetscErrorCode ConfigureNestedFieldSplits(KSP solver, const std::vector<FieldSplit> &splits);
+
+    /** @brief Release compressed matrices and numbering before a mesh rebuild. */
+    void ResetReducedSystem();
+
+    /**
+     * @brief Decide whether this solve requests preconditioner reconfiguration.
+     * @param NR_it Newton iteration; the regular step cadence is checked at iteration zero.
+     * @return Whether the configured cadence or previous iteration growth requests rebuilding.
+     */
+    bool NeedsPreconditionerRebuild(int NR_it);
+
+    /** @brief Scatter owned and ghost solution components into the full native x_lhs. */
+    void RecoverSolution();
 };

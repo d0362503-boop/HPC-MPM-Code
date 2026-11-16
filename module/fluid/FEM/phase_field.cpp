@@ -1,25 +1,23 @@
-#include <array>
-#include <vector>
-#include <iostream>
-#include <iomanip>
-#include <optional>
-#include <string>
-#include <mpi.h>
-#include <cmath>
 #include "module/dataset.h"
-#include "module/shape_function.h"
+#include "module/fluid/FEM/stabilized_fem.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/shape_function.h"
+#include <array>
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+#include <mpi.h>
+#include <optional>
+#include <string>
+#include <vector>
 
 using namespace stabilizedfem;
 
 void StabilizedFEM::Particle2NodePhi() {
 
     VectorAssign(this->num, this->phi);
-    for (int ip = 0; ip < this->num; ip++) {
-        this->phi[ip] = (this->coord[ip][2] < fs_height) ? 1.0e0 : 0.0e0;
-    }
+    for (int ip = 0; ip < this->num; ip++) { this->phi[ip] = (this->coord[ip][2] < fs_height) ? 1.0e0 : 0.0e0; }
 
     double volp = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
 
@@ -28,21 +26,21 @@ void StabilizedFEM::Particle2NodePhi() {
     for (int m = 0; m < nelem; m++) {
 
         int nenode;
-        std::vector<int> ncm; 
+        std::vector<int> ncm;
         std::vector<double> sf;
         std::vector<std::array<double, 3>> dsf;
 
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
                 this->nvof[nid] += sfi * volp;
                 this->nphi[nid] += sfi * this->phi[pid] * volp;
             }
-            pid = this->idp2p[pid]; 
+            pid = this->idp2p[pid];
         }
     }
 
@@ -82,7 +80,7 @@ double StabilizedFEM::CalLiquidVol() {
     return vol_liquid;
 }
 
-void StabilizedFEM::SetPFDomain () {
+void StabilizedFEM::SetPFDomain() {
 
     for (int n = 0; n < nodec; n++) {
         if (this->nphi[n] < 0.0e0) {
@@ -99,10 +97,8 @@ void StabilizedFEM::SetPFDomain () {
     for (int m = 0; m < nelem; m++) {
         for (int n = 0; n < nenode; n++) {
             int nid = ncc[m][n];
-            this->rhoe[m] += (this->nphi[nid] * this->rhol 
-                          +  (1.0e0 - this->nphi[nid]) * this->rhog) / double(nenode); 
-            this->rmue[m] += (this->nphi[nid] * this->rmul 
-                          +  (1.0e0 - this->nphi[nid]) * this->rmug) / double(nenode); 
+            this->rhoe[m] += (this->nphi[nid] * this->rhol + (1.0e0 - this->nphi[nid]) * this->rhog) / double(nenode);
+            this->rmue[m] += (this->nphi[nid] * this->rmul + (1.0e0 - this->nphi[nid]) * this->rmug) / double(nenode);
         }
     }
 

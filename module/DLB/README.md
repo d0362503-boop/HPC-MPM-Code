@@ -1,8 +1,8 @@
 # `module/DLB/` — Dynamic Load Balancing
 
 > Runtime repartitioning of the background mesh across MPI ranks, driven by the
-> material-point distribution. Currently wired into the standalone fluid MPM solver
-> (`src_fluid/MPM`); solid and FSI keep `do_dlb = false`.
+> material-point distribution. The calling material owner selects whether and
+> when to enable repartitioning through `do_dlb` and `ApplyDLB()`.
 
 ---
 
@@ -25,7 +25,7 @@ the change incremental.
 
 | File                     | Role                                                                                                |
 | ------------------------ | --------------------------------------------------------------------------------------------------- |
-| `module/DLB/mpm_dlb.h`   | `Region` struct + the six public functions                                                          |
+| `module/DLB/mpm_dlb.h`   | `Region`, sampling, region update, and diagnostic interfaces                                         |
 | `module/DLB/mpm_dlb.cpp` | implementation; owns the single `g_current_regions` instance                                        |
 | `module/mpi_data.cpp`    | `MaterialPoint::{DetermineParticleRank, DetermineDLBParticleRank, RebalanceDLBParticles, ApplyDLB}` |
 | `module/bc.cpp`          | `BoundaryCondition::{CaptureGlobal*, RebuildLocal*}` — BC persistence across repartitions           |
@@ -43,12 +43,9 @@ void UpdateDLBRegions(const std::vector<Region> &);    // apply + rebuild overla
 
 ## 3. Activation and Call Sites
 
-- `do_dlb` is the second token of the first parameter line of `input.txt`
-  (`<solswitch, do_dlb, rstflag, nlstep>`), read in
-  `work/src_fluid/MPM/datain_para.cpp`. Solid/FSI hardcode `do_dlb = false` in their
-  constructors.
-- The main loop (`work/src_fluid/MPM/main.cpp`) replaces `MoveParticle()` with
-  `ApplyDLB()` when `do_dlb && istep % iout == 0` (and `nprocs > 1`):
+- The caller sets `do_dlb` and selects a collective repartitioning cadence.
+- One possible caller policy replaces ordinary migration at output steps
+  when DLB is enabled and more than one rank participates:
 
 ```cpp
 const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
@@ -72,10 +69,10 @@ ComputeDLBRegions(local_samples)     // 3. root cuts new regions, MPI_Bcast
 RebalanceDLBParticles(regions)       // 4. global particle migration to new owners
 UpdateDLBRegions(regions)            // 5. new mesh sizes + overlap tables + weights
 BuildMesh(); BuildControlPoint();
-MakNodalVol(); RebuildBC();   // 6. partition-dependent data
+ComputeNodalVol(); RebuildBC();   // 6. partition-dependent data
 ```
 
-The physics class then rebuilds its solver system (stage 8, in the overrides).
+The physics class then rebuilds its solver system after these six stages.
 
 ## 5. Region Model and Invariants
 
@@ -101,18 +98,20 @@ struct Region { std::array<int,3> elem_min, elem_max; };  // inclusive, global e
 
 ## 6. Sampling
 
-Goal: ~`kSamplesPerRank` (128) coordinate samples per rank, proportional to local load.
+The sampling-rate target is `kSamplesPerRank = 256` times the rank count globally,
+distributed approximately in proportion to each rank's particle count. The minimum
+rate and integer stride can increase the actual sample count.
 
 ```cpp
 // ComputeSampleSkip
-sample_rate   = max(kMinSampleRate /*1e-4*/, 128 * nprocs / global_count)  // MPI_Allreduce
+sample_rate   = max(kMinSampleRate /*1e-4*/, 256 * nprocs / global_count)  // MPI_Allreduce
 target        = ceil(local_count * sample_rate)
 skip          = max(1, local_count / target)
 ```
 
-`SelectSamples` then takes every `skip`-th particle — deterministic, O(num), and
-density-faithful because every particle is equally likely to be sampled regardless of
-rank. `GatherSamplesToRoot` packs `(x,y,z)` into a flat double array and uses
+`SelectSamples` then takes every `skip`-th particle. This is deterministic strided
+sampling, not random sampling; particle ordering can bias the sample distribution.
+`GatherSamplesToRoot` packs `(x,y,z)` into a flat double array and uses
 `MPI_Gather`/`MPI_Gatherv`; only the root keeps the global sample set.
 
 ## 7. Repartitioning: Recursive Coordinate Bisection
@@ -184,11 +183,13 @@ it, in this order:
    griddata path, so `NodeVarComm`'s sum-then-weight averaging is unchanged.
 
 The caller then rebuilds derived data: `BuildMesh()` (also re-collects
-`g_current_regions`), `BuildControlPoint()` (`ncc`, `xyc`), `MakNodalVol()` (`nvol`,
+`g_current_regions`), `BuildControlPoint()` (`ncc`, `xyc`), `ComputeNodalVol()` (`nvol`,
 with the new overlap tables), `RebuildBC()` (§10), and the physics
 class rebuilds its `CrsMat` — with `use_petsc`, `BuildCrsMat` first calls
 `ResetPetscSolver()` to destroy the old `Mat/Vec/KSP/lgmap/scatter` (all handles are
 `nullptr`-initialized, so the first call is a safe no-op).
+This reset also releases the reduced matrix and retained-equation index set.
+Neither compact numbering nor the old KSP can survive a partition-layout change.
 
 Nodal *state* is intentionally not preserved: the fluid MPM rebuilds all nodal fields
 from particles at the next `Particle2Node()` anyway (arrays are re-`VectorAssign`ed
@@ -219,7 +220,7 @@ re-evaluates boundary-cell fill under the new partition.
 - `StabilizedMPM::MoveParticle()` and the solid equivalent pass
   `mpm_dlb::CurrentRegions()` to `DetermineParticleRank`, so per-step migration always
   uses the *current* partition without touching the update machinery.
-- `PairwiseRepulsiveParticleShifting` builds its ghost set by intersecting each
+- `PairwiseRepulsivePST` builds its ghost set by intersecting each
   particle's support ball with the peers' physical region bounds read from
   `CurrentRegions()` — correct for non-uniform regions, unlike the old Cartesian rank
   arithmetic. The regions reference is used transiently inside the call (converted to
@@ -252,7 +253,7 @@ re-evaluates boundary-cell fill under the new partition.
 - **Cost:** owner search is O(num × nprocs) per DLB; acceptable at `iout` cadence. If
   it ever shows up in profiles, build an element→owner lookup table once per
   repartition for O(1) per particle.
-- **Balance quality** is limited by the sample count (≈128/rank) and the
+- **Balance quality** is limited by the sampling target (256 per rank on average), particle ordering, and the
   element-granular cuts; expect approximate, not exact, load balance.
 - **Fixed topology:** `nxyr` cannot change at runtime, and `nprocs` must always equal
   the partition topology stored in `griddata`.

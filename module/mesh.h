@@ -47,13 +47,23 @@ inline void InitializeMeshAndTimeParameters() {
  * @param ne Number of background elements along x/y/z (typically the global `xyelem`).
  * @return Element indices along x/y/z.
  */
-inline std::array<int, 3> ElementIndexToIJK(int m, const std::vector<int> &ne) {
+inline std::array<int, 3> IndexToIJK(int m, const std::vector<int> &ne) {
 
     const int ize = m / (ne[0] * ne[1]);
     const int iye = (m - ize * (ne[0] * ne[1])) / ne[0];
     const int ixe = m - ize * (ne[0] * ne[1]) - iye * ne[0];
 
     return {ixe, iye, ize};
+}
+
+/**
+ * @brief Flatten per-direction background element indices into a linear index.
+ * @param ijk Element indices along x/y/z.
+ * @param ne Number of background elements along x/y/z.
+ * @return Linear element index with x varying fastest, then y, then z.
+ */
+inline int IJKToIndex(const std::array<int, 3> &ijk, const std::vector<int> &ne) {
+    return ijk[0] + ne[0] * (ijk[1] + ne[1] * ijk[2]);
 }
 
 /**
@@ -89,7 +99,7 @@ bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local);
 /**
  * @brief Compute nodal/control-point volumes from element volumes.
  */
-void MakNodalVol();
+void ComputeNodalVol();
 
 /**
  * @brief Build the background mesh node coordinates and element connectivity.
