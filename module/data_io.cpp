@@ -1,9 +1,10 @@
-#include "data_io.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "mesh.h"
-#include "mpi_data.h"
-#include "shape_function.h"
+#include "module/data_io.h"
+#include "module/DLB/mpm_dlb.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -11,24 +12,22 @@
 #include <stdexcept>
 #include <vector>
 
-using namespace std;
+std::ifstream OpenInputFile(const std::string &filename) {
 
-ifstream OpenInputFile(const string &filename) {
-
-    ifstream infile(filename);
-    if (!infile.is_open()) { throw runtime_error("Failed to open input file: " + filename); }
+    std::ifstream infile(filename);
+    if (!infile.is_open()) { throw std::runtime_error("Failed to open input file: " + filename); }
     return infile;
 }
 
-ofstream OpenOutputFile(const string &filename) {
+std::ofstream OpenOutputFile(const std::string &filename) {
 
-    ofstream outfile(filename);
-    if (!outfile.is_open()) { throw runtime_error("Failed to open output file: " + filename); }
-    outfile.flags(ios::right | ios::scientific);
+    std::ofstream outfile(filename);
+    if (!outfile.is_open()) { throw std::runtime_error("Failed to open output file: " + filename); }
+    outfile.flags(std::ios::right | std::ios::scientific);
     return outfile;
 }
 
-void InputParaGriddata(ifstream &infile) {
+void InputParaGriddata(std::ifstream &infile) {
 
     infile >> myrank;
     infile.ignore(1000, '\n');
@@ -84,7 +83,7 @@ void InputParaGriddata(ifstream &infile) {
         nsubc.resize(isubc);
         InputVector(infile, isubc, nsubc); // --- Overlapped control point ID ---
 
-        vector<int> dbn(nodec);
+        std::vector<int> dbn(nodec);
         InputVector(infile, nodec, dbn); // --- Number of control point shares ---
 
         dbc.resize(nodec * 4);
@@ -120,6 +119,8 @@ void InputParaGriddata(ifstream &infile) {
         nsubl.resize(0);
         dbl.assign(node * 4, 1.0e0);
     }
+
+    mpm_dlb::CollectCurrentRegions();
 
     return;
 }

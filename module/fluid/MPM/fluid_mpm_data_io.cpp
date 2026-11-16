@@ -3,17 +3,44 @@
 #include <string>
 #include <vector>
 
-#include "../../data_io.h"
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "../../vtk_hdf5.h"
-#include "stabilized_mpm.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/vtk_hdf5.h"
 
 using namespace stabilizedmpm;
 
+void StabilizedMPM::InputBCData(std::ifstream &infile) {
+
+    this->ubc.BCInput(infile);
+    this->vbc.BCInput(infile);
+    this->wbc.BCInput(infile);
+    this->pbc.BCInput(infile);
+    // --- Inflow boundary ---
+    this->uinfbc.BCInput(infile, false);
+    this->vinfbc.BCInput(infile, false);
+    this->winfbc.BCInput(infile, false);
+
+    if (this->do_dlb) {
+        this->ubc.CaptureGlobalControlPointBC();
+        this->vbc.CaptureGlobalControlPointBC();
+        this->wbc.CaptureGlobalControlPointBC();
+        this->pbc.CaptureGlobalControlPointBC();
+        this->uinfbc.CaptureGlobalElementBC();
+        this->vinfbc.CaptureGlobalElementBC();
+        this->winfbc.CaptureGlobalElementBC();
+    }
+
+    this->InitializeInflowBC();
+
+    return;
+}
+
 void StabilizedMPM::InputPointData(std::ifstream &infile) {
+
     infile >> this->num;
     infile.ignore(1000, '\n');
 
@@ -48,7 +75,7 @@ void StabilizedMPM::OutputPointDataVTKHDF(int iview, int istep) {
 
 void StabilizedMPM::RestartInput() {
 
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -56,7 +83,7 @@ void StabilizedMPM::RestartInput() {
     reinfile >> this->num;
     reinfile.ignore(1000, '\n');
 
-    this->InputPointData(reinfile);
+    this->InitializePointData();
 
     if (this->num != 0) {
         InputVector(reinfile, this->num, this->coord);
@@ -87,10 +114,11 @@ void StabilizedMPM::RestartInput() {
 
 void StabilizedMPM::RestartOutput() {
 
-    std::string filename = pointfile + std::to_string(myrank) + "_re.txt";
+    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);
+    reoutfile.precision(17);
     reoutfile.open(filename);
 
     reoutfile << this->num << "     --- Number of water material point --- " << "\n";
@@ -98,10 +126,10 @@ void StabilizedMPM::RestartOutput() {
     OutputVector(reoutfile, this->num, this->coord);
 
     for (int i = 0; i < this->num; i++) {
-        reoutfile << this->id[i] << std::setw(15)    //
-                  << this->matid[i] << std::setw(15) //
-                  << this->mass[i] << std::setw(15)  //
-                  << this->vol[i] << std::setw(15)   //
+        reoutfile << this->id[i] << std::setw(26)    //
+                  << this->matid[i] << std::setw(26) //
+                  << this->mass[i] << std::setw(26)  //
+                  << this->vol[i] << std::setw(26)   //
                   << this->pres[i] << "\n";
     }
 

@@ -1,294 +1,258 @@
 # HPC-MPM-Code
 
-`HPC-MPM-Code` is a C++17 MPM/FEM solver for solid mechanics, fluid mechanics, and fluid-structure interaction (FSI). The code is MPI-parallel and uses PETSc for linear algebra. Visualization output is standardized on VTK HDF5 (`.vtkhdf`).
+C++17 MPM/FEM solver for solid mechanics, fluid mechanics, and fluid-structure interaction (FSI). MPI-parallel with PETSc linear algebra and VTK HDF5 visualization output.
 
-This repository currently supports three top-level solver modes:
+Supported solver modes:
 
-- `FLUID`
-- `SOLID`
-- `FSI`
-
-It also contains standalone data generators for building input files for those cases.
+- `FLUID` — MPM or FEM fluid solver
+- `SOLID` — explicit or implicit MPM solid solver
+- `FSI` — partitioned MPM–FEM or monolithic MPM–MPM fluid–solid interaction
 
 ## Features
 
-- C++17 solver code with MPI parallelism
+- C++17 with MPI parallelism
+- Dynamic load balancing (DLB) for fluid MPM via particle-coordinate sampling (`module/DLB/`)
 - PETSc-backed sparse linear algebra
-- Fluid solvers in both `FEM` and `MPM` variants
-- Solid solvers in both `EXPLICIT` and `IMPLICIT` variants
-- Partitioned FSI workflow
-- Built-in third-party dependency bootstrap through CMake
-- Standalone data generators under `data/`
-- VTK HDF5 output for mesh and particle visualization
+- Generalized-alpha/Newmark parameters and kinematics in `GeneralizedAlphaIntegrator`, owned by each `MaterialPoint`
+- Fluid: FEM or MPM
+- Solid: explicit or implicit MPM
+- Partitioned MPM–FEM FSI and monolithic MPM–MPM FSI with interface multipliers
+- CMake-based build with bundled PETSc/HDF5 bootstrap
+- Standalone input generators and partitioners under `data/`
+- VTK HDF5 output (`*.vtkhdf`)
+
+## Quick Start
+
+```bash
+cmake -S . -B build
+cmake --build build -j8
+cd build
+mpirun -np 4 ./MPM
+```
+
+The CMake binary directory **must** be named `build`; anything else is rejected.
+
+Default compile flags are `-O3 -DNDEBUG` with `-march=native` enabled by default. Use `-DMPM_ENABLE_NATIVE_ARCH=OFF` for cross-architecture or cluster builds.
 
 ## Repository Layout
 
-The top-level directories are:
+| Directory | Purpose |
+|-----------|---------|
+| `module/` | Shared core modules: mesh, material points, I/O, MPI comms, PETSc wrapper, fluid/solid mechanics implementations |
+| `work/` | Top-level solver drivers: `src_fluid/`, `src_solid/`, `src_fsi/` |
+| `data/` | Input generators (`data/generate/`) and partitioners (`data/divide/`) |
+| `cmake/` | Build options and bundled-dependency bootstrap |
+| `Ext/` | Bundled source tarballs (PETSc, HDF5, optional Hypre) |
+| `external/` | Installed dependencies after bootstrap |
+| `docs/` | Developer notes and plans |
+| `build/res/` | Runtime visualization output |
+| `build/` | Required CMake binary directory |
 
-- `module/`: shared core modules, data structures, IO, solver wrappers, fluid modules, solid modules
-- `work/`: top-level solver source selections for `FLUID`, `SOLID`, and `FSI`
-- `data/`: standalone input generators for `fluid`, `solid`, and `fsi`
-- `cmake/`: build options and third-party dependency bootstrap logic
-- `Ext/`: bundled source tarballs for external dependencies
-- `external/`: installed third-party dependencies after CMake bootstrap
-- `docs/`: notes, plans, and developer-facing documents
-- `res/`: resource files
+Key files:
 
-Important root files:
-
-- `CMakeLists.txt`: root CMake entry
-- `cmake/options.cmake`: central build switches
-- `AGENTS.md`: project-specific engineering rules and pitfalls
+- `CMakeLists.txt` — root CMake entry
+- `cmake/options.cmake` — build options
+- `AGENTS.md` — engineering rules and pitfalls
+- `work/**/main.cpp` — each solver's executable entry point; CMake selects one
 
 ## Dependencies
 
-The project expects:
+Required:
 
 - GCC with C++17 support
 - MPI
-- CMake 3.20 or newer
+- CMake ≥ 3.20
 - Zlib
 
-The repository can bootstrap these bundled dependencies automatically:
+Auto-bootstrapped from `Ext/`:
 
-- `PETSc 3.24.5` from `Ext/petsc-3.24.5.tar.gz`
-- `HDF5 1.14.5` from `Ext/hdf5-hdf5_1.14.5.tar.gz`
-- optional `Hypre 3.0.0` from `Ext/hypre-3.0.0.tar.gz` during PETSc build
+- PETSc 3.24.5 → `external/petsc`
+- HDF5 1.14.5 → `external/hdf5`
+- Hypre 3.0.0 (optional, during PETSc build)
 
-By default:
-
-- PETSc is installed into `external/petsc`
-- HDF5 is installed into `external/hdf5`
-
-If those installs already exist, the CMake bootstrap logic skips rebuilding them.
-
-## Build System
-
-The project now uses the root CMake workflow.
-
-One important repository convention is that the CMake binary directory must be named exactly `build`. Configuring into any other directory is rejected by the root `CMakeLists.txt`.
-
-Typical configure step:
-
-```bash
-cmake -S . -B build
-```
-
-Typical build step:
-
-```bash
-cmake --build build -j8
-```
-
-This produces the main solver executable:
-
-```bash
-build/MPM
-```
+If `external/petsc` and `external/hdf5` already exist, CMake skips rebuilding them.
 
 ## Build Options
 
-Most build switches live in `cmake/options.cmake`.
+Active build options (most are defined in `cmake/options.cmake`; `MPM_ENABLE_NATIVE_ARCH` is defined in the root `CMakeLists.txt`):
 
-### 1. Solver Source Selection
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `MPM_ENABLE_NATIVE_ARCH` | `ON` | Enable `-march=native` |
+| `BUILD_PETSC` | `ON` | Build PETSc from bundled tarball |
+| `USE_HDF5` | `ON` | Enable VTK HDF5 output |
+| `HDF5_ENABLE_PARALLEL` | `ON` | Build parallel HDF5 |
+| `USE_MPI` | `ON` | Enable MPI |
 
-Exactly one of the following should be enabled:
+### Selecting the solver source
 
-- `USE_SRC_FSI`
-- `USE_SRC_FLUID`
-- `USE_SRC_SOLID`
+The active driver is selected by uncommenting **exactly one** `add_subdirectory(...)` line in `work/CMakeLists.txt`:
 
-These select which source tree under `work/` is linked into the final `MPM` executable.
+```cmake
+# add_subdirectory(src_fluid)
+# add_subdirectory(src_solid)
+add_subdirectory(src_fsi)
+```
 
-### 2. Data Generator Selection
+The selected solver's `main.cpp` supplies `main()` directly; there is no separate dispatch entry.
+Initialization and finalization are shared through `InitializeSimulation()` and `FinalizeSimulation()` in `module/dataset.h`.
 
-Exactly one of the following should be enabled when building standalone data generators:
+For FSI, `work/src_fsi/CMakeLists.txt` selects either `MPM_FEM` or `MPM_MPM`.
+`work/src_solid/CMakeLists.txt` similarly selects `explicit` or `implicit`.
 
-- `USE_DATA_FSI`
-- `USE_DATA_FLUID`
-- `USE_DATA_SOLID`
+The [MPM-MPM FSI guide](work/src_fsi/MPM_MPM/README.md) describes the coupled
+Newton loop, interface activation, particle correction, and the optimized
+solver strategy. Its nonlinear check is separate from the standalone
+`CrsMat` monitor.
 
-These control which `makinput_*` executable is emitted into `build/data/`.
+### Current linear-solver strategy
 
-### 3. Solver Method Selection
+| Change | Current behavior | Guide |
+|--------|------------------|-------|
+| One component count | Physics constructors set `CrsMat::ndof` once; matrix helpers and assembly callbacks read it | [Shared solver](module/solver/README.md) |
+| Shared MPM solve/setup | Pure fluid, implicit solid and FSI retain full `nodec * ndof` assembly/vectors; `CrsMat` configures declared field groups, compresses and recovers the full solution | [Shared solver](module/solver/README.md) |
+| Solid preconditioning | FGMRES with ASM overlap 1 and local PREONLY/ILU(1), nonzero shift `1e-3` | [Implicit solid](module/solid/implicit/README.md) |
+| Coupled FSI preconditioning | Fluid / [solid + lambda] Schur grouping; the coupled inner FGMRES uses PETSc's assembled `selfp` Pmat | [FSI strategy](work/src_fsi/MPM_MPM/README.md) |
+| Activity and logging | Absolute `nmass > mtol` phase activation; optional PETSc performance logging | [FSI configuration](work/src_fsi/MPM_MPM/README.md) |
 
-Fluid solver method:
+The current PETSc MPM path uses reduced equations after boundary elimination.
+It rebuilds the compact matrix values every linear solve. The KSP is recreated
+when retained equations change or the configured cadence requests it; otherwise
+the KSP is retained while its numerical preconditioner is refreshed. This is
+distinct from keeping the entire preconditioner unchanged between NR iterations.
 
-- `FLUID_METHOD=FEM`
-- `FLUID_METHOD=MPM`
+### Selecting data tools
 
-Solid solver method:
+`data/generate/CMakeLists.txt` and `data/divide/CMakeLists.txt` configure all
+standalone fluid/solid tools and both FSI variants by default. Build only the
+target needed for a case:
 
-- `SOLID_METHOD=EXPLICIT`
-- `SOLID_METHOD=IMPLICIT`
+```cmake
+cmake --build build --target makinput_fsi_mpm_fem makdivide_fsi_mpm_fem -j8
+```
 
-### 4. Dependency and Feature Toggles
+## Build Examples
 
-- `BUILD_PETSC`: build PETSc from bundled tarball
-- `USE_HDF5`: enable VTK HDF5 output
-- `HDF5_ENABLE_PARALLEL`: build parallel HDF5
-- `USE_MPI`: enable MPI support
-
-## Common Build Examples
-
-### Build the default solver configuration
+Current MPM--MPM FSI build (selected in `work/src_fsi/CMakeLists.txt`):
 
 ```bash
 cmake -S . -B build
 cmake --build build -j8
 ```
 
-### Build a fluid solver configuration
+Fluid build (select `src_fluid` in `work/CMakeLists.txt`):
 
 ```bash
-cmake -S . -B build \
-  -DUSE_SRC_FLUID=ON \
-  -DUSE_SRC_FSI=OFF \
-  -DUSE_SRC_SOLID=OFF \
-  -DFLUID_METHOD=FEM
-
+cmake -S . -B build
 cmake --build build -j8
 ```
 
-### Build a solid implicit configuration
+Solid implicit build (select `src_solid` and uncomment `implicit` in `work/src_solid/CMakeLists.txt`):
 
 ```bash
-cmake -S . -B build \
-  -DUSE_SRC_SOLID=ON \
-  -DUSE_SRC_FSI=OFF \
-  -DUSE_SRC_FLUID=OFF \
-  -DSOLID_METHOD=IMPLICIT
-
+cmake -S . -B build
 cmake --build build -j8
 ```
 
-### Build the FSI data generator
+Example fluid data generator:
 
 ```bash
-cmake -S . -B build \
-  -DUSE_DATA_FSI=ON \
-  -DUSE_DATA_FLUID=OFF \
-  -DUSE_DATA_SOLID=OFF
-
-cmake --build build --target makinput_fsi -j8
+cmake --build build --target makinput_fluid -j8
 ```
 
 ## Running the Solver
 
-The main executable is intended to run under MPI:
-
 ```bash
-mpiexec -np 4 ./build/MPM
+cd build
+mpirun -np 4 ./MPM
 ```
 
-The solver expects input files such as:
+At runtime the solver reads an orchestration file, conventionally `file.dat`, with four lines:
 
-- `griddata.txt`
-- `pointdata.txt` or case-specific point data file
-- `input.txt`
+1. Parameter file path (e.g., `input.txt`)
+2. Grid file prefix (e.g., `griddata`)
+3. Point file prefix (e.g., `pointdata`)
+4. Output file prefix
 
-The exact required files depend on the selected case and workflow.
+Per-rank input files follow the prefix with the rank number, e.g. `griddata0.txt`, `pointdata0.txt`.
 
-## Data Generator Workflow
+`file.dat` is read from the `build/` working directory. Its paths should refer to
+generated files under `build/`, such as `./data/divide/...` and `./res/...`, not
+source-tree paths under `../data/`. The MPI process count must match the partition
+topology, and the input mesh dimensions must match the generated partition data.
 
-The `data/` directory contains standalone tools for generating input files for the three main case families:
-
-- `data/fluid`
-- `data/solid`
-- `data/fsi`
-
-The generators are built through the root CMake workflow and produce executables in:
+A convenience script is available at `build/run.sh`:
 
 ```bash
-build/data/
+cd build
+sh run.sh [NP]
 ```
 
-Typical targets are:
+Supply the partition count as an argument (`sh run.sh 16`) or through `NP`.
+The local script falls back to `nproc` when neither is supplied, which is suitable
+only when the generated partition count matches. Launcher copies are host-local:
+cluster versions may instead require `NP` and select apparently idle physical
+cores. Inspect the installed script for its binding policy.
 
-- `makinput_fluid`
-- `makinput_solid`
-- `makinput_fsi`
+Output goes to:
 
-Typical run pattern:
+- `stdout/out_<PID>_<NP>.log`
+- `stderr/err_<PID>_<NP>.log`
+
+The launcher prints only the process count, background PID, stdout path and
+stderr path. It inherits `PETSC_OPTIONS`. For optional PETSc event timings:
 
 ```bash
-cd build/data
-./makinput_fsi
+PETSC_OPTIONS="-log_view" sh run.sh 16
 ```
 
-This works because CMake copies the matching case `input.txt` into the expected subdirectory under `build/data/`.
+PETSc writes the performance summary to stdout at normal finalization. Setup,
+preconditioner, and solve event times can overlap; do not add them as independent
+costs. Ordinary NR records report residuals and iteration counts, not separate
+KSP setup/solve times. Options and rebuilt code affect new processes only.
 
-For more detail, see `data/README.md`.
+`build/run.sh` is gitignored; copy it elsewhere if you want to version a customized version.
 
-## Output and Visualization
+> **Do not delete `build/`**: it contains generated runtime files, partitioned input data, and job outputs. If a clean CMake configure is needed, remove only `build/CMakeCache.txt` and `build/CMakeFiles/`.
 
-The project uses VTK HDF5 for visualization output.
+CMake copies some parameter files from `data/` into `build/data/` during
+configuration. After reconfiguring, check the selected parameter block and
+restart settings before launching; local runtime edits may have been overwritten.
 
-Typical generated files include:
+## Data Generator / Partitioner Workflow
 
-- mesh output: `grid.vtkhdf`
-- particle/material point output: `wp.vtkhdf` or `sp.vtkhdf`
+Build and run a generator:
 
-The `data/` generators also emit text input files such as:
+```bash
+cmake --build build --target makinput_fluid -j8
+cd build/data/generate/fluid
+./makinput_fluid
+```
 
-- `griddata.txt`
-- `wpdata.txt`
-- `spdata.txt`
-- `pointdata.txt`
+Build and run a partitioner:
 
-Legacy `.vtk`, `.vtu`, `.pvtu`, and `.pvd` outputs are not the standard path in the current `data/` workflow.
+```bash
+cmake --build build --target makdivide_fluid -j8
+cd build/data/divide/fluid
+./makdivide_fluid
+```
 
-## Architecture Notes
+The partitioner writes rank-split data under `myrank_data/`.
 
-Some project-specific design choices matter a lot when modifying the code:
+For solid cases, each particle section stores a count, then all coordinate
+triplets, then one `id matid surf_point mass vol0` row per particle. Coordinates
+and attributes are separate blocks, not interleaved particle records.
 
-- A large amount of shared state lives in inline global variables declared in headers such as `dataset.h`, `mesh.h`, and `mpi_data.h`
-- Many functions operate directly on this shared global state
-- Refactoring those globals into class members without a broader redesign can easily break behavior or introduce ODR issues
+## Output
 
-There are also mode-specific source trees:
+- Visualization: VTK HDF5 (`grid.vtkhdf`, `wp.vtkhdf`, `sp.vtkhdf`)
+- Text inputs/outputs: `griddata*.txt`, `pointdata*.txt`
+- Restart: per-rank `*_re.txt` files
 
-- `work/src_fluid`
-- `work/src_solid`
-- `work/src_fsi`
+## Important Notes
 
-And lower-level module trees:
-
-- `module/fluid/FEM`
-- `module/fluid/MPM`
-- `module/solid/explicit`
-- `module/solid/implicit`
-- `module/solver`
-
-## Parallel and Numerical Caveats
-
-Several project rules are important enough to call out explicitly:
-
-- Use `nodec` for computation and PETSc ownership logic; `node` is for visualization and mesh layout, not solver ownership
-- `NodeVarComm` behavior is not equivalent to a naive `MPI_Allreduce`
-- `dbc` stores overlap weights, not a boolean ownership mask
-- Shared control-point ownership uses the smallest `aelemmin` tie-break rule
-
-If you are touching parallel assembly or control-point communication, read `AGENTS.md` first.
-
-## Development Notes
-
-- Match the repository style rules in `.clang-tidy`
-- In class member functions, call other member functions with explicit `this->`
-- When adding new `.cpp` files, keep CMake targets in sync
-- Be careful with `data/divide_fsi/`, which is not fully synchronized with the current global inline variable layout
-
-## Known Current State
-
-At the repository level, the current direction is:
-
-- root CMake is the primary build path
-- bundled tarballs in `Ext/` are the primary dependency source
-- `data/` generators are class-based and built through root CMake
-- visualization output is centered on VTK HDF5
-
-Some older assumptions may still appear in historical notes or legacy subdirectories, so prefer the current root CMake workflow over older ad hoc build paths when in doubt.
+Before modifying the solver core, read `AGENTS.md` — in particular §5 (Critical Parallel Rules) and §6 (Common Pitfalls). It is the single source of truth for the project's engineering rules.
 
 ## License
 
-This repository includes a `LICENSE` file at the root. Check it before redistribution or external reuse.
+See `LICENSE` at the repository root.

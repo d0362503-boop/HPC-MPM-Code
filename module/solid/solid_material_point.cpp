@@ -1,4 +1,4 @@
-#include "solid_material_point.h"
+#include "module/solid/solid_material_point.h"
 
 #include <array>
 #include <cmath>
@@ -6,12 +6,13 @@
 #include <string>
 #include <vector>
 
-#include "../bc.h"
-#include "../dataset.h"
-#include "../material_point.h"
-#include "../mesh.h"
-#include "../mpi_data.h"
-#include "../shape_function.h"
+#include "module/DLB/mpm_dlb.h"
+#include "module/bc.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+#include "module/shape_function.h"
 
 void SolidMaterialPointBase::InitializePointData() {
     VectorAssign(this->num, this->id);
@@ -30,6 +31,7 @@ void SolidMaterialPointBase::InitializePointData() {
     VectorAssign(this->num, this->def_grad);
 
     if (this->Fbar_flag) {
+        VectorAssign(this->num, this->delta_def_grad_bar);
         VectorAssign(this->num, this->det_def_grad_bar, 1.0e0);
         VectorAssign(this->num, this->def_grad_bar);
     }
@@ -45,12 +47,29 @@ void SolidMaterialPointBase::InitializePointData() {
     return;
 }
 
-void SolidMaterialPointBase::Moveparticle() {
-    this->DetermineParticleRank();
+void SolidMaterialPointBase::RebuildBC() {
+
+    this->ubc.RebuildLocalControlPointBC();
+    this->vbc.RebuildLocalControlPointBC();
+    this->wbc.RebuildLocalControlPointBC();
+
+    return;
+}
+
+void SolidMaterialPointBase::MoveParticle() {
+
+    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp == 0) return;
 
     this->num += this->par_comm_.nrps - this->par_comm_.nmps - this->par_comm_.nrmp;
+
+    this->MigrateParticleData();
+
+    return;
+}
+
+void SolidMaterialPointBase::MigrateParticleData() {
 
     // ---- Scalar part ----
     this->par_comm_.PointVarComm(this->num, this->id);           // ---- Point Global ID ----
@@ -72,8 +91,10 @@ void SolidMaterialPointBase::Moveparticle() {
     this->par_comm_.PointVarComm(this->num, this->def_grad); // --- Point deformation gradient ---
 
     if (Fbar_flag) {
-        // ---- Point determinant of deformation gradient bar ----
+        // --- Point determinant of deformation gradient bar ---
         this->par_comm_.PointVarComm(this->num, this->det_def_grad_bar);
+        // --- Point delta deformation gradient bar ---
+        this->par_comm_.PointVarComm(this->num, this->delta_def_grad_bar);
         // --- Point deformation gradient bar ---
         this->par_comm_.PointVarComm(this->num, this->def_grad_bar);
     }
@@ -96,22 +117,30 @@ void SolidMaterialPointBase::Moveparticle() {
 }
 
 void SolidMaterialPointBase::DetermineRigidBC() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
     VectorAssign(nodec, this->nvof);
+    VectorAssign(nodec * 3, this->nrigid_normal);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             if (iprop[this->matid[pid]] == -1) {
                 std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-                MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
                 for (int ni = 0; ni < nenode; ni++) {
                     int nid = ncm[ni];
                     double sfi = sf[ni];
+                    double dsfi1 = dsf[ni][0];
+                    double dsfi2 = dsf[ni][1];
+                    double dsfi3 = dsf[ni][2];
                     this->nvof[nid] += sfi * this->vol[pid];
+                    this->nrigid_normal[nid + nuc] += dsfi1 * this->mass[pid];
+                    this->nrigid_normal[nid + nvc] += dsfi2 * this->mass[pid];
+                    this->nrigid_normal[nid + nwc] += dsfi3 * this->mass[pid];
                 }
             }
             pid = this->idp2p[pid];
@@ -119,6 +148,7 @@ void SolidMaterialPointBase::DetermineRigidBC() {
     }
 
     NodeVarComm(this->nvof, 0);
+    NodeVarComm(this->nrigid_normal, {nuc, nvc, nwc});
 
     VectorAssign(nodec, this->rigid_bc.nbc);
     VectorAssign(nodec, this->rigid_bc.fbc);
@@ -128,17 +158,51 @@ void SolidMaterialPointBase::DetermineRigidBC() {
             this->rigid_bc.fbc[this->rigid_bc.ibc] = 0.0e0;
             this->rigid_bc.ibc++;
         }
+        const double norm = std::sqrt(std::pow(this->nrigid_normal[n + nuc], 2) + //
+                                      std::pow(this->nrigid_normal[n + nvc], 2) + //
+                                      std::pow(this->nrigid_normal[n + nwc], 2));
+        if (norm > mtol) {
+            this->nrigid_normal[n + nuc] /= norm;
+            this->nrigid_normal[n + nvc] /= norm;
+            this->nrigid_normal[n + nwc] /= norm;
+        } else {
+            this->nrigid_normal[n + nuc] = 0.0e0;
+            this->nrigid_normal[n + nvc] = 0.0e0;
+            this->nrigid_normal[n + nwc] = 0.0e0;
+        }
     }
 
     return;
 }
 
-void SolidMaterialPointBase::UpdateConstitutiveModel(
-    int pid,                                                           //
-    std::vector<std::array<double, 6>> &stress,                        //
-    const std::vector<double> &det_def_grad_bar,                       //
-    const std::vector<std::array<std::array<double, 3>, 3>> &def_grad, //
-    const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad) {
+void SolidMaterialPointBase::UpdateDefGrad(int pid, int nenode, double af_coeff, const std::vector<int> &ncm,
+                                           const std::vector<double> &sf, const std::vector<std::array<double, 3>> &dsf,
+                                           std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
+                                           std::vector<std::array<std::array<double, 3>, 3>> &def_grad) {
+
+    std::array<std::array<double, 3>, 3> ddg{};
+    ddg = this->ComputeDeltaDefGrad(ncm, nenode, af_coeff, dsf);
+
+    delta_def_grad[pid] = ddg;
+
+    // --- Deformation gradient update: F^{n+1} = dF * F^n ---
+    std::array<std::array<double, 3>, 3> F{};
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            for (int k = 0; k < 3; k++) { F[i][j] += ddg[i][k] * this->def_grad[pid][k][j]; }
+        }
+    }
+    def_grad[pid] = F;
+
+    this->det_def_grad[pid] = DetMat3(F);
+
+    return;
+}
+
+void SolidMaterialPointBase::UpdateConstitutiveModel(int pid, std::vector<std::array<double, 6>> &stress,               //
+                                                     const std::vector<double> &det_def_grad_bar,                       //
+                                                     const std::vector<std::array<std::array<double, 3>, 3>> &def_grad, //
+                                                     const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad) {
 
     std::array<std::array<double, 3>, 3> F = def_grad[pid];
     std::array<std::array<double, 3>, 3> dF = delta_def_grad[pid];

@@ -1,0 +1,163 @@
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+#include <mpi.h>
+#include <vector>
+
+#include "module/cal_mat.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
+
+#include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
+
+using namespace mpm_mpm_monolithic_fsi;
+
+MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
+    this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
+    this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
+    this->fluid_.rhs_start = 0;
+    this->solid_.rhs_start = 4;
+    this->integrator_.ode_order = 2;
+    this->fsi_sys.ndof = 10;
+    this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
+                               4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
+    this->fsi_sys.block_col = {0, 1, 2, 3, 7, 0, 1, 2, 3, 8, 0, 1, 2, 3, 9, 0, 1, 2, 3,
+                               4, 5, 6, 7, 4, 5, 6, 8, 4, 5, 6, 9, 0, 4, 1, 5, 2, 6};
+    this->fsi_sys.FEM_flag = false;
+    this->fsi_sys.use_petsc = true;
+    this->fsi_sys.rebuild_freq = 1; // refresh each step start
+    this->fsi_sys.owner_ = this;
+}
+
+MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); }
+
+void MPMMPMMonolithicFSI::SolveFSISystem() {
+
+    this->LumpedLagrangeMultiplier();
+
+    this->BuildActiveDOFs();
+
+    this->fluid_.MakeNSStabCoeff(this->fluid_.nvel);
+
+    std::vector<std::array<double, 6>> stress_k = this->solid_.InitializeNRStress();
+
+    std::vector<double> nvel_f(nodec * 3), nvel_s(nodec * 3);
+    std::vector<double> naccel_f(nodec * 3), naccel_s(nodec * 3);
+    std::array<double, 4> initial_norm{};
+
+    VectorAssign(nodec * 3, this->fluid_.ndispl);
+    VectorAssign(nodec * 3, this->solid_.ndispl);
+    VectorAssign(nodec * 3, this->nlambda);
+    VectorAssign(nodec, this->fluid_.npres);
+
+    int solver_it = 0;
+    for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
+        VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
+        VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
+
+        this->fluid_.BCNRSet();
+        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
+
+        this->solid_.BCNRSet();
+        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
+
+        this->AssembleFluidSystem(nvel_f, naccel_f);
+        this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
+        this->AssembleInterfaceSystem(nvel_f, nvel_s);
+
+        if (this->CheckNRConvergence(initial_norm, NR_it, solver_it)) { break; }
+
+        solver_it = this->SolveSystem(NR_it);
+
+        this->UpdateNRIncrement();
+    }
+
+    return;
+}
+
+void MPMMPMMonolithicFSI::UpdateNRIncrement() {
+
+    for (int n = 0; n < nodec * 3; n++) {
+        this->fluid_.ndispl[n] += this->fsi_sys.x_lhs[n];
+        this->solid_.ndispl[n] += this->fsi_sys.x_lhs[n + nodec * 4];
+        this->nlambda[n] += this->fsi_sys.x_lhs[n + nodec * 7];
+    }
+
+    for (int n = 0; n < nodec; n++) { this->fluid_.npres[n] += this->fsi_sys.x_lhs[n + npc]; }
+
+    return;
+}
+
+std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
+
+    this->BCResidualSet(this->fsi_sys.b_rhs);
+
+    // stats[0]: fluid momentum residual
+    // stats[1]: fluid continuity residual
+    // stats[2]: solid momentum residual
+    // stats[3]: endpoint velocity difference
+    // stats[4..7]: corresponding active-component counts.
+    std::array<double, 8> stats{};
+
+    for (int n : this->fsi_sys.owned_natural_ids) {
+        for (int d = 0; d < this->fsi_sys.ndof; d++) {
+            const int index = n + d * nodec;
+            if (this->fixed_dof[index]) continue;
+
+            int field;
+            if (d < 3) { // Fluid momentum
+                field = 0;
+            } else if (d == 3) { // Fluid continuity
+                field = 1;
+            } else if (d < 7) { // Solid momentum
+                field = 2;
+            } else { // Interface velocity
+                field = 3;
+            }
+
+            double residual = this->fsi_sys.b_rhs[index];
+            if (field == 3) { residual /= this->nlm_lump[n]; }
+            stats[field] += residual * residual;
+            stats[field + 4] += 1.0;
+        }
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, stats.data(), 8, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    std::array<double, 4> norms;
+    for (int field = 0; field < 4; field++) { norms[field] = std::sqrt(stats[field] / std::max(1.0, stats[field + 4])); }
+
+    return norms;
+}
+
+bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
+
+    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-13, 1.0e-7, 1.0e-8};
+    const std::array<double, 4> stats = this->ComputeNRResidualNorms();
+
+    // Fields 0..2: max(absolute_tol, 1e-5 * initial nonlinear residual RMS).
+    // Field 3: endpoint velocity RMS <= 1e-10 m/s, without interface weights.
+    bool converged = true;
+    for (int field = 0; field < 4; field++) {
+        if (NR_it == 0 && field < 3) { initial_norm[field] = stats[field]; }
+        const double tolerance = field == 3 ? absolute_tol[field] : std::max(absolute_tol[field], 1.0e-5 * initial_norm[field]);
+        converged = converged && stats[field] <= tolerance;
+    }
+
+    if (myrank == 0) {
+        const char *prefix = converged ? "Monolithic_converge: " : "Monolithic_NR: ";
+        std::cout << prefix << std::setw(15) << NR_it << std::setw(15) << solver_it << std::scientific << std::setw(15)
+                  << stats[0] << std::setw(15) << stats[1] << std::setw(15) << stats[2] << std::setw(15) << stats[3] << "\n";
+    }
+
+    if (converged) { return true; }
+
+    if (NR_it == this->max_NR_it) {
+        if (myrank == 0) { std::cout << "Monolithic Newton did not converge" << "\n"; }
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    return false;
+}

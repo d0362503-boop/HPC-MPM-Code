@@ -1,8 +1,9 @@
-#include "../../dataset.h"
-#include "../../material_point.h"
-#include "../../mesh.h"
-#include "../../mpi_data.h"
-#include "stabilized_mpm.h"
+#include "module/DLB/mpm_dlb.h"
+#include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 #include <array>
 #include <fstream>
 #include <iomanip>
@@ -12,6 +13,7 @@
 using namespace stabilizedmpm;
 
 void StabilizedMPM::InitializePointData() {
+
     VectorAssign(this->num, this->id);
     VectorAssign(this->num, this->matid);
     VectorAssign(this->num, this->mass);
@@ -34,15 +36,40 @@ void StabilizedMPM::InitializePointData() {
     return;
 }
 
-void StabilizedMPM::Moveparticle() {
+void StabilizedMPM::RebuildBC() {
 
-    this->DetermineParticleRank();
+    this->ubc.RebuildLocalControlPointBC();
+    this->vbc.RebuildLocalControlPointBC();
+    this->wbc.RebuildLocalControlPointBC();
+    this->pbc.RebuildLocalControlPointBC();
+    this->uinfbc.RebuildLocalElementBC();
+    this->vinfbc.RebuildLocalElementBC();
+    this->winfbc.RebuildLocalElementBC();
+
+    this->InitializeInflowBC();
+    this->infbc_isfilled = false;
+
+    return;
+}
+
+void StabilizedMPM::MoveParticle() {
+
+    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
 
     this->InflowParticles();
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp + this->ifp.num == 0) return;
 
     this->num += this->par_comm_.nrps + this->ifp.num - this->par_comm_.nrmp - this->par_comm_.nmps;
+
+    this->MigrateParticleData();
+
+    this->ifp.num = 0;
+
+    return;
+}
+
+void StabilizedMPM::MigrateParticleData() {
 
     // ---- Scalar part ----
     this->par_comm_.PointVarComm(this->num, this->ifp.num, this->id, this->ifp.id);       // ---- Point Global ID ----

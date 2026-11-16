@@ -2,47 +2,23 @@
 # Data partition tools
 # -----------------------------------------------------------------------------
 
-set(g_selected_divide_case_count 0)
-if(USE_DIVIDE_FLUID)
-    math(EXPR g_selected_divide_case_count "${g_selected_divide_case_count} + 1")
-endif()
-if(USE_DIVIDE_SOLID)
-    math(EXPR g_selected_divide_case_count "${g_selected_divide_case_count} + 1")
-endif()
-if(USE_DIVIDE_FSI)
-    math(EXPR g_selected_divide_case_count "${g_selected_divide_case_count} + 1")
-endif()
-
-if(NOT g_selected_divide_case_count EQUAL 1)
-    message(FATAL_ERROR
-        "Exactly one divide case must be enabled. "
-        "Set exactly one of USE_DIVIDE_FLUID, USE_DIVIDE_SOLID, USE_DIVIDE_FSI to ON.")
-endif()
+# MPMTools.cmake is already included by data/generate, but include it here as
+# well so this directory can be built independently.
+include(${CMAKE_SOURCE_DIR}/cmake/MPMTools.cmake)
 
 add_library(mpm_divide_common OBJECT
     data_partitioner.cpp
 )
 
-target_link_libraries(mpm_divide_common PUBLIC mpm_modules)
+# mpm_divide_common reuses module utilities and inherits the module's public
+# interface. The compatibility layer is linked explicitly so the dependency is
+# visible even if the relationship to mpm_modules changes later.
+target_link_libraries(mpm_divide_common
+    PUBLIC mpm_modules mpm_cxx_compat
+)
 
-if(NOT USE_DIVIDE_FLUID)
-    file(REMOVE_RECURSE ${CMAKE_BINARY_DIR}/data/divide/fluid)
-endif()
-if(NOT USE_DIVIDE_SOLID)
-    file(REMOVE_RECURSE ${CMAKE_BINARY_DIR}/data/divide/solid)
-endif()
-if(NOT USE_DIVIDE_FSI)
-    file(REMOVE_RECURSE ${CMAKE_BINARY_DIR}/data/divide/fsi)
-endif()
-
-if(USE_DIVIDE_FLUID)
-    add_subdirectory(divide_fluid fluid)
-endif()
-
-if(USE_DIVIDE_SOLID)
-    add_subdirectory(divide_solid solid)
-endif()
-
-if(USE_DIVIDE_FSI)
-    add_subdirectory(divide_fsi fsi)
-endif()
+# Keep all candidate subdirectories visible here.
+# Uncomment exactly the cases you want to build.
+add_subdirectory(divide_fluid fluid)
+add_subdirectory(divide_solid solid)
+add_subdirectory(divide_fsi fsi)

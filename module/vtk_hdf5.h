@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -67,8 +68,16 @@ class VTKHDFWriter {
 
     VTKHDFWriter() = default;
 
+    /**
+     * @brief Construct and open a VTK HDF5 file.
+     * @param filename Output file path.
+     * @param comm_arg MPI communicator for collective writes.
+     */
     explicit VTKHDFWriter(const std::string& filename, MPI_Comm comm_arg = MPI_COMM_WORLD) { Open(filename, comm_arg); }
 
+    /**
+     * @brief Close any open HDF5 handles on destruction.
+     */
     ~VTKHDFWriter() { Close(); }
 
     // Disable copy; allow move.
@@ -95,6 +104,12 @@ class VTKHDFWriter {
         return *this;
     }
 
+    /**
+     * @brief Create a new VTK HDF5 file with MPI-IO access if available.
+     * @param filename Output file path.
+     * @param comm_arg MPI communicator for collective writes.
+     * @throws std::runtime_error if HDF5 file creation fails.
+     */
     void Open(const std::string& filename, MPI_Comm comm_arg = MPI_COMM_WORLD) {
         comm = comm_arg;
 
@@ -128,6 +143,9 @@ class VTKHDFWriter {
         if (file < 0) throw std::runtime_error("H5Fcreate failed for " + filename);
     }
 
+    /**
+     * @brief Close all open HDF5 groups and the file handle.
+     */
     void Close() {
         if (celldata_group >= 0) {
             H5Gclose(celldata_group);
@@ -150,6 +168,13 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // Global offset helper
     // ------------------------------------------------------------------------
+    /**
+     * @brief Compute the global offset and total count for a local dataset slice.
+     * @param local_count   Local number of entries.
+     * @param global_offset Output global offset of this rank's slice.
+     * @param total_count   Output total number of entries across all ranks.
+     * @param comm          MPI communicator.
+     */
     static void ComputeGlobalInfo(hsize_t local_count, hsize_t& global_offset, hsize_t& total_count,
                                   MPI_Comm comm = MPI_COMM_WORLD) {
         int mpi_initialized = 0;
@@ -168,6 +193,13 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // Attribute helpers
     // ------------------------------------------------------------------------
+    /**
+     * @brief Write a numeric HDF5 attribute to a group or dataset.
+     * @param loc  HDF5 location identifier.
+     * @param name Attribute name.
+     * @param n    Number of values.
+     * @param data Pointer to attribute values.
+     */
     template <typename T>
     static void WriteAttribute(hid_t loc, const char* name, int n, const T* data) {
         hsize_t dim = static_cast<hsize_t>(n);
@@ -180,6 +212,12 @@ class VTKHDFWriter {
         H5Sclose(attr_space);
     }
 
+    /**
+     * @brief Write a string HDF5 attribute to a group or dataset.
+     * @param loc  HDF5 location identifier.
+     * @param name Attribute name.
+     * @param str  Null-terminated string value.
+     */
     static void WriteAttributeString(hid_t loc, const char* name, const char* str) {
         hid_t str_type = H5Tcopy(H5T_C_S1);
         H5Tset_size(str_type, strlen(str));
@@ -195,13 +233,86 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // Dataset creation / collective write helpers
     // ------------------------------------------------------------------------
-    static hid_t CreateDataset1D(hid_t loc, const char* name, hsize_t total_size, hid_t h5type, hid_t& out_filespace) {
+    /**
+     * @brief Check whether HDF5 deflate (gzip) compression is available.
+     * @return True if deflate is available.
+     */
+    static bool DeflateAvailable() {
+        static bool checked = false;
+        static bool available = false;
+        if (!checked) {
+            available = (H5Zfilter_avail(H5Z_FILTER_DEFLATE) > 0);
+            checked = true;
+        }
+        return available;
+    }
+
+    /**
+     * @brief Create a 1D dataset creation property list with optional gzip compression.
+     * @param total_size      Total dataset size.
+     * @param preferred_chunk Preferred chunk size.
+     * @return HDF5 property list identifier.
+     */
+    static hid_t CreateCompressedPlist1D(hsize_t total_size, hsize_t preferred_chunk = 65536) {
+        hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+        if (total_size > 0 && DeflateAvailable()) {
+            hsize_t chunk_size = total_size < preferred_chunk ? total_size : preferred_chunk;
+            if (chunk_size < 1) chunk_size = 1;
+            H5Pset_chunk(dcpl, 1, &chunk_size);
+            H5Pset_deflate(dcpl, 6);
+        }
+        return dcpl;
+    }
+
+    /**
+     * @brief Create a 2D dataset creation property list with optional gzip compression.
+     * @param dim0             First dimension size.
+     * @param dim1             Second dimension size (number of components).
+     * @param preferred_chunk  Preferred chunk size.
+     * @return HDF5 property list identifier.
+     */
+    static hid_t CreateCompressedPlist2D(hsize_t dim0, int dim1, hsize_t preferred_chunk = 65536) {
+        hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+        if (dim0 > 0 && dim1 > 0 && DeflateAvailable()) {
+            hsize_t ncomp = static_cast<hsize_t>(dim1);
+            hsize_t chunk0 = preferred_chunk / ncomp;
+            if (chunk0 < 1) chunk0 = 1;
+            if (chunk0 > dim0) chunk0 = dim0;
+            hsize_t chunks[2] = {chunk0, ncomp};
+            H5Pset_chunk(dcpl, 2, chunks);
+            H5Pset_deflate(dcpl, 6);
+        }
+        return dcpl;
+    }
+
+    /**
+     * @brief Create a 1D HDF5 dataset.
+     * @param loc          HDF5 location identifier.
+     * @param name         Dataset name.
+     * @param total_size   Total dataset size.
+     * @param h5type       HDF5 datatype.
+     * @param out_filespace Output filespace identifier.
+     * @param dcpl         Dataset creation property list.
+     * @return Dataset identifier.
+     * @throws std::runtime_error if dataset creation fails.
+     */
+    static hid_t CreateDataset1D(hid_t loc, const char* name, hsize_t total_size, hid_t h5type, hid_t& out_filespace,
+                                 hid_t dcpl = H5P_DEFAULT) {
         out_filespace = H5Screate_simple(1, &total_size, nullptr);
-        hid_t dset = H5Dcreate(loc, name, h5type, out_filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dset = H5Dcreate(loc, name, h5type, out_filespace, H5P_DEFAULT, dcpl, H5P_DEFAULT);
         if (dset < 0) throw std::runtime_error(std::string("H5Dcreate failed for ") + name);
         return dset;
     }
 
+    /**
+     * @brief Write a local slice of a 1D dataset using collective MPI-IO.
+     * @param dset          Dataset identifier.
+     * @param filespace     Filespace identifier.
+     * @param data          Pointer to local data.
+     * @param local_count   Local number of entries.
+     * @param global_offset Global offset of this rank's slice.
+     * @param h5type        HDF5 datatype.
+     */
     void WriteArrayCollective(hid_t dset, hid_t filespace, const void* data, hsize_t local_count,
                               hsize_t global_offset, hid_t h5type) {
         hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
@@ -225,20 +336,47 @@ class VTKHDFWriter {
         H5Pclose(dxpl);
     }
 
+    /**
+     * @brief Create a 1D scalar dataset and write a local slice collectively.
+     * @param loc           HDF5 location identifier.
+     * @param name          Dataset name.
+     * @param total_size    Total dataset size.
+     * @param filetype      HDF5 file datatype.
+     * @param memtype       HDF5 memory datatype.
+     * @param data          Pointer to local data.
+     * @param local_count   Local number of entries.
+     * @param global_offset Global offset of this rank's slice.
+     */
     void CreateAndWriteScalar(hid_t loc, const char* name, hsize_t total_size, hid_t filetype, hid_t memtype,
                               const void* data, hsize_t local_count, hsize_t global_offset) {
         hid_t filespace;
-        hid_t dset = CreateDataset1D(loc, name, total_size, filetype, filespace);
+        hid_t dcpl = CreateCompressedPlist1D(total_size);
+        hid_t dset = CreateDataset1D(loc, name, total_size, filetype, filespace, dcpl);
+        H5Pclose(dcpl);
         WriteArrayCollective(dset, filespace, data, local_count, global_offset, memtype);
         H5Sclose(filespace);
         H5Dclose(dset);
     }
 
-    void CreateAndWriteVector(hid_t loc, const char* name, hsize_t npts, int ncomp, hid_t filetype, hid_t memtype,
-                              const void* data, hsize_t local_npts, hsize_t global_offset) {
-        hsize_t dims[2] = {npts, static_cast<hsize_t>(ncomp)};
+    /**
+     * @brief Create a 2D vector dataset and write a local slice collectively.
+     * @param loc           HDF5 location identifier.
+     * @param name          Dataset name.
+     * @param npts          Total number of points.
+     * @param data          Pointer to local array data.
+     * @param local_npts    Local number of points.
+     * @param global_offset Global offset of this rank's slice.
+     */
+    template <typename T, std::size_t N>
+    void CreateAndWriteVector(hid_t loc, const char* name, hsize_t npts, const std::array<T, N>* data,
+                              hsize_t local_npts, hsize_t global_offset) {
+        constexpr hsize_t kNumComponents = static_cast<hsize_t>(N);
+        hsize_t dims[2] = {npts, kNumComponents};
         hid_t filespace = H5Screate_simple(2, dims, nullptr);
-        hid_t dset = H5Dcreate(loc, name, filetype, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t dcpl = CreateCompressedPlist2D(npts, static_cast<int>(N));
+        hid_t dset =
+            H5Dcreate(loc, name, HDF5TypeMap<T>::fileType(), filespace, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+        H5Pclose(dcpl);
         if (dset < 0) throw std::runtime_error(std::string("H5Dcreate failed for ") + name);
 
         hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
@@ -248,18 +386,18 @@ class VTKHDFWriter {
 
         if (local_npts > 0) {
             hsize_t start[2] = {global_offset, 0};
-            hsize_t count[2] = {local_npts, static_cast<hsize_t>(ncomp)};
+            hsize_t count[2] = {local_npts, kNumComponents};
             H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, nullptr, count, nullptr);
 
-            hsize_t mem_dims[2] = {local_npts, static_cast<hsize_t>(ncomp)};
+            hsize_t mem_dims[2] = {local_npts, kNumComponents};
             hid_t memspace = H5Screate_simple(2, mem_dims, nullptr);
-            H5Dwrite(dset, memtype, memspace, filespace, dxpl, data);
+            H5Dwrite(dset, HDF5TypeMap<T>::memType(), memspace, filespace, dxpl, data);
             H5Sclose(memspace);
         } else {
             H5Sselect_none(filespace);
             hsize_t zero = 0;
             hid_t memspace = H5Screate_simple(1, &zero, nullptr);
-            H5Dwrite(dset, memtype, memspace, filespace, dxpl, nullptr);
+            H5Dwrite(dset, HDF5TypeMap<T>::memType(), memspace, filespace, dxpl, nullptr);
             H5Sclose(memspace);
         }
 
@@ -271,6 +409,12 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // UnstructuredGrid helpers
     // ------------------------------------------------------------------------
+    /**
+     * @brief Create the top-level VTKHDF group and write UnstructuredGrid metadata.
+     * @param total_npts         Total number of points.
+     * @param total_ncells       Total number of cells.
+     * @param total_connectivity Total number of connectivity entries.
+     */
     void CreateUnstructuredGridGroup(hsize_t total_npts, hsize_t total_ncells, hsize_t total_connectivity) {
         vtkhdf_group = H5Gcreate(file, "VTKHDF", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if (vtkhdf_group < 0) throw std::runtime_error("H5Gcreate VTKHDF failed");
@@ -293,40 +437,87 @@ class VTKHDFWriter {
         }
     }
 
+    /**
+     * @brief Write the simulation time as a VTKHDF group attribute.
+     * @param time Simulation time.
+     */
     void SetTime(double time) { WriteAttribute(vtkhdf_group, "Time", 1, &time); }
 
+    /**
+     * @brief Create the PointData group under the VTKHDF group.
+     */
     void CreatePointDataGroup() {
         pointdata_group = H5Gcreate(vtkhdf_group, "PointData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     }
 
+    /**
+     * @brief Create the CellData group under the VTKHDF group.
+     */
     void CreateCellDataGroup() {
         celldata_group = H5Gcreate(vtkhdf_group, "CellData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     }
 
+    /**
+     * @brief Write point coordinates to the VTKHDF file.
+     * @param total_npts    Total number of points.
+     * @param local_npts    Local number of points.
+     * @param global_offset Global offset of this rank's points.
+     * @param points        Local point coordinates.
+     */
     void WritePoints(hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
                      const std::vector<std::array<double, 3>>& points) {
-        CreateAndWriteVector(vtkhdf_group, "Points", total_npts, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, points.data(),
-                             local_npts, global_offset);
+        this->CreateAndWriteVector(vtkhdf_group, "Points", total_npts, points.data(), local_npts, global_offset);
     }
 
+    /**
+     * @brief Write cell connectivity to the VTKHDF file.
+     * @param total_size    Total number of connectivity entries.
+     * @param local_count   Local number of connectivity entries.
+     * @param global_offset Global offset of this rank's connectivity.
+     * @param connectivity  Local connectivity array.
+     */
     void WriteConnectivity(hsize_t total_size, hsize_t local_count, hsize_t global_offset,
                            const std::vector<long long>& connectivity) {
         CreateAndWriteScalar(vtkhdf_group, "Connectivity", total_size, H5T_STD_I64LE, H5T_NATIVE_LLONG,
                              connectivity.data(), local_count, global_offset);
     }
 
+    /**
+     * @brief Write cell offsets to the VTKHDF file.
+     * @param total_size    Total number of offset entries.
+     * @param local_count   Local number of offset entries.
+     * @param global_offset Global offset of this rank's offsets.
+     * @param offsets       Local offsets array.
+     */
     void WriteOffsets(hsize_t total_size, hsize_t local_count, hsize_t global_offset,
                       const std::vector<long long>& offsets) {
         CreateAndWriteScalar(vtkhdf_group, "Offsets", total_size, H5T_STD_I64LE, H5T_NATIVE_LLONG, offsets.data(),
                              local_count, global_offset);
     }
 
+    /**
+     * @brief Write cell types to the VTKHDF file.
+     * @param total_size    Total number of cell type entries.
+     * @param local_count   Local number of cell type entries.
+     * @param global_offset Global offset of this rank's types.
+     * @param types         Local cell types array.
+     */
     void WriteTypes(hsize_t total_size, hsize_t local_count, hsize_t global_offset,
                     const std::vector<unsigned char>& types) {
         CreateAndWriteScalar(vtkhdf_group, "Types", total_size, H5T_STD_U8LE, H5T_NATIVE_UCHAR, types.data(),
                              local_count, global_offset);
     }
 
+    /**
+     * @brief Write the full UnstructuredGrid topology (points, connectivity, offsets, types).
+     * @param total_npts    Total number of points.
+     * @param local_npts    Local number of points.
+     * @param global_offset Global offset of this rank's points.
+     * @param points        Local point coordinates.
+     * @param connectivity  Local cell connectivity.
+     * @param offsets       Local cell offsets.
+     * @param types         Local cell types.
+     */
     void WriteUnstructuredGridTopology(hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
                                        const std::vector<std::array<double, 3>>& points,
                                        const std::vector<long long>& connectivity,
@@ -356,6 +547,14 @@ class VTKHDFWriter {
     // ------------------------------------------------------------------------
     // Point / cell data helpers
     // ------------------------------------------------------------------------
+    /**
+     * @brief Write a scalar point-data field to the VTKHDF file.
+     * @param name          Field name.
+     * @param total_npts    Total number of points.
+     * @param local_npts    Local number of points.
+     * @param global_offset Global offset of this rank's points.
+     * @param field         Local scalar values.
+     */
     template <typename T>
     void WritePointScalar(const char* name, hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
                           const std::vector<T>& field) {
@@ -363,22 +562,47 @@ class VTKHDFWriter {
                              field.data(), local_npts, global_offset);
     }
 
+    /**
+     * @brief Write a vector point-data field to the VTKHDF file.
+     * @param name          Field name.
+     * @param total_npts    Total number of points.
+     * @param local_npts    Local number of points.
+     * @param global_offset Global offset of this rank's points.
+     * @param field         Local vector values.
+     */
+    template <typename T, std::size_t N>
     void WritePointVector(const char* name, hsize_t total_npts, hsize_t local_npts, hsize_t global_offset,
-                          const std::vector<std::array<double, 3>>& field) {
-        CreateAndWriteVector(pointdata_group, name, total_npts, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_npts, global_offset);
+                          const std::vector<std::array<T, N>>& field) {
+        this->CreateAndWriteVector(pointdata_group, name, total_npts, field.data(), local_npts, global_offset);
     }
 
+    /**
+     * @brief Write a scalar cell-data field to the VTKHDF file.
+     * @param name          Field name.
+     * @param total_ncells  Total number of cells.
+     * @param local_ncells  Local number of cells.
+     * @param global_offset Global offset of this rank's cells.
+     * @param field         Local scalar values.
+     */
+    template <typename T>
     void WriteCellScalar(const char* name, hsize_t total_ncells, hsize_t local_ncells, hsize_t global_offset,
-                         const std::vector<double>& field) {
-        CreateAndWriteScalar(celldata_group, name, total_ncells, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_ncells, global_offset);
+                         const std::vector<T>& field) {
+        CreateAndWriteScalar(celldata_group, name, total_ncells, HDF5TypeMap<T>::fileType(), HDF5TypeMap<T>::memType(),
+                             field.data(), local_ncells, global_offset);
     }
 
+    /**
+     * @brief Write a vector cell-data field to the VTKHDF file.
+     * @param name          Field name.
+     * @param total_ncells  Total number of cells.
+     * @param local_ncells  Local number of cells.
+     * @param global_offset Global offset of this rank's cells.
+     * @param field         Local vector values.
+     */
+    template <typename T, std::size_t N>
     void WriteCellVector(const char* name, hsize_t total_ncells, hsize_t local_ncells, hsize_t global_offset,
-                         const std::vector<std::array<double, 3>>& field) {
-        CreateAndWriteVector(celldata_group, name, total_ncells, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, field.data(),
-                             local_ncells, global_offset);
+                         const std::vector<std::array<T, N>>& field) {
+        this->CreateAndWriteVector(celldata_group, name, total_ncells, field.data(), local_ncells, global_offset);
     }
 };
 
@@ -391,6 +615,12 @@ struct ParticleTopologyInfo {
     hsize_t global_offset = 0;
 };
 
+/**
+ * @brief Write a particle dataset as VTK_VERTEX cells.
+ * @param writer VTK HDF5 writer.
+ * @param points Local particle coordinates.
+ * @return Topology info containing global counts and offsets.
+ */
 inline ParticleTopologyInfo WriteParticleTopology(VTKHDFWriter& writer,
                                                   const std::vector<std::array<double, 3>>& points) {
     ParticleTopologyInfo info;
@@ -442,9 +672,18 @@ struct HexMeshTopologyInfo {
     hsize_t conn_global_offset = 0;
 };
 
+/**
+ * @brief Write a hexahedral mesh dataset as VTK_HEXAHEDRON cells.
+ * @param writer          VTK HDF5 writer.
+ * @param points          Local node coordinates.
+ * @param conn8           Local 8-node hexahedral connectivity.
+ * @param point_id_offset Offset added to connectivity node IDs.
+ * @return Topology info containing global counts and offsets.
+ */
 inline HexMeshTopologyInfo WriteHexMeshTopology(VTKHDFWriter& writer,
                                                 const std::vector<std::array<double, 3>>& points,
-                                                const std::vector<std::array<int, 8>>& conn8) {
+                                                const std::vector<std::array<int, 8>>& conn8,
+                                                hsize_t point_id_offset = 0) {
     HexMeshTopologyInfo info;
     info.local_npts = static_cast<hsize_t>(points.size());
     info.local_ncells = static_cast<hsize_t>(conn8.size());
@@ -461,9 +700,10 @@ inline HexMeshTopologyInfo WriteHexMeshTopology(VTKHDFWriter& writer,
     writer.WritePoints(info.total_npts, info.local_npts, info.point_global_offset, points);
 
     std::vector<long long> connectivity(info.local_conn_count);
+    long long point_offset_ll = static_cast<long long>(point_id_offset);
     for (hsize_t m = 0; m < info.local_ncells; ++m) {
         for (int n = 0; n < 8; ++n) {
-            connectivity[m * 8 + n] = conn8[m][n];
+            connectivity[m * 8 + n] = static_cast<long long>(conn8[m][n]) + point_offset_ll;
         }
     }
     writer.WriteConnectivity(info.total_conn_count, info.local_conn_count, info.conn_global_offset, connectivity);

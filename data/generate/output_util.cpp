@@ -1,16 +1,16 @@
-#include "output_util.h"
+#include "data/generate/output_util.h"
 
 #include <iomanip>
 #include <string>
 
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/mesh.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
 
 #ifdef HAVE_HDF5
 #include <mpi.h>
 
-#include "../../module/vtk_hdf5.h"
+#include "module/vtk_hdf5.h"
 #endif
 
 void WriteGlobalMeshHeader(std::ofstream &outfile) {
@@ -37,13 +37,13 @@ void WriteGlobalMeshHeader(std::ofstream &outfile) {
 }
 
 #ifdef HAVE_HDF5
-void WriteVtkHdf5Mesh(const std::string &filename) {
+void WriteVTKHDFMesh(const std::string &filename) {
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
     vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
     writer.SetTime(0.0e0);
 }
 
-void WriteVtkHdf5Points(const std::string &filename, const MaterialPoint &point) {
+void WriteVTKHDFPoints(const std::string &filename, const MaterialPoint &point) {
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
     auto info = vtkhdf::WriteParticleTopology(writer, point.coord);
     writer.SetTime(0.0e0);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dataset.h"
+#include "module/dataset.h"
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
@@ -22,6 +22,10 @@ template <typename T> struct MPIDatatypeCheck {
 
 template <> struct MPIDatatypeCheck<int> {
     static MPI_Datatype GetType() { return MPI_INT; }
+};
+
+template <> struct MPIDatatypeCheck<unsigned long long> {
+    static MPI_Datatype GetType() { return MPI_UNSIGNED_LONG_LONG; }
 };
 
 template <> struct MPIDatatypeCheck<double> {
@@ -56,12 +60,16 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) {
         int io = ii;
         ii = io + nsbc[i];
         int npro = naid[i];
-        MPI_Isend(&sdn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-        MPI_Irecv(&rvn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
+        if (nsbc[i] != 0) {
+            MPI_Isend(&sdn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
+            MPI_Irecv(&rvn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
+        }
     }
     for (int i = 0; i < isb; i++) {
-        MPI_Wait(&irqs[i], &status);
-        MPI_Wait(&irqr[i], &status);
+        if (nsbc[i] != 0) {
+            MPI_Wait(&irqs[i], &status);
+            MPI_Wait(&irqr[i], &status);
+        }
     }
 
     ii = 0;
@@ -110,12 +118,16 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<in
         int io = ii;
         ii = io + nsbc[i];
         int npro = naid[i];
-        MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-        MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
+        if (nsbc[i] != 0) {
+            MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
+            MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
+        }
     }
     for (int i = 0; i < isb; i++) {
-        MPI_Wait(&irqs[i], &status);
-        MPI_Wait(&irqr[i], &status);
+        if (nsbc[i] != 0) {
+            MPI_Wait(&irqs[i], &status);
+            MPI_Wait(&irqr[i], &status);
+        }
     }
 
     ii = 0;
@@ -131,10 +143,15 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<in
     return;
 }
 
+/**
+ * @brief Exchange one visualization-node field component on overlap nodes and add received values back into `dat`.
+ * @param dat Nodal data array.
+ * @param nn  Component offset inside `dat`.
+ */
 template <typename T> void NodeVarCommLowerOrder(std::vector<T> &dat, int nn) {
 
-    std::vector<T> sdn(isubc);
-    std::vector<T> rvn(isubc);
+    std::vector<T> sdn(isubl);
+    std::vector<T> rvn(isubl);
     std::vector<MPI_Request> irqs(isb);
     std::vector<MPI_Request> irqr(isb);
     MPI_Status status;
@@ -154,12 +171,16 @@ template <typename T> void NodeVarCommLowerOrder(std::vector<T> &dat, int nn) {
         int io = ii;
         ii = io + nsbl[i];
         int npro = naid[i];
-        MPI_Isend(&sdn[io], nsbl[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-        MPI_Irecv(&rvn[io], nsbl[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
+        if (nsbl[i] != 0) {
+            MPI_Isend(&sdn[io], nsbl[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
+            MPI_Irecv(&rvn[io], nsbl[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
+        }
     }
     for (int i = 0; i < isb; i++) {
-        MPI_Wait(&irqs[i], &status);
-        MPI_Wait(&irqr[i], &status);
+        if (nsbl[i] != 0) {
+            MPI_Wait(&irqs[i], &status);
+            MPI_Wait(&irqr[i], &status);
+        }
     }
     // MPI_Waitall(isb, irqs.data(), statuses.data());
     // MPI_Waitall(isb, irqr.data(), statuses.data());
@@ -185,34 +206,80 @@ class ParticleCommunication {
     int nmps; // Material Points to Send: total particles sent to neighbor ranks (sum of nsp)
     int nrps; // Material Points to Receive: total particles received from neighbor ranks (sum of nrp)
     // -----------------------------------------------------------------------------
+    std::vector<int> comm_ranks; // current particle peers
     std::vector<int> nsp, nrp, ofp_id;
     std::vector<int> idmp, idnsp;
 
+    /**
+     * @brief Send/receive a scalar particle variable to/from neighbor ranks.
+     * @param bufs Send buffer packed by neighbor.
+     * @param bufr Receive buffer packed by neighbor.
+     * @param idm  Number of scalar values per particle.
+     */
     template <typename T> void PointVarSendrecv(std::vector<T> &bufs, std::vector<T> &bufr, const int idm) {
 
-        std::vector<MPI_Request> irqs(isb);
-        std::vector<MPI_Request> irqr(isb);
+        const int npeer = int(this->comm_ranks.size());
+        std::vector<MPI_Request> irqs(npeer);
+        std::vector<MPI_Request> irqr(npeer);
         MPI_Status status;
 
         int sicounts = 0;
         int sicountr = 0;
-        for (int i = 0; i < isb; i++) {
-            int ncomid = naid[i];
+        for (int i = 0; i < npeer; i++) {
+            int ncomid = this->comm_ranks[i];
             int icounts = this->nsp[i] * idm;
             int icountr = this->nrp[i] * idm;
             if (icounts != 0) {
-                MPI_Isend(&bufs[sicounts], icounts, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD,
+                MPI_Isend(&bufs[sicounts], icounts, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD, &irqs[i]);
+            }
+            if (icountr != 0) {
+                MPI_Irecv(&bufr[sicountr], icountr, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD, &irqr[i]);
+            }
+            sicounts += icounts;
+            sicountr += icountr;
+        }
+
+        for (int i = 0; i < npeer; i++) {
+            if (this->nsp[i] != 0) { MPI_Wait(&irqs[i], &status); }
+            if (this->nrp[i] != 0) { MPI_Wait(&irqr[i], &status); }
+        }
+
+        return;
+    }
+
+    /**
+     * @brief Send/receive an array-valued particle variable to/from neighbor ranks.
+     * @param bufs Send buffer packed by neighbor.
+     * @param bufr Receive buffer packed by neighbor.
+     * @param idm  Number of array values per particle.
+     */
+    template <typename T, std::size_t N>
+    void PointVarSendrecv(std::vector<std::array<T, N>> &bufs, std::vector<std::array<T, N>> &bufr, const int idm) {
+
+        const int npeer = int(this->comm_ranks.size());
+        std::vector<MPI_Request> irqs(npeer);
+        std::vector<MPI_Request> irqr(npeer);
+        MPI_Status status;
+
+        int sicounts = 0;
+        int sicountr = 0;
+        for (int i = 0; i < npeer; i++) {
+            int ncomid = this->comm_ranks[i];
+            int icounts = this->nsp[i] * idm;
+            int icountr = this->nrp[i] * idm;
+            if (icounts != 0) {
+                MPI_Isend(bufs.data() + sicounts, icounts * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1, MPI_COMM_WORLD,
                           &irqs[i]);
             }
             if (icountr != 0) {
-                MPI_Irecv(&bufr[sicountr], icountr, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD,
+                MPI_Irecv(bufr.data() + sicountr, icountr * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1, MPI_COMM_WORLD,
                           &irqr[i]);
             }
             sicounts += icounts;
             sicountr += icountr;
         }
 
-        for (int i = 0; i < isb; i++) {
+        for (int i = 0; i < npeer; i++) {
             if (this->nsp[i] != 0) { MPI_Wait(&irqs[i], &status); }
             if (this->nrp[i] != 0) { MPI_Wait(&irqr[i], &status); }
         }
@@ -220,46 +287,18 @@ class ParticleCommunication {
         return;
     }
 
-    template <typename T, std::size_t N>
-    void PointVarSendrecv(std::vector<std::array<T, N>> &bufs, std::vector<std::array<T, N>> &bufr, const int idm) {
-
-        std::vector<MPI_Request> irqs(isb);
-        std::vector<MPI_Request> irqr(isb);
-        MPI_Status status;
-
-        int sicounts = 0;
-        int sicountr = 0;
-        for (int i = 0; i < isb; i++) {
-            int ncomid = naid[i];
-            int icounts = this->nsp[i] * idm;
-            int icountr = this->nrp[i] * idm;
-            if (icounts != 0) {
-                MPI_Isend(bufs.data() + sicounts, icounts * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1,
-                          MPI_COMM_WORLD, &irqs[i]);
-            }
-            if (icountr != 0) {
-                MPI_Irecv(bufr.data() + sicountr, icountr * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1,
-                          MPI_COMM_WORLD, &irqr[i]);
-            }
-            sicounts += icounts;
-            sicountr += icountr;
-        }
-
-        for (int i = 0; i < isb; i++) {
-            if (this->nsp[i] != 0) { MPI_Wait(&irqs[i], &status); }
-            if (this->nrp[i] != 0) { MPI_Wait(&irqr[i], &status); }
-        }
-
-        return;
-    }
-
+    /**
+     * @brief Migrate a scalar particle variable across rank boundaries and rebuild the local vector.
+     * @param point_num  New local particle count after communication.
+     * @param point_var  Particle variable vector (resized and repopulated in-place).
+     */
     template <typename T> void PointVarComm(int point_num, std::vector<T> &point_var) {
 
         std::vector<T> bufs(this->nmps, T()), bufr(this->nrps, T());
         std::vector<T> tmp(this->nnmp, T());
 
         int sip = 0;
-        for (int i = 0; i < isb; i++) {
+        for (int i = 0; i < int(this->comm_ranks.size()); i++) {
             for (int ip = 0; ip < this->nsp[i]; ip++) {
                 int ipsip = ip + sip;
                 bufs[ipsip] = point_var[this->idmp[ipsip]];
@@ -280,6 +319,13 @@ class ParticleCommunication {
         return;
     }
 
+    /**
+     * @brief Migrate a scalar particle variable across rank boundaries and append inflow-particle values.
+     * @param point_num  New local particle count after communication.
+     * @param ifp_num    Number of inflow particles to append.
+     * @param point_var  Particle variable vector (resized and repopulated in-place).
+     * @param ifp_var    Inflow-particle values to append.
+     */
     template <typename T>
     void PointVarComm(int point_num, int ifp_num, std::vector<T> &point_var, const std::vector<T> &ifp_var) {
 
@@ -293,12 +339,17 @@ class ParticleCommunication {
         return;
     }
 
+    /**
+     * @brief Migrate an array-valued particle variable across rank boundaries and rebuild the local vector.
+     * @param point_num  New local particle count after communication.
+     * @param point_var  Particle variable vector (resized and repopulated in-place).
+     */
     template <typename T, std::size_t N> void PointVarComm(int point_num, std::vector<std::array<T, N>> &point_var) {
 
         std::vector<std::array<T, N>> bufs(this->nmps), bufr(this->nrps), tmp(this->nnmp);
 
         int sip = 0;
-        for (int i = 0; i < isb; i++) {
+        for (int i = 0; i < int(this->comm_ranks.size()); i++) {
             for (int ip = 0; ip < this->nsp[i]; ip++) {
                 int ipsip = ip + sip;
                 bufs[ipsip] = point_var[this->idmp[ipsip]];
@@ -319,6 +370,13 @@ class ParticleCommunication {
         return;
     }
 
+    /**
+     * @brief Migrate an array-valued particle variable across rank boundaries and append inflow-particle values.
+     * @param point_num  New local particle count after communication.
+     * @param ifp_num    Number of inflow particles to append.
+     * @param point_var  Particle variable vector (resized and repopulated in-place).
+     * @param ifp_var    Inflow-particle values to append.
+     */
     template <typename T, std::size_t N>
     void PointVarComm(int point_num, int ifp_num, std::vector<std::array<T, N>> &point_var,
                       const std::vector<std::array<T, N>> &ifp_var) {

@@ -1,15 +1,14 @@
-#include "mesh.h"
-#include "dataset.h"
-#include "material_point.h"
-#include "shape_function.h"
+#include "module/mesh.h"
+#include "module/dataset.h"
+#include "module/material_point.h"
+#include "module/shape_function.h"
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <vector>
 
-using namespace std;
-
-void GaussianDistribution(array<array<double, 3>, 6> &dec2p) {
+void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p) {
 
     dec2p = {};
 
@@ -53,6 +52,42 @@ void GaussianDistribution(array<array<double, 3>, 6> &dec2p) {
     return;
 }
 
+bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie_g) {
+
+    for (int d = 0; d < 3; d++) {
+        if (xq[d] < xyminw[d] || xq[d] > xymaxw[d]) { return false; }
+
+        double xi = (xq[d] - xyminw[d]) / dxy[d];
+        int ie = static_cast<int>(std::floor(xi));
+        ie_g[d] = std::clamp(ie, 0, xyelemw[d] - 1);
+    }
+
+    return true;
+}
+
+bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local) {
+
+    for (int d = 0; d < 3; d++) {
+        if (ie_g[d] < aelemmin[d] || ie_g[d] > aelemmax[d]) { return false; }
+    }
+
+    int iex_l = ie_g[0] - aelemmin[0];
+    int iey_l = ie_g[1] - aelemmin[1];
+    int iez_l = ie_g[2] - aelemmin[2];
+
+    m_local = iex_l + xyelem[0] * iey_l + xyelem[0] * xyelem[1] * iez_l;
+
+    return true;
+}
+
+bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local) {
+
+    std::array<int, 3> ie_g{};
+    if (!LocateGlobalElement(xq, ie_g)) { return false; }
+
+    return GlobalElementToLocal(ie_g, m_local);
+}
+
 void BuildMesh() {
 
     double xmin = xymin[0];
@@ -69,7 +104,7 @@ void BuildMesh() {
     int ynode = xynode[1];
     int znode = xynode[2];
 
-    xyn.assign(node, array<double, 3>{});
+    VectorAssign(node, xyn);
     for (int k = 0; k < znode; k++) {
         for (int j = 0; j < ynode; j++) {
             for (int i = 0; i < xnode; i++) {
@@ -81,7 +116,7 @@ void BuildMesh() {
         }
     }
 
-    nc.assign(nelem, array<int, 8>{});
+    VectorAssign(nelem, nc);
     for (int k = 0; k < zelem; k++) {
         for (int j = 0; j < yelem; j++) {
             for (int i = 0; i < xelem; i++) {
@@ -107,26 +142,21 @@ void BuildControlPoint() {
     int nxc = xynodec[0];
     int nyc = xynodec[1];
     int nzc = xynodec[2];
-    int nex = xyelem[0];
-    int ney = xyelem[1];
-    int nez = xyelem[2];
 
     int nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);
-    ncc.assign(nelem, vector<int>(nenode));
+    ncc.assign(nelem, std::vector<int>(nenode));
     for (int m = 0; m < nelem; m++) {
 
-        int ize = m / (nex * ney);
-        int iye = (m - ize * (nex * ney)) / nex;
-        int ixe = m - ize * (nex * ney) - iye * nex;
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         int ixyn[3];
         int id = 0;
         for (int k = 0; k <= idimc[2]; k++) {
-            ixyn[2] = ize + k;
+            ixyn[2] = ijk[2] + k;
             for (int j = 0; j <= idimc[1]; j++) {
-                ixyn[1] = iye + j;
+                ixyn[1] = ijk[1] + j;
                 for (int i = 0; i <= idimc[0]; i++) {
-                    ixyn[0] = ixe + i;
+                    ixyn[0] = ijk[0] + i;
                     ncc[m][id] = ixyn[0] + nxc * ixyn[1] + nxc * nyc * ixyn[2];
                     id++;
                 }
@@ -134,7 +164,7 @@ void BuildControlPoint() {
         }
     }
 
-    xyc.assign(nodec, array<double, 3>{});
+    xyc.assign(nodec, std::array<double, 3>{});
     for (int k = aelemmin[2]; k <= aelemmax[2] + idimc[2]; k++) {
         for (int j = aelemmin[1]; j <= aelemmax[1] + idimc[1]; j++) {
             for (int i = aelemmin[0]; i <= aelemmax[0] + idimc[0]; i++) {
@@ -157,12 +187,12 @@ void BuildControlPoint() {
     return;
 }
 
-void MakNodalVol() {
+void ComputeNodalVol() {
+
     std::array<std::array<double, 3>, 6> dec2p;
     GaussianDistribution(dec2p);
 
     double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
-    int nex = xyelem[0], ney = xyelem[1], nez = xyelem[2];
 
     int nenode;
     std::vector<int> ncm;
@@ -171,21 +201,19 @@ void MakNodalVol() {
 
     VectorAssign(nodec, nvol);
     for (int m = 0; m < nelem; m++) {
-        int ize = m / (nex * ney);
-        int iye = (m - ize * (nex * ney)) / nex;
-        int ixe = m - ize * (nex * ney) - iye * nex;
+        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
 
         std::array<double, 3> xye, xyp;
-        xye[0] = xymin[0] + dxy[0] * (double(ixe) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(iye) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ize) + 0.5e0);
+        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
+        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
+        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
             for (int iy = 0; iy < npxye[1]; iy++) {
                 xyp[1] = xye[1] + dec2p[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
                     xyp[0] = xye[0] + dec2p[ix][0];
-                    MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];

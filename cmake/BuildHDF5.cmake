@@ -30,10 +30,29 @@ file(REMOVE_RECURSE ${TEMP_HDF5_DIR}/src)
 file(MAKE_DIRECTORY ${TEMP_HDF5_DIR}/src)
 
 execute_process(
-    COMMAND tar zxvf ${HDF5_TARBALL} -C ${TEMP_HDF5_DIR}/src --strip-components=1
-    RESULT_VARIABLE tar_result)
+    COMMAND ${CMAKE_COMMAND} -E tar xzf ${HDF5_TARBALL}
+    WORKING_DIRECTORY ${TEMP_HDF5_DIR}/src
+    RESULT_VARIABLE tar_result
+    OUTPUT_VARIABLE tar_stdout
+    ERROR_VARIABLE tar_stderr)
 if(NOT tar_result EQUAL 0)
-    message(FATAL_ERROR "Failed to extract HDF5 tarball")
+    message(FATAL_ERROR
+        "Failed to extract HDF5 tarball: ${HDF5_TARBALL}\n"
+        "Result: ${tar_result}\n"
+        "Stdout:\n${tar_stdout}\n"
+        "Stderr:\n${tar_stderr}")
+endif()
+
+file(GLOB hdf5_extracted_dirs RELATIVE ${TEMP_HDF5_DIR}/src
+    ${TEMP_HDF5_DIR}/src/*)
+list(LENGTH hdf5_extracted_dirs hdf5_extracted_count)
+if(hdf5_extracted_count EQUAL 1)
+    list(GET hdf5_extracted_dirs 0 hdf5_root_dir)
+    if(IS_DIRECTORY ${TEMP_HDF5_DIR}/src/${hdf5_root_dir})
+        file(COPY ${TEMP_HDF5_DIR}/src/${hdf5_root_dir}/
+            DESTINATION ${TEMP_HDF5_DIR}/src)
+        file(REMOVE_RECURSE ${TEMP_HDF5_DIR}/src/${hdf5_root_dir})
+    endif()
 endif()
 
 file(MAKE_DIRECTORY ${TEMP_HDF5_DIR}/build)

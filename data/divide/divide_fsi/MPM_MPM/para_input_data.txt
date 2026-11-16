@@ -1,0 +1,5 @@
+10 1 2
+../../../generate/fsi/MPM_MPM/griddata.txt
+../../../generate/fsi/MPM_MPM/pointdata.txt
+./myrank_data_column/griddata
+./myrank_data_column/pointdata

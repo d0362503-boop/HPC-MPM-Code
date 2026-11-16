@@ -1,10 +1,10 @@
-#include "../../module/bc.h"
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/fluid/MPM/stabilized_mpm.h"
-#include "../../module/material_point.h"
-#include "../../module/mesh.h"
-#include "../../module/mpi_data.h"
+#include "module/bc.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/material_point.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -16,18 +16,17 @@ using namespace stabilizedmpm;
 
 void StabilizedMPM::DataInput() {
 
-    std::ifstream infile;
-    infile.open("file.dat");
+    std::ifstream infile = OpenInputFile("file.dat");
     getline(infile, parafile);
     getline(infile, gridfile);
     getline(infile, pointfile);
     getline(infile, outfile);
     infile.close();
 
-    infile.open(parafile);
+    infile = OpenInputFile(parafile);
     infile.ignore(1000, '\n');
     std::string solswitch_str;
-    infile >> solswitch_str >> rstflag >> nlstep;
+    infile >> solswitch_str >> this->do_dlb >> rstflag >> nlstep;
     this->solswitch = ParseMapScheme(solswitch_str);
     infile.ignore(1000, '\n');
 
@@ -36,7 +35,7 @@ void StabilizedMPM::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->gamma_nb >> this->beta_nb;
+    infile >> dt >> mtol >> this->integrator_.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -66,49 +65,31 @@ void StabilizedMPM::DataInput() {
     infile.ignore(1000, '\n');
     for (int i = 0; i < 3; i++) infile >> bb[i];
     infile.ignore(1000, '\n');
+
     infile.close();
 
-    dti = 1.0e0 / dt;
-    for (int i = 0; i < 3; i++) {
-        dxy[i] = (xymaxw[i] - xyminw[i]) / double(xyelemw[i]);
-        xynodew[i] = xyelemw[i] + 1;
-        xynodecw[i] = xyelemw[i] + idimc[i];
-    }
-    dlstep = 1.0e0 / double(nlstep);
+    InitializeMeshAndTimeParameters();
 
-    // ----- Newmark beta parameter -----
+    // --- Generalized α & Newmark β parameter Init ---
+    this->GeneralizedAlphaParaSet();
     this->NewmarkBetaParaSet();
+    // --------------------------------
 
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
-    infile.open(filename);
+    infile = OpenInputFile(filename);
 
     InputParaGriddata(infile);
-
-    this->ubc.BCInput(infile);
-    this->vbc.BCInput(infile);
-    this->wbc.BCInput(infile);
-    this->pbc.BCInput(infile);
-    // --- Inflow boundary ---
-    this->uinfbc.BCInput(infile, false);
-    this->vinfbc.BCInput(infile, false);
-    this->winfbc.BCInput(infile, false);
+    // --- Input Fluid BC ---
+    this->InputBCData(infile);
 
     infile.close();
 
     if (rstflag == 0 || rstflag == 2) {
         filename = pointfile + std::to_string(myrank) + ".txt";
-        infile.open(filename);
-        infile >> this->num;
-        infile.ignore(1000, '\n');
+        infile = OpenInputFile(filename);
 
-        this->InitializePointData();
+        this->InputPointData(infile);
 
-        InputVector(infile, this->num, this->coord);
-
-        for (int ip = 0; ip < this->num; ip++) {
-            infile >> this->id[ip] >> this->matid[ip] >> this->mass[ip] >> this->vol[ip];
-            infile.ignore(1000, '\n');
-        }
         infile.close();
     }
 

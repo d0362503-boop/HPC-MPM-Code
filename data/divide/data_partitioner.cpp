@@ -1,4 +1,4 @@
-#include "data_partitioner.h"
+#include "data/divide/data_partitioner.h"
 
 #include <cmath>
 #include <filesystem>
@@ -6,12 +6,13 @@
 #include <iostream>
 #include <vector>
 
-#include "../../module/data_io.h"
-#include "../../module/dataset.h"
-#include "../../module/mesh.h"
-#include "../../module/mpi_data.h"
+#include "module/data_io.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+#include "module/mpi_data.h"
 
 int DataPartitioner::Run() {
+
     std::cout << " ---- Start dividing " << this->CaseName() << " data ----"
               << "\n";
 
@@ -32,22 +33,22 @@ int DataPartitioner::Run() {
     for (int rank_id = 0; rank_id < rank_count; ++rank_id) {
         this->PartitionProcess(rank_id);
 
-        std::ofstream grid_outfile =
-            OpenOutputFile(this->grid_output_prefix_ + std::to_string(rank_id) + ".txt");
+        std::ofstream grid_outfile = OpenOutputFile(this->grid_output_prefix_ + std::to_string(rank_id) + ".txt");
         this->OutputMeshData(grid_outfile, rank_id);
         this->WriteBoundaryData(grid_outfile);
 
-        std::ofstream point_outfile =
-            OpenOutputFile(this->point_output_prefix_ + std::to_string(rank_id) + ".txt");
+        std::ofstream point_outfile = OpenOutputFile(this->point_output_prefix_ + std::to_string(rank_id) + ".txt");
         this->WritePointData(point_outfile);
     }
 
     std::cout << " ---- Finish dividing " << this->CaseName() << " data ----"
               << "\n";
+
     return 0;
 }
 
 void DataPartitioner::InputMeshData(std::ifstream &infile) {
+
     for (int i = 0; i < 3; ++i) infile >> idimc[i];
     infile.ignore(1000, '\n');
 
@@ -68,9 +69,12 @@ void DataPartitioner::InputMeshData(std::ifstream &infile) {
     infile >> nodec;
     for (int i = 0; i < 3; ++i) infile >> xynodecw[i];
     infile.ignore(1000, '\n');
+
+    return;
 }
 
 void DataPartitioner::OutputMeshData(std::ofstream &outfile, int rank_id) const {
+
     outfile << std::setw(15) << rank_id << "     --- myrank ---" << "\n";
 
     outfile << std::setw(15) << nelem << std::setw(15) << xyelem[0] << std::setw(15) << xyelem[1] << std::setw(15)
@@ -112,9 +116,12 @@ void DataPartitioner::OutputMeshData(std::ofstream &outfile, int rank_id) const 
         OutputVector(outfile, isubl, nsubl);
         OutputVector(outfile, node, dbl);
     }
+
+    return;
 }
 
 void DataPartitioner::PartitionInitialDataset() {
+
     for (int i = 0; i < 3; ++i) {
         this->nexyr1_[i] = xyelemw[i] / nxyr[i];
         this->nexyr2_[i] = this->nexyr1_[i] + 1;
@@ -127,12 +134,15 @@ void DataPartitioner::PartitionInitialDataset() {
         this->nxyr2_[i] = this->nexyr2_[i] + 1;
         this->bound12_[i] = xyminw[i] + this->drxy1_[i] * double(this->nr1_[i]);
     }
+
+    return;
 }
 
-void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc, const BoundaryCondition &source_bc,
+void DataPartitioner::BCRenumber(BoundaryCondition &partition_bc, const BoundaryCondition &source_bc,
                                  const std::vector<int> &local_counts, const std::vector<int> &global_counts,
                                  const std::vector<int> &local_min, const std::vector<int> &local_max,
-                                 bool compute_values) const {
+                                 bool compute_values) {
+
     partition_bc.nbc.resize(source_bc.ibc);
     if (compute_values) { partition_bc.fbc.resize(source_bc.ibc); }
 
@@ -147,7 +157,8 @@ void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc, const Boundary
         inxy[1] = (n - inxy[2] * (nx * ny)) / nx;
         inxy[0] = n - inxy[2] * (nx * ny) - inxy[1] * nx;
 
-        if (inxy[0] >= local_min[0] && inxy[0] <= local_max[0] && inxy[1] >= local_min[1] && inxy[1] <= local_max[1] &&
+        if (inxy[0] >= local_min[0] && inxy[0] <= local_max[0] && //
+            inxy[1] >= local_min[1] && inxy[1] <= local_max[1] && //
             inxy[2] >= local_min[2] && inxy[2] <= local_max[2]) {
             for (int j = 0; j < 3; ++j) { local_index[j] = inxy[j] - local_min[j]; }
             int local_id =
@@ -157,10 +168,13 @@ void DataPartitioner::BcRenumber(BoundaryCondition &partition_bc, const Boundary
             ++partition_bc.ibc;
         }
     }
+
+    return;
 }
 
 void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id, //
                                     MaterialPoint &point, int rank_id) const {
+
     std::vector<int> irxy(3);
     global_id.resize(point.num);
 
@@ -182,9 +196,12 @@ void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id,
             ++local_num;
         }
     }
+
+    return;
 }
 
 void DataPartitioner::MeshPartition(int rank_id) {
+
     const int nrx = nxyr[0];
     const int nry = nxyr[1];
 
@@ -317,20 +334,28 @@ void DataPartitioner::MeshPartition(int rank_id) {
             }
         }
     }
+
+    return;
 }
 
 void DataPartitioner::LoadPartitionParameters(std::ifstream &infile) {
+
     for (int i = 0; i < 3; ++i) { infile >> nxyr[i]; }
     infile >> this->grid_input_file_;
     infile >> this->point_input_file_;
     infile >> this->grid_output_prefix_;
     infile >> this->point_output_prefix_;
+
+    return;
 }
 
 void DataPartitioner::CreateOutputDirectories() const {
+
     const std::filesystem::path grid_parent = std::filesystem::path(this->grid_output_prefix_).parent_path();
     if (!grid_parent.empty()) { std::filesystem::create_directories(grid_parent); }
 
     const std::filesystem::path point_parent = std::filesystem::path(this->point_output_prefix_).parent_path();
     if (!point_parent.empty()) { std::filesystem::create_directories(point_parent); }
+
+    return;
 }

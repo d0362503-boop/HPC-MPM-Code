@@ -4,15 +4,26 @@
 #include <iostream>
 #include <vector>
 
-#include "../../dataset.h"
-#include "../../mesh.h"
-#include "../../shape_function.h"
-#include "../../vtk_hdf5.h"
-#include "stabilized_fem.h"
+#include "module/dataset.h"
+#include "module/fluid/FEM/stabilized_fem.h"
+#include "module/mesh.h"
+#include "module/shape_function.h"
+#include "module/vtk_hdf5.h"
 
 using namespace stabilizedfem;
 
+void StabilizedFEM::InputBCData(std::ifstream &infile) {
+
+    this->ubc.BCInput(infile);
+    this->vbc.BCInput(infile);
+    this->wbc.BCInput(infile);
+    this->pbc.BCInput(infile);
+
+    return;
+}
+
 void StabilizedFEM::RestartInput() {
+
     this->InitializeMeshData();
 
     std::string filename = gridfile + std::to_string(myrank) + "_re.txt";
@@ -21,18 +32,10 @@ void StabilizedFEM::RestartInput() {
     reinfile.open(filename);
 
     for (int n = 0; n < nodec; n++) {
-        reinfile >> this->naccel[n + nuc] //
-            >> this->naccel[n + nvc]      //
-            >> this->naccel[n + nwc]      //
-            >> this->nvel[n + nuc]        //
-            >> this->nvel[n + nvc]        //
-            >> this->nvel[n + nwc]        //
-            >> this->nvel_old[n + nuc]    //
-            >> this->nvel_old[n + nvc]    //
-            >> this->nvel_old[n + nwc]    //
-            >> this->nvel_older[n + nuc]  //
-            >> this->nvel_older[n + nvc]  //
-            >> this->nvel_older[n + nwc]  //
+        reinfile >> this->naccel[n + nuc] >> this->naccel[n + nvc] >> this->naccel[n + nwc]        //
+            >> this->nvel[n + nuc] >> this->nvel[n + nvc] >> this->nvel[n + nwc]                   //
+            >> this->nvel_old[n + nuc] >> this->nvel_old[n + nvc] >> this->nvel_old[n + nwc]       //
+            >> this->nvel_older[n + nuc] >> this->nvel_older[n + nvc] >> this->nvel_older[n + nwc] //
             >> this->npres[n] >> this->npres_old[n] >> this->nphi[n];
         reinfile.ignore(1000, '\n');
     }
@@ -43,6 +46,7 @@ void StabilizedFEM::RestartInput() {
 }
 
 void StabilizedFEM::RestartOutput() {
+
     std::string filename = gridfile + std::to_string(myrank) + "_re.txt";
 
     std::ofstream reoutfile;
@@ -82,8 +86,15 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
         velocity[n] = {this->nvel_vtk[n + nu], this->nvel_vtk[n + nv], this->nvel_vtk[n + nw]};
     }
 
-    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
-    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
+    vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_WORLD);
+
+    // Compute global point offset so local connectivity is written as global node IDs.
+    hsize_t local_npts = static_cast<hsize_t>(xyn.size());
+    hsize_t point_global_offset = 0;
+    hsize_t total_npts = local_npts;
+    vtkhdf::VTKHDFWriter::ComputeGlobalInfo(local_npts, point_global_offset, total_npts, MPI_COMM_WORLD);
+
+    auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc, point_global_offset);
     writer.SetTime(real_time);
 
     writer.CreatePointDataGroup();
@@ -96,6 +107,7 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
 }
 
 void StabilizedFEM::Cp2NodeVTK() {
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
@@ -113,7 +125,7 @@ void StabilizedFEM::Cp2NodeVTK() {
             this->nvel_vtk[id + nu] = 0.0e0;
             this->nvel_vtk[id + nv] = 0.0e0;
             this->nvel_vtk[id + nw] = 0.0e0;
-            MakSf(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];

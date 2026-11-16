@@ -1,5 +1,6 @@
 #pragma once
 
+#include "module/dataset.h"
 #include <array>
 #include <vector>
 
@@ -21,14 +22,102 @@ inline std::vector<std::vector<int>> ncc;
 inline std::vector<std::array<double, 3>> xyc;
 // ----------------------------
 
+/**
+ * @brief Initialize mesh spacings and time-integration scalars derived from the global input parameters.
+ *
+ * Computes `dti`, `dxy`, `xynodew`, `xynodecw`, and `dlstep` from the
+ * already-populated global mesh/time input state.
+ */
+inline void InitializeMeshAndTimeParameters() {
+
+    dti = 1.0e0 / dt;
+    for (int i = 0; i < 3; i++) {
+        dxy[i] = (xymaxw[i] - xyminw[i]) / double(xyelemw[i]);
+        xynodew[i] = xyelemw[i] + 1;
+        xynodecw[i] = xyelemw[i] + idimc[i];
+    }
+    dlstep = 1.0e0 / double(nlstep);
+
+    return;
+}
+
+/**
+ * @brief Decompose a linear background element index into per-direction element indices.
+ * @param m  Linear element index (x varies fastest, then y, then z).
+ * @param ne Number of background elements along x/y/z (typically the global `xyelem`).
+ * @return Element indices along x/y/z.
+ */
+inline std::array<int, 3> IndexToIJK(int m, const std::vector<int> &ne) {
+
+    const int ize = m / (ne[0] * ne[1]);
+    const int iye = (m - ize * (ne[0] * ne[1])) / ne[0];
+    const int ixe = m - ize * (ne[0] * ne[1]) - iye * ne[0];
+
+    return {ixe, iye, ize};
+}
+
+/**
+ * @brief Flatten per-direction background element indices into a linear index.
+ * @param ijk Element indices along x/y/z.
+ * @param ne Number of background elements along x/y/z.
+ * @return Linear element index with x varying fastest, then y, then z.
+ */
+inline int IJKToIndex(const std::array<int, 3> &ijk, const std::vector<int> &ne) {
+    return ijk[0] + ne[0] * (ijk[1] + ne[1] * ijk[2]);
+}
+
+/**
+ * @brief Compute Gaussian quadrature points and weights for hexahedral elements.
+ * @param dec2p Output array of quadrature data.
+ */
 void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p);
 
-void MakNodalVol();
+/**
+ * @brief Locate the global background element indices containing point `xq`.
+ * @param xq   Query point in physical coordinates.
+ * @param ie_g Output global element indices along x/y/z.
+ * @return `true` if the point lies inside the global background mesh bounds.
+ */
+bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie_g);
 
+/**
+ * @brief Convert global background element indices to the current rank-local element index.
+ * @param ie_g    Global element indices along x/y/z.
+ * @param m_local Output local element index on this rank.
+ * @return `true` if the element belongs to the current rank partition.
+ */
+bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local);
+
+/**
+ * @brief Locate the current rank-local background element containing point `xq`.
+ * @param xq      Query point in physical coordinates.
+ * @param m_local Output local element index on this rank.
+ * @return `true` if the point is inside the current rank partition.
+ */
+bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local);
+
+/**
+ * @brief Compute nodal/control-point volumes from element volumes.
+ */
+void ComputeNodalVol();
+
+/**
+ * @brief Build the background mesh node coordinates and element connectivity.
+ */
 void BuildMesh();
 
+/**
+ * @brief Build the higher-order control-point coordinates and connectivity.
+ */
 void BuildControlPoint();
 
+/**
+ * @brief Compute the coordinate of control point `nid` along direction `dir`.
+ * @tparam dir  Spatial direction (0=x, 1=y, 2=z).
+ * @param nid   Control-point index.
+ * @param ijk_l Local IJK indices of the control point.
+ * @param ijk_g Global IJK indices of the control point.
+ */
 template <int dir> void DefineCpPos(int nid, const std::vector<int> &ijk_l, const std::vector<int> &ijk_g) {
 
     if (idimc[dir] == 1) {
