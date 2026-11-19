@@ -300,8 +300,7 @@ class MaterialPoint {
      * @return Coordinate 0.01 cell widths inside a crossed closed face, or the
      * unchanged coordinate for an interior point or an open-face crossing.
      */
-    double ConstrainClosedBoundaryCoordinate(double coordinate, int direction,
-                                               const std::array<bool, 6> &closed_face) const;
+    double ConstrainClosedBoundaryCoordinate(double coordinate, int direction, const std::array<bool, 6> &closed_face) const;
 
     /**
      * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
@@ -465,8 +464,7 @@ class MaterialPoint {
      * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
      * @param disp_corr Particle-shifting displacement with boundary-normal components removed in place.
      */
-    void ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord,
-                                         std::array<double, 3> &disp_corr) const;
+    void ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord, std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Remove a surface-normal shift while preserving previously applied Cartesian boundary constraints.
@@ -474,9 +472,8 @@ class MaterialPoint {
      * @param surface_normal Material-surface unit normal interpolated at the particle.
      * @param disp_corr Particle shift projected onto the surface tangent; apply Cartesian boundary constraints first.
      */
-    void ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord,
-                                        const std::array<double, 3> &surface_normal,
-                                        std::array<double, 3> &disp_corr) const;
+    void ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &surface_normal,
+                                         std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
@@ -499,7 +496,7 @@ class MaterialPoint {
      *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> PairwiseRepulsivePST();
+    std::vector<std::array<double, 3>> PairwiseRepulsivePST(const std::vector<std::array<double, 3>> &displ);
     // ----------------------------------
 
     // ----- Control point variable -----

@@ -134,7 +134,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
 bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-13, 1.0e-7, 1.0e-8};
+    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-13, 1.0e-8, 1.0e-8};
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
     // Fields 0..2: max(absolute_tol, 1e-5 * initial nonlinear residual RMS).
