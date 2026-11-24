@@ -13,12 +13,8 @@ inline int isb, isubc, isubl;
 inline std::vector<int> naid, nsbc, nsubc, nsbl, nsubl, nxyr(3);
 inline std::vector<double> dbc, dbl;
 
-template <typename T> struct MPIDatatypeCheck {
-    static MPI_Datatype GetType() {
-        std::cout << "MPI_datatype_check_error" << "\n";
-        exit(1);
-    }
-};
+/// MPI datatype for `T`; unsupported types fail at compile time (incomplete type).
+template <typename T> struct MPIDatatypeCheck;
 
 template <> struct MPIDatatypeCheck<int> {
     static MPI_Datatype GetType() { return MPI_INT; }
@@ -32,6 +28,50 @@ template <> struct MPIDatatypeCheck<double> {
     static MPI_Datatype GetType() { return MPI_DOUBLE; }
 };
 
+namespace internal {
+
+/**
+ * @brief Shared implementation of NodeVarComm; call NodeVarComm instead.
+ * @param dat Nodal data array that stores all components in contiguous blocks.
+ * @param offsets Pointer to `ndof` component offsets inside `dat`, such as `0`, `nuc`, `nvc`, or `nwc`.
+ * @param ndof Number of components exchanged in one communication step.
+ * @note Send/receive buffers are static and reused across calls, so this function is not reentrant or thread-safe.
+ */
+template <typename T> void NodeVarCommImpl(std::vector<T> &dat, const int *offsets, int ndof) {
+
+    static std::vector<T> sdn, rvn;      // reused send/recv buffers
+    static std::vector<MPI_Request> irq; // unposted stay MPI_REQUEST_NULL
+    sdn.resize(static_cast<std::size_t>(isubc) * ndof);
+    rvn.resize(static_cast<std::size_t>(isubc) * ndof);
+    irq.assign(2 * isb, MPI_REQUEST_NULL);
+
+    int io = 0;
+    for (int i = 0; i < isb; i++) {
+        for (int j = io; j < io + nsbc[i]; j++) {
+            for (int d = 0; d < ndof; d++) { sdn[j * ndof + d] = dat[nsubc[j] + offsets[d]]; }
+        }
+        if (nsbc[i] != 0) {
+            MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), naid[i], 1, MPI_COMM_WORLD, &irq[2 * i]);
+            MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), naid[i], 1, MPI_COMM_WORLD,
+                      &irq[2 * i + 1]);
+        }
+        io += nsbc[i];
+    }
+    MPI_Waitall(2 * isb, irq.data(), MPI_STATUSES_IGNORE);
+
+    io = 0;
+    for (int i = 0; i < isb; i++) {
+        for (int j = io; j < io + nsbc[i]; j++) {
+            for (int d = 0; d < ndof; d++) { dat[nsubc[j] + offsets[d]] += rvn[j * ndof + d]; }
+        }
+        io += nsbc[i];
+    }
+
+    return;
+}
+
+} // namespace internal
+
 /**
  * @brief Exchange one nodal field component on overlap control points and add received values back into `dat`.
  * @param dat Nodal data array that stores all components in contiguous blocks.
@@ -39,48 +79,7 @@ template <> struct MPIDatatypeCheck<double> {
  */
 template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) {
 
-    std::vector<T> sdn(isubc);
-    std::vector<T> rvn(isubc);
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
-    MPI_Status status;
-
-    int ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            sdn[j] = dat[jj + offset];
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        int npro = naid[i];
-        if (nsbc[i] != 0) {
-            MPI_Isend(&sdn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-            MPI_Irecv(&rvn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
-        }
-    }
-    for (int i = 0; i < isb; i++) {
-        if (nsbc[i] != 0) {
-            MPI_Wait(&irqs[i], &status);
-            MPI_Wait(&irqr[i], &status);
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            dat[jj + offset] += rvn[j];
-        }
-    }
+    internal::NodeVarCommImpl(dat, &offset, 1);
 
     return;
 }
@@ -91,54 +90,8 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) {
  * @param offsets Component offsets inside `dat` for the fields packed into one communication step.
  */
 template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<int> &offsets) {
-    int ndof = static_cast<int>(offsets.size());
-    if (ndof == 1) {
-        NodeVarComm(dat, offsets[0]);
-        return;
-    }
 
-    std::vector<T> sdn(isubc * ndof);
-    std::vector<T> rvn(isubc * ndof);
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
-    MPI_Status status;
-
-    int ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            for (int d = 0; d < ndof; d++) { sdn[j * ndof + d] = dat[jj + offsets[d]]; }
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        int npro = naid[i];
-        if (nsbc[i] != 0) {
-            MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-            MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
-        }
-    }
-    for (int i = 0; i < isb; i++) {
-        if (nsbc[i] != 0) {
-            MPI_Wait(&irqs[i], &status);
-            MPI_Wait(&irqr[i], &status);
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            for (int d = 0; d < ndof; d++) { dat[jj + offsets[d]] += rvn[j * ndof + d]; }
-        }
-    }
+    internal::NodeVarCommImpl(dat, offsets.data(), static_cast<int>(offsets.size()));
 
     return;
 }

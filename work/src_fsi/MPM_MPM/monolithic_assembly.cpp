@@ -46,8 +46,8 @@ void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &nvel_k,
 void MPMMPMMonolithicFSI::AssembleInterfaceSystem(const std::vector<double> &nvel_f,
                                                  const std::vector<double> &nvel_s) {
 
-    const double cf = this->fluid_.integrator_.nb_para[0];
-    const double cs = this->solid_.integrator_.nb_para[0];
+    const double cf = this->fluid_.integrator_.dv_du;
+    const double cs = this->solid_.integrator_.dv_du;
 
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;

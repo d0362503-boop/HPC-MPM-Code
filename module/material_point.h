@@ -194,7 +194,6 @@ class MaterialPoint {
     }
 
     // --- Newmark-β part ---
-
     /**
      * @brief Refresh integrator displacement coefficients using the global time step.
      */
@@ -249,7 +248,7 @@ class MaterialPoint {
     // ------------------------------------------
 
     virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
-        double emd = this->integrator_.nb_para[3] * sfi * this->mass[pid];
+        double emd = this->integrator_.da_du * sfi * this->mass[pid];
 
         return emd;
     }
@@ -283,38 +282,11 @@ class MaterialPoint {
     void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
 
     /**
-     * @brief Identify whole box faces with stationary impermeable normal BCs.
-     * @return Flags indexed by 2*axis+side (side 0: lower, 1: upper). A face is
-     * closed only when all face control points prescribe zero normal velocity
-     * and no normal inflow is marked; pressure and tangential BCs do not close it.
-     * @note Call collectively on all MPI ranks. Uses this object's BCs and overlap
-     * weights without caching state. Local openings within one face are not resolved.
-     */
-    std::array<bool, 6> DetermineClosedBoundaryFaces() const;
-
-    /**
-     * @brief Move one candidate coordinate inside a crossed closed box face.
-     * @param coordinate Particle coordinate after displacement and shifting.
-     * @param direction Spatial axis: 0=x, 1=y, 2=z.
-     * @param closed_face Whole-face impermeability flags for this particle object.
-     * @return Coordinate 0.01 cell widths inside a crossed closed face, or the
-     * unchanged coordinate for an interior point or an open-face crossing.
-     */
-    double ConstrainClosedBoundaryCoordinate(double coordinate, int direction, const std::array<bool, 6> &closed_face) const;
-
-    /**
      * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
      *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
      * @param accel_old Particle acceleration from the previous step.
      * @param disp Particle displacement increments interpolated from control points.
      * @param disp_corr Per-particle shifting displacements; empty or zero disables shifting.
-     * @pre `disp` contains at least `num` entries, as does `accel_old` for FLIP.
-     * Nonempty `disp_corr` contains at least `num` entries. All MPI ranks call collectively.
-     * @note Uses this object's BCs: a whole box face is closed only when all its
-     * control points prescribe zero normal velocity and no normal inflow is marked.
-     * Closed-face overshoots are placed 0.01 cell widths inside; other faces allow outflow.
-     * This position-only restriction leaves velocity, acceleration and constitutive
-     * state unchanged. It does not handle local openings within an otherwise closed face.
      */
     void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
                                           const std::vector<std::array<double, 3>> &disp,
@@ -466,14 +438,6 @@ class MaterialPoint {
      */
     void ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord, std::array<double, 3> &disp_corr) const;
 
-    /**
-     * @brief Remove a surface-normal shift while preserving previously applied Cartesian boundary constraints.
-     * @param particle_coord Current material-point position used to restrict the surface projection near domain faces.
-     * @param surface_normal Material-surface unit normal interpolated at the particle.
-     * @param disp_corr Particle shift projected onto the surface tangent; apply Cartesian boundary constraints first.
-     */
-    void ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord, const std::array<double, 3> &surface_normal,
-                                         std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.

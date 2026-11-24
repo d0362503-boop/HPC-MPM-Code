@@ -362,7 +362,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
 double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
 
     double emd = MaterialPoint::ComputeNRLumpedMassMat(pid, sfi);
-    emd += this->integrator_.nb_para[3] * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
+    emd += this->integrator_.da_du * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
 
     return emd;
 }

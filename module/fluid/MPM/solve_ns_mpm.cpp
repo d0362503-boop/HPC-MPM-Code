@@ -166,8 +166,8 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
     const double af0 = 1.0e0 - af;
     const double am = this->integrator_.alpha_m;
     const double am0 = 1.0e0 - am;
-    const double cv = this->integrator_.nb_para[0];
-    const double ca = this->integrator_.nb_para[3];
+    const double cv = this->integrator_.dv_du;
+    const double ca = this->integrator_.da_du;
 
     std::vector<double> nvel_af(nodec * 3), naccel_am(nodec * 3);
     for (int n = 0; n < nodec * 3; n++) {
