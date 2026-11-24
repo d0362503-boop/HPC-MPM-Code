@@ -91,9 +91,9 @@ class StabilizedMPM : public MaterialPoint {
 
     /**
      * @brief Read fluid point data from input stream.
-     * @param inflie Input stream.
+     * @param infile Input stream.
      */
-    void InputPointData(std::ifstream &inflie) override;
+    void InputPointData(std::ifstream &infile) override;
 
     /** @brief Read fluid restart data. */
     void RestartInput() override;

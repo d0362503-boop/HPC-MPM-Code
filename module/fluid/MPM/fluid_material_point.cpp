@@ -88,7 +88,7 @@ void StabilizedMPM::MigrateParticleData() {
     if (this->solswitch == MapScheme::TPIC) {
         // ---- TPIC acceleration gradient ----
         this->par_comm_.PointVarComm(this->num, this->ifp.num, this->tpic.accel_grad, this->ifp.tpic.accel_grad);
-        // ---- TPIC velocity gredient ----
+        // ---- TPIC velocity gradient ----
         this->par_comm_.PointVarComm(this->num, this->ifp.num, this->tpic.vel_grad, this->ifp.tpic.vel_grad);
     } else if (this->solswitch == MapScheme::APIC) {
         // ---- APIC acceleration B matrix ----

@@ -316,7 +316,7 @@ class MaterialPoint {
     std::array<std::array<double, 6>, 6> stif_mat;
     std::vector<std::array<std::array<double, 3>, 3>> def_grad, def_grad_bar, delta_def_grad_bar;
 
-    virtual void InputPointData(std::ifstream &inflie) {};
+    virtual void InputPointData(std::ifstream &infile) {};
 
     virtual void InitializePointData() {};
 

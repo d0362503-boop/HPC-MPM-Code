@@ -27,9 +27,9 @@ class SolidMaterialPointBase : public MaterialPoint {
 
     /**
      * @brief Read the solid particle count, coordinate block and attribute block.
-     * @param inflie Stream positioned at count, coordinates, then id/matid/surf_point/mass/vol0 rows.
+     * @param infile Stream positioned at count, coordinates, then id/matid/surf_point/mass/vol0 rows.
      */
-    void InputPointData(std::ifstream &inflie) override;
+    void InputPointData(std::ifstream &infile) override;
 
     /**
      * @brief Initialize solid particle state (mass, volume, stress, deformation gradient) after input is read.
@@ -72,8 +72,7 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @return One third of the stress trace, with the stored stress sign convention.
      */
     double ComputeMeanStress(int pid) const noexcept {
-        double mean_stress = (this->stress[pid][0] + this->stress[pid][1] + this->stress[pid][2]) / 3.0e0;
-        return mean_stress;
+        return (this->stress[pid][0] + this->stress[pid][1] + this->stress[pid][2]) / 3.0e0;
     }
 
     /**

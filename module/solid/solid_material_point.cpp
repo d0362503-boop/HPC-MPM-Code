@@ -102,7 +102,7 @@ void SolidMaterialPointBase::MigrateParticleData() {
     if (this->solswitch == MapScheme::TPIC) {
         // ---- TPIC acceleration gradient ----
         this->par_comm_.PointVarComm(this->num, this->tpic.accel_grad);
-        // ---- TPIC velocity gredient ----
+        // ---- TPIC velocity gradient ----
         this->par_comm_.PointVarComm(this->num, this->tpic.vel_grad);
     } else if (this->solswitch == MapScheme::APIC) {
         // ---- APIC acceleration B matrix ----

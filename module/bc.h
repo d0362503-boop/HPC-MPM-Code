@@ -25,9 +25,9 @@ class BoundaryCondition {
      * @brief Write boundary-condition node IDs and values to an output stream.
      * @param outfile   Output file stream.
      * @param bc_name   Name of the boundary condition (used in the header).
-     * @param ife_fbc   If true, also write prescribed values.
+     * @param if_fbc    If true, also write prescribed values.
      */
-    void BCOutput(std::ofstream &outfile, std::string bc_name, bool ife_fbc = true);
+    void BCOutput(std::ofstream &outfile, std::string bc_name, bool if_fbc = true);
 
     /**
      * @brief Apply prescribed boundary values to `variable` at constrained DOFs.
