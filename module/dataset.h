@@ -30,23 +30,11 @@ inline MapScheme ParseMapScheme(const std::string &s) {
  * @brief Resize a vector and fill every entry with the given initial value.
  * @param size Target number of entries.
  * @param variable Vector to reset.
- * @param init_value Value assigned to each entry after resizing.
+ * @param init_value Value assigned to each entry after resizing; defaults to zero for numbers and std::array.
  */
 template <typename T> void VectorAssign(int size, std::vector<T> &variable, T init_value = T()) {
 
     variable.assign(size, init_value);
-
-    return;
-}
-
-/**
- * @brief Resize a vector of fixed-size arrays and value-initialize every entry.
- * @param size Target number of entries.
- * @param variable Vector of arrays to reset.
- */
-template <typename T, std::size_t N> void VectorAssign(int size, std::vector<std::array<T, N>> &variable) {
-
-    variable.assign(size, std::array<T, N>{});
 
     return;
 }

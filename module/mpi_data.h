@@ -165,14 +165,13 @@ class ParticleCommunication {
     }
 
     /**
-     * @brief Migrate a scalar particle variable across rank boundaries and rebuild the local vector.
+     * @brief Migrate a scalar or array-valued particle variable across rank boundaries and rebuild the local vector.
      * @param point_num  New local particle count after communication.
      * @param point_var  Particle variable vector (resized and repopulated in-place).
      */
-    template <typename T> void PointVarComm(int point_num, std::vector<T> &point_var) {
+    template <typename E> void PointVarComm(int point_num, std::vector<E> &point_var) {
 
-        std::vector<T> bufs(this->nmps, T()), bufr(this->nrps, T());
-        std::vector<T> tmp(this->nnmp, T());
+        std::vector<E> bufs(this->nmps), bufr(this->nrps), tmp(this->nnmp);
 
         int sip = 0;
         for (int i = 0; i < int(this->comm_ranks.size()); i++) {
@@ -197,66 +196,14 @@ class ParticleCommunication {
     }
 
     /**
-     * @brief Migrate a scalar particle variable across rank boundaries and append inflow-particle values.
+     * @brief Migrate a scalar or array-valued particle variable and append inflow-particle values.
      * @param point_num  New local particle count after communication.
      * @param ifp_num    Number of inflow particles to append.
      * @param point_var  Particle variable vector (resized and repopulated in-place).
      * @param ifp_var    Inflow-particle values to append.
      */
-    template <typename T>
-    void PointVarComm(int point_num, int ifp_num, std::vector<T> &point_var, const std::vector<T> &ifp_var) {
-
-        this->PointVarComm(point_num, point_var);
-
-        if (ifp_num != 0) {
-            int num = this->nnmp + this->nrps;
-            for (int i = 0; i < ifp_num; i++) { point_var[num + i] = ifp_var[i]; }
-        }
-
-        return;
-    }
-
-    /**
-     * @brief Migrate an array-valued particle variable across rank boundaries and rebuild the local vector.
-     * @param point_num  New local particle count after communication.
-     * @param point_var  Particle variable vector (resized and repopulated in-place).
-     */
-    template <typename T, std::size_t N> void PointVarComm(int point_num, std::vector<std::array<T, N>> &point_var) {
-
-        std::vector<std::array<T, N>> bufs(this->nmps), bufr(this->nrps), tmp(this->nnmp);
-
-        int sip = 0;
-        for (int i = 0; i < int(this->comm_ranks.size()); i++) {
-            for (int ip = 0; ip < this->nsp[i]; ip++) {
-                int ipsip = ip + sip;
-                bufs[ipsip] = point_var[this->idmp[ipsip]];
-            }
-            sip += this->nsp[i];
-        }
-
-        this->PointVarSendrecv(bufs, bufr, 1);
-
-        for (int i = 0; i < this->nnmp; i++) { tmp[i] = point_var[this->idnsp[i]]; }
-
-        VectorAssign(point_num, point_var);
-
-        for (int i = 0; i < this->nnmp; i++) { point_var[i] = tmp[i]; }
-
-        for (int i = 0; i < this->nrps; i++) { point_var[this->nnmp + i] = bufr[i]; }
-
-        return;
-    }
-
-    /**
-     * @brief Migrate an array-valued particle variable across rank boundaries and append inflow-particle values.
-     * @param point_num  New local particle count after communication.
-     * @param ifp_num    Number of inflow particles to append.
-     * @param point_var  Particle variable vector (resized and repopulated in-place).
-     * @param ifp_var    Inflow-particle values to append.
-     */
-    template <typename T, std::size_t N>
-    void PointVarComm(int point_num, int ifp_num, std::vector<std::array<T, N>> &point_var,
-                      const std::vector<std::array<T, N>> &ifp_var) {
+    template <typename E>
+    void PointVarComm(int point_num, int ifp_num, std::vector<E> &point_var, const std::vector<E> &ifp_var) {
 
         this->PointVarComm(point_num, point_var);
 

@@ -39,14 +39,12 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
         infile >> this->id[ip] >> this->matid[ip] >> this->surf_point[ip] >> this->mass[ip] >> this->vol0[ip];
         infile.ignore(1000, '\n');
     }
-    for (int ip = 0; ip < this->num; ip++) {
-        this->def_grad[ip] = eye_mat;
-        if (this->Fbar_flag) {
-            this->def_grad_bar[ip] = eye_mat;
-            this->delta_def_grad_bar[ip] = eye_mat;
-        }
-        this->vol[ip] = this->vol0[ip];
+    VectorAssign(this->num, this->def_grad, eye_mat);
+    if (this->Fbar_flag) {
+        VectorAssign(this->num, this->def_grad_bar, eye_mat);
+        VectorAssign(this->num, this->delta_def_grad_bar, eye_mat);
     }
+    this->vol = this->vol0;
 
     return;
 }
