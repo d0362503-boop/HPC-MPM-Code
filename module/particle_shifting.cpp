@@ -309,13 +309,13 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     // -------------------------------------------------------------------------
     for (int n = 0; n < this->num; n++) {
         this->ConstrainPSTBoundaryDisplacement(this->coord[n], disp_corr[n]);
-        const bool surface_particle = surface_weight[n] >= 0.3e0 && surface_weight[n] <= 0.7e0;
-        if (surface_particle) { this->ConstrainPSTSurfaceDisplacement(this->coord[n], particle_normal[n], disp_corr[n]); }
+        // const bool surface_particle = surface_weight[n] >= 0.3e0 && surface_weight[n] <= 0.7e0;
+        // if (surface_particle) { this->ConstrainPSTSurfaceDisplacement(this->coord[n], particle_normal[n], disp_corr[n]); }
 
         const double shift_norm = NormVec3(disp_corr[n]);
         if (shift_norm > 0.0e0) {
             const double motion_norm = NormVec3(displ[n]);
-            const double max_shift = motion_norm / 10.0e0;
+            const double max_shift = motion_norm / 20.0e0;
             const double scale = std::min(max_shift, shift_norm) / shift_norm;
             for (int i = 0; i < 3; i++) { disp_corr[n][i] *= scale; }
         }
