@@ -8,7 +8,7 @@
 #include <iostream>
 #include <vector>
 
-void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p) {
+void SubcellOffsets(std::array<std::array<double, 3>, 6> &dec2p) {
 
     dec2p = {};
 
@@ -190,7 +190,7 @@ void BuildControlPoint() {
 void ComputeNodalVol() {
 
     std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
+    SubcellOffsets(dec2p);
 
     double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
 
@@ -201,12 +201,8 @@ void ComputeNodalVol() {
 
     VectorAssign(nodec, nvol);
     for (int m = 0; m < nelem; m++) {
-        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
-
-        std::array<double, 3> xye, xyp;
-        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
+        const std::array<double, 3> xye = ElementCenter(m);
+        std::array<double, 3> xyp;
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
             for (int iy = 0; iy < npxye[1]; iy++) {

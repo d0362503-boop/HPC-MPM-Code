@@ -146,6 +146,7 @@ class ParticleCommunication {
     int nmps; // Material Points to Send: total particles sent to neighbor ranks (sum of nsp)
     int nrps; // Material Points to Receive: total particles received from neighbor ranks (sum of nrp)
     // -----------------------------------------------------------------------------
+
     std::vector<int> comm_ranks; // current particle peers
     std::vector<int> nsp, nrp, ofp_id;
     std::vector<int> idmp, idnsp;

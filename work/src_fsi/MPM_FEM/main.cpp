@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 
         BuildControlPoint();
 
-        fsi.fluid_.BuildGaussianPoint();
+        fsi.fluid_.BuildSubcellPoints();
 
         fsi.fluid_.MeshPointLinklist();
 

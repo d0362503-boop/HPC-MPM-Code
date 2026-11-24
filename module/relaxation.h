@@ -3,8 +3,6 @@
 #include "module/bc.h"
 #include <vector>
 
-using namespace std;
-
 /**
  * @brief Apply depth-two Anderson relaxation to the coupled interface field.
  *
@@ -17,8 +15,8 @@ using namespace std;
  * @param intf_bc Interface boundary data; its prescribed field is updated in place.
  */
 void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
-                            std::vector<double> &var_older, std::vector<double> &res_old,
-                            std::vector<double> &res_older, BoundaryCondition &intf_bc);
+                            std::vector<double> &var_older, std::vector<double> &res_old, std::vector<double> &res_older,
+                            BoundaryCondition &intf_bc);
 
 /**
  * @brief Apply depth-one Anderson relaxation to the coupled interface field.
@@ -41,5 +39,5 @@ void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const s
  * @param res_old Residual from the preceding coupling iteration.
  * @param intf_bc Interface boundary data; its prescribed field is updated in place.
  */
-void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var,
-                       std::vector<double> &res_old, BoundaryCondition &intf_bc);
+void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var, std::vector<double> &res_old,
+                       BoundaryCondition &intf_bc);

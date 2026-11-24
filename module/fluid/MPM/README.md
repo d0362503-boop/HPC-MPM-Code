@@ -173,7 +173,7 @@ Two particle-shifting strategies are implemented in `module/particle_shifting.cp
 Inflow generation follows a three-layer dispatch (`InflowMeshisFilled` → `GenerateInflowParticles` → `AssignUniqueInflowIds`).  The MPM-specific differences are:
 
 - `InflowParticles()` allocates the inflow buffer including scheme-specific TPIC/APIC state.
-- `GenerateInflowParticlesEmptyMesh` fills empty boundary cells with a Gaussian sub-grid.
+- `GenerateInflowParticlesEmptyMesh` fills empty boundary cells with a uniform sub-cell grid (see `SubcellOffsets`).
 - `GenerateInflowParticlesFilledMesh` clones particles that moved one cell inward; it copies the scheme-specific state (velocity/acceleration gradients or APIC B-matrices) by G2P interpolation.
 - `MoveParticle` communicates the scheme-specific state for both regular migration and inflow appending.
 

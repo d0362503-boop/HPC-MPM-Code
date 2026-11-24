@@ -403,9 +403,9 @@ class MaterialPoint {
     void MeshPointLinklist();
 
     /**
-     * @brief Generate material points inside each background element using Gaussian quadrature.
+     * @brief Generate material points at the sub-cell centers of each background element (see SubcellOffsets).
      */
-    void BuildGaussianPoint();
+    void BuildSubcellPoints();
 
     /**
      * @brief Compute mass-weighted nodal unit normals.

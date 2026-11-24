@@ -59,7 +59,7 @@ void MPMMPMFSIFluidGenerator::CreateBCs() {
                     this->vbc.fbc[this->vbc.ibc] = 0.0e0;
                     this->vbc.ibc++;
                 }
-                if (k == 0 || k == znodec - 1) {
+                if (k == 0) { // || k == znodec - 1) {
                     double vel;
                     // if (xyc[id][0] <= 0.3e-2) {
                     //     vel = std::pow(std::sin(M_PI * xyc[id][0] / 0.6e-2), 2);
@@ -99,7 +99,7 @@ void MPMMPMFSIFluidGenerator::CreateParticles() {
     this->fluid_point_mass_ = this->rho * this->fluid_point_volume_;
 
     std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
+    SubcellOffsets(dec2p);
 
     this->coord.resize(nelem * nspe);
     this->matid.resize(nelem * nspe);
@@ -197,7 +197,7 @@ void MPMMPMFSISolidGenerator::CreateParticles() {
     this->solid_point_mass_ = this->rho * this->solid_point_volume_;
 
     std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
+    SubcellOffsets(dec2p);
 
     this->coord.resize(nelem * nspe);
     this->matid.resize(nelem * nspe);
