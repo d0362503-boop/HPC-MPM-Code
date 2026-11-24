@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
         int iview = istep / iout;
         real_time = dt * double(istep);
 
-        wp.OutputPointDataVTKHDF(iview, istep);
+        wp.OutputPointDataVTKHDF(iview);
 
         for (istep = ista; istep <= iend; istep++) {
 
@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
 
             if (istep % iout == 0) {
                 iview++;
-                wp.OutputPointDataVTKHDF(iview, istep);
+                wp.OutputPointDataVTKHDF(iview);
 
                 if (rstflag == 2 || rstflag == 3) wp.RestartOutput();
             }

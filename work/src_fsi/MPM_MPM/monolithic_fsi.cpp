@@ -64,7 +64,7 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
         this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
 
         this->AssembleFluidSystem(nvel_f, naccel_f);
-        this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
+        this->AssembleSolidSystem(naccel_s, stress_k);
         this->AssembleInterfaceSystem(nvel_f, nvel_s);
 
         if (this->CheckNRConvergence(initial_norm, NR_it, solver_it)) { break; }

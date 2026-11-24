@@ -136,11 +136,9 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Assemble tangent matrix and residual vector.
      * @param mat Target system, cleared by the caller before assembly.
      * @param naccel_k Nodal acceleration at the current endpoint iterate.
-     * @param nvel_k Nodal velocity at the current endpoint iterate.
      * @param stress_k  Particle stress state for tangent assembly.
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                const std::vector<double> &nvel_k,                //
                                 std::vector<std::array<double, 6>> &stress_k);
 
     /**
@@ -152,8 +150,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @param sts_af  Particle stress at intermediate time level.
      * @return Three-by-three material and geometric stiffness block before volume and alpha_f weighting.
      */
-    std::array<std::array<double, 3>, 3> ComputeTangentModulus(int pid, int ni, int nj,
-                                                               const std::vector<std::array<double, 3>> &dsf,
+    std::array<std::array<double, 3>, 3> ComputeTangentModulus(int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
                                                                const std::array<double, 6> &sts_af);
 
     /**

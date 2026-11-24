@@ -110,9 +110,8 @@ class StabilizedFEM : public MaterialPoint {
     /**
      * @brief Write fluid mesh data to VTK HDF5 files.
      * @param iview Output view index.
-     * @param istep Current time step.
      */
-    void OutputMeshDataVTKHDF(int iview, int istep);
+    void OutputMeshDataVTKHDF(int iview);
 
   protected:
     /** @brief Apply velocity and pressure boundary conditions. */

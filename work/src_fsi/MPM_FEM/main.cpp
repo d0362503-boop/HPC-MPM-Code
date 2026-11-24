@@ -60,9 +60,9 @@ int main(int argc, char *argv[]) {
 
         fsi.fluid_.Cp2NodeVTK();
 
-        fsi.solid_.OutputPointDataVTKHDF(iview, istep);
+        fsi.solid_.OutputPointDataVTKHDF(iview);
 
-        fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+        fsi.fluid_.OutputMeshDataVTKHDF(iview);
 
         for (istep = ista; istep <= iend; istep++) {
             // -----------------------------------------------
@@ -93,9 +93,9 @@ int main(int argc, char *argv[]) {
 
             if (istep % iout == 0) {
                 iview++;
-                fsi.solid_.OutputPointDataVTKHDF(iview, istep);
+                fsi.solid_.OutputPointDataVTKHDF(iview);
                 fsi.fluid_.Cp2NodeVTK();
-                fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+                fsi.fluid_.OutputMeshDataVTKHDF(iview);
 
                 if (rstflag == 2 || rstflag == 3) {
                     fsi.solid_.RestartOutput();

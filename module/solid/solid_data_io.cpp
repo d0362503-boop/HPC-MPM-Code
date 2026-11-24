@@ -49,7 +49,7 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
     return;
 }
 
-void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, int istep) {
+void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-s.vtkhdf";
 

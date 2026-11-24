@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
         int iview = istep / iout;
         real_time = dt * double(istep);
 
-        sp.OutputPointDataVTKHDF(iview, istep);
+        sp.OutputPointDataVTKHDF(iview);
 
         for (istep = ista; istep <= iend; istep++) {
 
@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
 
             if (istep / iout * iout == istep) {
                 iview++;
-                sp.OutputPointDataVTKHDF(iview, istep);
+                sp.OutputPointDataVTKHDF(iview);
             }
 
             if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }

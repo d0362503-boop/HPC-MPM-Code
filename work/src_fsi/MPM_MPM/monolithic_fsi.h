@@ -89,12 +89,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
 
     /**
      * @brief Assemble the solid field and its multiplier load into the coupled system.
-     * @param nvel_k Solid nodal velocity at the current endpoint iterate.
      * @param naccel_k Solid nodal acceleration at the current endpoint iterate.
      * @param stress_k Particle stress state for the current Newton iterate.
      */
-    void AssembleSolidSystem(const std::vector<double> &nvel_k,   //
-                             const std::vector<double> &naccel_k, //
+    void AssembleSolidSystem(const std::vector<double> &naccel_k, //
                              std::vector<std::array<double, 6>> &stress_k);
 
     /**

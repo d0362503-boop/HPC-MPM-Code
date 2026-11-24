@@ -101,9 +101,8 @@ class StabilizedMPM : public MaterialPoint {
     /**
      * @brief Write fluid particle data to VTK HDF5 files.
      * @param iview Output view index.
-     * @param istep Current time step.
      */
-    void OutputPointDataVTKHDF(int iview, int istep) override;
+    void OutputPointDataVTKHDF(int iview) override;
 
     /** @brief Write fluid restart data. */
     void RestartOutput() override;

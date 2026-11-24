@@ -44,7 +44,7 @@ void ImplicitSolidMPM::UpdateNRIncrement() {
     return;
 }
 
-std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj,
+std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int ni, int nj,
                                                                              const std::vector<std::array<double, 3>> &dsf,
                                                                              const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
@@ -96,7 +96,7 @@ void ImplicitSolidMPM::SolveSolid() {
         VectorAssign(this->SM_.nmata, this->SM_.amat);
         VectorAssign(nodec * 3, this->SM_.b_rhs);
         VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
-        this->AssembleSystem(this->SM_, naccel_k, nvel_k, stress_k);
+        this->AssembleSystem(this->SM_, naccel_k, stress_k);
 
         if (!NR_flag) { // --- Linear not need Newton Raphson ---
             if (myrank == 0) { std::cout << "Solid converge:" << std::setw(10) << NR_it << std::setw(10) << iter << "\n"; }
@@ -119,7 +119,6 @@ void ImplicitSolidMPM::SolveSolid() {
 }
 
 void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                      const std::vector<double> &nvel_k,                //
                                       std::vector<std::array<double, 6>> &stress_k) {
 
     const std::vector<int> offsets = this->RHSOffsets();
@@ -176,7 +175,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
                     int ida = mat.FindIndex(nid, njd, ncol);
 
                     std::array<std::array<double, 3>, 3> K_mat;
-                    K_mat = this->ComputeTangentModulus(pid, ni, nj, dsf, sts_af);
+                    K_mat = this->ComputeTangentModulus(ni, nj, dsf, sts_af);
 
                     if (nid == njd) {
                         mat.amat[ida + mat.block_id[this->blocks[0]]] += am * emd_lu;

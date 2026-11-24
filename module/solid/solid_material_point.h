@@ -45,9 +45,8 @@ class SolidMaterialPointBase : public MaterialPoint {
     /**
      * @brief Write solid particle data to VTK HDF5 visualization files.
      * @param iview Output view index.
-     * @param istep Current time step.
      */
-    void OutputPointDataVTKHDF(int iview, int istep) override;
+    void OutputPointDataVTKHDF(int iview) override;
 
     /**
      * @brief Write solid restart data to per-rank `*_re.txt` files.

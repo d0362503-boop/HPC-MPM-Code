@@ -58,7 +58,7 @@ displacement iterate; `CommitNodalKinematics()` commits the converged state.
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
     ComputeNodeVelAccelFromDispl(...);     // predictor step
-    AssembleSystem(SM_, naccel_k, nvel_k, stress_k);
+    AssembleSystem(SM_, naccel_k, stress_k);
     if NR_flag && CheckNRConvergence() break; // check current physical RHS
     zero SM_.x_lhs;                         // new correction starts from zero
     iter = SM_.SolveSystem(NR_it);           // PETSc or native linear solve

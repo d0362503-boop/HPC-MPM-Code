@@ -56,7 +56,7 @@ void StabilizedMPM::InputPointData(std::ifstream &infile) {
     return;
 }
 
-void StabilizedMPM::OutputPointDataVTKHDF(int iview, int istep) {
+void StabilizedMPM::OutputPointDataVTKHDF(int iview) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
