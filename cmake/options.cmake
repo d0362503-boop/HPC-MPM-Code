@@ -2,10 +2,9 @@
 # MPM-Code build options
 # ----------------------------------------------------------------------------
 
-# Solver source selection.
-# The active solver source tree is selected by uncommenting exactly one
-# add_subdirectory(...) line in work/CMakeLists.txt and its method subdirectory.
-# The selected work/main.cpp supplies the executable entry point.
+# Solver drivers.
+# Every work/ driver is built as its own executable (see mpm_add_driver);
+# build/MPM points to MPM_DEFAULT_DRIVER (root CMakeLists.txt).
 
 # Data generator / partitioner selection.
 # The active generator and partitioner cases are selected by uncommenting the

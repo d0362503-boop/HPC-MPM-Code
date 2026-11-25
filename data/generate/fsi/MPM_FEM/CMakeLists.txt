@@ -6,4 +6,4 @@ mpm_add_data_tool(
         ${CMAKE_SOURCE_DIR}/data/generate/solid/solid_generator.cpp
 )
 
-configure_file(input.txt input.txt COPYONLY)
+mpm_copy_input_once(input.txt)

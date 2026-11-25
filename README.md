@@ -12,17 +12,21 @@ Shared modules provide generalized-alpha/Newmark integration and VTK HDF5 visual
 
 Requires a C++17-capable GCC, MPI, CMake ≥ 3.20, and Zlib. CMake bootstraps PETSc 3.24.5 and HDF5 1.14.5 from `Ext/` into `external/`, reusing existing installations there. Hypre 3.0.0 is optional during the PETSc build.
 
-### Select the solver
+### Solver executables
 
-Enable exactly one driver in [work/CMakeLists.txt](work/CMakeLists.txt), then select its method in the corresponding nested CMake file:
+Every driver is built as its own executable in its own directory under `build/work/`, next to that driver's `file.dat`; no CMake edit is needed to switch solvers:
 
-| Driver | Method selection |
-|--------|------------------|
-| `src_fluid` | MPM (current standalone driver) |
-| `src_solid` | `explicit` or `implicit` in [work/src_solid/CMakeLists.txt](work/src_solid/CMakeLists.txt) |
-| `src_fsi` | `MPM_FEM` or `MPM_MPM` in [work/src_fsi/CMakeLists.txt](work/src_fsi/CMakeLists.txt) |
+| Driver source | Executable |
+|---------------|------------|
+| `work/src_fluid/MPM` | `build/work/src_fluid/MPM/MPM_FLUID` |
+| `work/src_solid/explicit` | `build/work/src_solid/explicit/MPM_SOLID_EXPLICIT` |
+| `work/src_solid/implicit` | `build/work/src_solid/implicit/MPM_SOLID_IMPLICIT` |
+| `work/src_fsi/MPM_FEM` | `build/work/src_fsi/MPM_FEM/MPM_FEM_FSI` |
+| `work/src_fsi/MPM_MPM` | `build/work/src_fsi/MPM_MPM/MPM_MPM_FSI` |
 
-The selected `work/**/main.cpp` supplies the executable entry point.
+`build/MPM` is a symlink to the default driver for the older `build/file.dat` workflow.
+Select it with `-DMPM_DEFAULT_DRIVER=<executable>` at configure time (default `MPM_MPM_FSI`).
+To build one driver only, use `cmake --build build --target <executable>`.
 
 ### Configure and compile
 
@@ -47,7 +51,7 @@ Build options are defined in [cmake/options.cmake](cmake/options.cmake), except 
 
 > **Do not delete `build/`.** It contains generated inputs, partition data, outputs, and local runtime state. For a clean configure, remove only `build/CMakeCache.txt` and `build/CMakeFiles/`.
 
-CMake copies some parameter files from `data/` into `build/data/`. After reconfiguring, check the selected parameter block and restart settings before launching; local runtime edits may have been overwritten.
+CMake copies parameter files (`input.txt`, `para_input_data.txt`) from `data/` into `build/data/` only when the build copy does not exist yet, so runtime edits under `build/` survive re-configures. Delete a build copy and re-configure to get the source version again.
 
 ## Prepare Input Data
 
@@ -65,39 +69,40 @@ See the [data tools guide](data/README.md) for parameter files, particle formats
 
 ## Run
 
-Run from `build/` after generating and partitioning the case data:
+Run from the driver's directory under `build/work/` after generating and partitioning the case data:
 
 ```bash
-cd build
-mpirun -np 4 ./MPM  # example: input partitioned for four ranks
+cd build/work/src_fsi/MPM_MPM
+mpirun -np 4 ./MPM_MPM_FSI  # example: input partitioned for four ranks
 ```
 
-The orchestration file `build/file.dat` conventionally contains four lines:
+Each driver directory has its own orchestration file `file.dat`, which conventionally contains four lines:
 
 1. Parameter file path
 2. Grid file prefix
 3. Point file prefix
 4. Output file prefix
 
-Per-rank files append the rank number to the input prefix, for example `griddata0.txt` and `pointdata0.txt`. Paths in `file.dat` must refer to runtime files under `build/`, such as `./data/divide/...` and `./res/...`, rather than source paths under `../data/`.
+Per-rank files append the rank number to the input prefix, for example `griddata0.txt` and `pointdata0.txt`. Paths in `file.dat` are relative to the driver directory and must refer to runtime files under `build/`, such as `../../../data/divide/...` and `../../../res/...`, never to source paths in the repository `data/`.
 
 **The MPI process count must match the partition topology, and the input mesh dimensions must match the generated partition data.**
 
 ### Background launcher and logging
 
-The host-local, gitignored `build/run.sh` launches `MPM` in the background:
+The host-local, gitignored `build/run.sh` launches a driver in the background. Pass the driver directory as `RUN_DIR`;
+the script runs the single `MPM_*` executable it finds there (falling back to `build/MPM`) with that directory's `file.dat`:
 
 ```bash
 # from build/, with matching four-rank input
-sh run.sh 4
+sh run.sh 4 work/src_fsi/MPM_MPM
 ```
 
 Use the process-count argument or `NP`. The local script falls back to `nproc` if neither is supplied; this is valid only when it matches the input partition count. Cluster copies may require `NP` and use different CPU-binding policies, so inspect the installed script.
 
 The launcher prints the process count, PID, and log paths, and inherits `PETSC_OPTIONS`:
 
-- `stdout/out_<PID>_<NP>.log`
-- `stderr/err_<PID>_<NP>.log`
+- `<RUN_DIR>/stdout/out_<PID>_<NP>.log`
+- `<RUN_DIR>/stderr/err_<PID>_<NP>.log`
 
 For event timings, launch with `PETSC_OPTIONS="-log_view" sh run.sh 4`.
 PETSc prints the summary at normal finalization. Event times can overlap and should not be summed as independent costs; ordinary NR records contain residuals and iteration counts, not separate KSP setup/solve timings. Options and rebuilt code affect new processes only.
