@@ -249,10 +249,17 @@ class CrsMat {
 
     /**
      * @brief Delegate preconditioner configuration to the owning physical field.
-     * Converts declared root groups into index sets of the full equation numbering.
+     * Converts declared root groups into compact index sets when present.
      * @param pc PETSc preconditioner associated with `ksp`.
      */
     void ConfigurePreconditioner(PC pc);
+
+    /**
+     * @brief Set up the compact solver using the owner's physical field hierarchy.
+     * @return PETSc configuration status for the current retained equations.
+     * @note Handles empty systems, compact field indices and nested PCKSP operators.
+     */
+    PetscErrorCode ConfigureReducedPreconditioner();
 
     /**
      * @brief Initialize all PETSc objects (matrix, vectors, KSP) for this system.
@@ -273,8 +280,8 @@ class CrsMat {
 
     /**
      * @brief Solve with PETSc and recover the full native x_lhs, including ghosts.
-     * @note The full operator is solved; fixed and inactive rows become unit rows, so the CSR sparsity
-     * pattern and the symbolic PC setup are reused. Native arrays keep their nodec * ndof layout.
+     * @note MPM systems solve a compressed system internally. Native assembly, RHS,
+     * boundary values and solution arrays retain their nodec * ndof layout.
      * @param NR_it Current Newton–Raphson iteration controlling preconditioner reconfiguration.
      * @pre For MPM systems `x_lhs` is all zero (each correction starts from zero); inactive and boundary
      * rows are then eliminated in one call with zero prescribed values. FEM passes its current solution.
@@ -294,17 +301,20 @@ class CrsMat {
     int SolveSystem(int NR_it = -1);
 
     /**
-     * @brief Select a physical field in the full equation numbering.
+     * @brief Select a physical field in the reduced equation numbering.
      * @param pc Preconditioner receiving the field's equation index set.
      * @param name PETSc split name used in runtime options.
      * @param components Physical components in the original nodal ordering.
      * @param parent_components Components of the enclosing split; empty means the whole system.
      * @return PETSc configuration status.
-     * @pre The PETSc matrix exists (its row ownership defines the owned equations).
-     * @note Components are taken as global ID modulo ndof (node-blocked PETSc numbering).
+     * @pre The reduced equation map has been initialized.
+     * @note Compressed indices are derived from original global IDs, never index modulo ndof.
      */
     PetscErrorCode SetFieldSplitComponents(PC pc, const char *name, const std::vector<int> &components,
                                            const std::vector<int> &parent_components = {}) const;
+
+    /** @brief Report whether the current solver has a compressed equation layout. */
+    bool HasReducedLayout() const { return this->reduced_active_is_ != nullptr; }
 
     /**
      * @brief Collect global IDs of Dirichlet boundary rows/columns into `petsc_bc_gids`.
@@ -329,7 +339,28 @@ class CrsMat {
     }
 
   private:
-    bool petsc_setup_done_ = false; // KSP set up on an assembled operator since the last (re)initialization
+    IS reduced_active_is_ = nullptr; // original retained equation IDs
+    Mat reduced_matrix_ = nullptr;   // current compressed operator
+    std::vector<PetscInt> retained_dof_gids_;
+
+    /**
+     * @brief Rebuild the map excluding exact zero-increment identity equations.
+     * @param a Full constrained operator.
+     * @param b Full constrained force or continuity RHS.
+     * @param changed True on every rank when any rank's retained equations changed.
+     * @return PETSc mapping status.
+     */
+    PetscErrorCode BuildReducedDofMap(Mat a, Vec b, bool &changed);
+
+    /**
+     * @brief Compress, solve, and expand into the original full correction vector.
+     * @param a Full operator after physical boundary elimination.
+     * @param b Full RHS including prescribed nonzero boundary values.
+     * @param x Full solution receiving retained values and zeros at removed equations.
+     * @param NR_it Newton iteration controlling preconditioner reuse.
+     * @return PETSc solve status; the convergence reason remains on ksp.
+     */
+    PetscErrorCode SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it);
 
     /**
      * @brief Configure nested physical groups on already-created PETSc sub-solvers.
@@ -338,6 +369,9 @@ class CrsMat {
      * @return PETSc nested preconditioner setup status.
      */
     PetscErrorCode ConfigureNestedFieldSplits(KSP solver, const std::vector<FieldSplit> &splits);
+
+    /** @brief Release compressed matrices and numbering before a mesh rebuild. */
+    void ResetReducedSystem();
 
     /**
      * @brief Decide whether this solve requests preconditioner reconfiguration.

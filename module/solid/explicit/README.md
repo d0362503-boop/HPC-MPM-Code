@@ -40,7 +40,7 @@ The projection consists of two steps:
 ## Integration
 
 The explicit force/mass update does not use `CrsMat` or PETSc KSP; implicit
-linear-solver and preconditioner policies do not apply.
+equation-compression and preconditioner policies do not apply.
 
 - `SolveSolid` intentionally does **not** update `nvel`; velocity is advanced inside `Node2Particle` (or preserved for FLIP) before MUSL is called.
 - `UpdateDefGrad` and `UpdateVolume` live in `SolidMaterialPointBase` and are shared with the implicit solid path.

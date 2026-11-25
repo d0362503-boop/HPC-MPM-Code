@@ -74,7 +74,7 @@ EndNewtonStep();                            // release SM_ storage
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
 - `NR_flag = false` → linear elasticity (0 NR iterations, single linear solve)
 
-### 3. Linear solver
+### 3. Linear solver and reduced equations
 
 The standalone PETSc configuration is FGMRES, restart 200, with ASM overlap 1.
 Local sub-solvers apply PREONLY + ILU(1), nonzero shift `1e-3`, through the
@@ -82,10 +82,11 @@ Local sub-solvers apply PREONLY + ILU(1), nonzero shift `1e-3`, through the
 Standalone outer defaults are `rtol=1e-10`, `atol=1e-15` and `max_it=1000`.
 
 The constructor sets `SM_.ndof=3`. Assembly and native vectors retain the
-full `nodec * 3` layout; `CrsMat` solves the full PETSc system after boundary
-and inactive-row elimination. Activity uses the absolute `nmass > mtol`
-test. The numerical PC is refreshed at each step start and reused by later
-Newton iterations. See the [shared solver guide](../../solver/README.md) for lifecycle details.
+full `nodec * 3` layout; `CrsMat` handles compact PETSc equations and solution
+recovery after boundary elimination. Activity uses the absolute `nmass > mtol`
+test. Each correction refreshes compact values and the numerical PC; layout
+changes or scheduled rebuilding recreate the KSP. See the
+[shared solver guide](../../solver/README.md) for compression and lifecycle details.
 
 ### 4. System Assembly (`AssembleSystem`)
 

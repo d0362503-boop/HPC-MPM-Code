@@ -82,7 +82,7 @@ The scalar `PF_` system delegates PC selection to the base BoomerAMG callback;
 the four-component NS system uses the velocity/pressure split. `PF_` remains
 reserved rather than advanced by the current module workflow.
 
-FEM and MPM both solve the full equation layout.
+FEM retains the full equation layout; MPM equation compression does not apply.
 The NS constructor sets `rebuild_freq=20`. Between scheduled rebuilds,
 matrix values update while the numerical PC can be reused; FieldSplit groups
 are preserved by checking the actual PC type. See the

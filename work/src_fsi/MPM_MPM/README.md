@@ -49,11 +49,12 @@ CMake collects this directory's `.cpp` files; see the
 
 The FSI coordinator assembles with the original control points and ten components.
 Native RHS and correction vectors keep their full `nodec * ndof` length and
-component-major layout. It delegates the PETSc solve and solution recovery to
-`CrsMat`, which solves the full system after boundary and inactive-row elimination.
+component-major layout. It delegates equation compression and full solution
+recovery to `CrsMat`; no compact equation numbering belongs in the assembly.
 
-`CrsMat` derives each field's index set from global equation IDs through
-`SetFieldSplitComponents()`. FSI declares only
+`CrsMat` removes only exact unit-diagonal equations with a zero RHS after
+boundary elimination. It derives each field's compact index set from original
+global equation IDs through `SetFieldSplitComponents()`. FSI declares only
 PC choices and physical groups in `ConfigurePreconditioner()`:
 
 ```text
@@ -66,7 +67,8 @@ coupled {4,5,6,7,8,9}
 ```
 
 These groups are stored in `CrsMat::field_splits`. The shared
-`CrsMat` owns the index sets, nested setup and PCKSP operator selection; FSI supplies the physical grouping and PC choices.
+`ConfigureReducedPreconditioner()` owns compact numbering, nested setup,
+and PCKSP operator selection; FSI supplies the physical grouping and PC choices.
 See the [shared solver guide](../../../module/solver/README.md).
 
 The outer FGMRES splits fluid components (0..3) from solid and multiplier

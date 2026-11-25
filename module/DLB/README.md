@@ -167,7 +167,8 @@ it, in this order:
    griddata path, so `NodeVarComm`'s sum-then-weight averaging is unchanged.
 
 The caller rebuilds mesh/control points, nodal volumes and BCs, then the
-physics matrix. `BuildCrsMat()` resets the old PETSc objects; old numbering and KSP state cannot survive a
+physics matrix. `BuildCrsMat()` resets the old PETSc objects, including compact
+maps and retained equations; old numbering and KSP state cannot survive a
 partition-layout change. See the [shared solver guide](../solver/README.md).
 
 Nodal *state* is intentionally not preserved: the fluid MPM rebuilds all nodal fields

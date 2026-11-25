@@ -125,7 +125,7 @@ PETSc prints the summary at normal finalization. Event times can overlap and sho
 
 Implementation details are maintained in the relevant guides:
 
-- [Shared linear solver](module/solver/README.md): equation layout, preconditioners, and rebuild policy
+- [Shared linear solver](module/solver/README.md): equation layout, compression, preconditioners, and rebuild policy
 - [Implicit core](module/implicit/README.md): generalized-α integrator, implicit MPM kinematics, and the Newton driver
 - [Fluid MPM](module/fluid/MPM/README.md): stabilized MPM Navier–Stokes, transfers, inflow, and DLB use
 - [Fluid FEM](module/fluid/FEM/README.md): stabilized FEM Navier–Stokes with two-phase (VOF/phase-field) properties
