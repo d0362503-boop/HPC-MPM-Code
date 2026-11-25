@@ -75,7 +75,6 @@ void StabilizedMPM::SolveNS() {
 
         this->UpdateNRIncrement();
     }
-
     // --- Memory clear ---
     std::vector<double>().swap(this->NS_.adiag);
     std::vector<double>().swap(this->NS_.amat);

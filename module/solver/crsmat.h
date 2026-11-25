@@ -272,15 +272,19 @@ class CrsMat {
     void AssemblePetscMat();
 
     /**
-     * @brief Copy the local RHS vector `b_rhs` into the PETSc RHS vector.
+     * @brief Copy a native component-major array into a PETSc vector over the owned control points.
+     * @param vec PETSc vector to fill, such as `petsc_b` or `petsc_x`.
+     * @param values Native array in `nodec * ndof` component-major layout, such as `b_rhs` or `x_lhs`.
      */
-    void UpdatePetscRhs();
+    void SetPetscVector(Vec vec, const std::vector<double> &values);
 
     /**
      * @brief Solve with PETSc and recover the full native x_lhs, including ghosts.
      * @note MPM systems solve a compressed system internally. Native assembly, RHS,
      * boundary values and solution arrays retain their nodec * ndof layout.
      * @param NR_it Current Newton–Raphson iteration controlling preconditioner reconfiguration.
+     * @pre For MPM systems `x_lhs` is all zero (each correction starts from zero); inactive and boundary
+     * rows are then eliminated in one call with zero prescribed values. FEM passes its current solution.
      * @return Number of KSP iterations, including when KSP reports divergence.
      * @warning A negative KSP convergence reason is logged on rank zero; the
      * solution is still scattered and no failure sentinel is returned.

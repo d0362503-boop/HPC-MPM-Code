@@ -1,4 +1,4 @@
-#include "module/solver/solver.h"
+#include "module/solver/native_solver.h"
 #include "module/bc.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
@@ -10,20 +10,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-
-int CrsMat::SolveSystem(int NR_it) {
-
-    int iter;
-    if (this->use_petsc) {
-        this->AssemblePetscMat();
-        iter = this->SolveWithPetsc(NR_it);
-    } else {
-        this->BuildDiagonalPreconditioner();
-        iter = GPBiCGAR(*this);
-    }
-
-    return iter;
-}
 
 int GPBiCGSafe(CrsMat &mat) {
 
@@ -418,68 +404,82 @@ std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
     return rr;
 }
 
-void CrsMat::ComputeResidualNormSq(double &ref_tol, double &abs_tol) {
+void CrsMat::ComputeDiagonalInverseSqrt() {
 
-    const int var_size = int(this->x_lhs.size());
-
-    std::vector<double> free_dof(var_size, 1.0);
-    if (this->owner_) {
-        this->owner_->BCResidualSet(this->b_rhs);
-        this->owner_->BCResidualSet(free_dof);
-    }
-
-    double rtr = 0.0e0, active_dof = 0.0e0;
+    int var_size = nodec * this->ndof;
     for (int n = 0; n < var_size; n++) {
-        if (free_dof[n] == 0.0) { continue; }
-        int nid = n % nodec;
-        if (!this->FEM_flag) {
-            if (this->owner_->nmass[nid] > mtol) {
-                double r = this->b_rhs[n];
-                rtr += r * r * dbc[n];
-                active_dof += dbc[n];
-            }
+        if (this->FEM_flag) {
+            this->adiag[n] = 1.0e0 / std::sqrt(std::abs(this->adiag[n]));
         } else {
-            double r = this->b_rhs[n];
-            rtr += r * r * dbc[n];
-            active_dof += dbc[n];
+            this->adiag[n] = (std::abs(this->adiag[n]) < mtol) ? 0.0e0 : (1.0e0 / std::sqrt(std::abs(this->adiag[n])));
         }
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, &rtr, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &active_dof, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    if (active_dof <= 0.0e0) {
-        abs_tol = 0.0e0;
-        ref_tol = 0.0e0;
-    } else {
-        abs_tol = std::sqrt(rtr / active_dof);
-        ref_tol = std::sqrt(rtr);
     }
 
     return;
 }
 
-bool CrsMat::CheckNRConvergence(int NR_it, int NR_it_max, int solver_it, double &r0r) {
+void CrsMat::ApplyDiagonalScaling() {
 
-    double rkr, rtr_abs;
-    this->ComputeResidualNormSq(rkr, rtr_abs);
-    if (NR_it == 0) { r0r = rkr; }
+    for (int i = 0; i < nodec; i++) {
+        for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
+            const int col = this->matcolid[j];
 
-    const double rtr_ref = (r0r > 1.0e-30) ? (rkr / r0r) : 0.0e0;
-
-    if (rtr_ref < 1.0e-8 || rtr_abs < 1.0e-12) {
-        if (myrank == 0) {
-            std::cout << "NR_converge:" << std::setw(15) << NR_it << std::setw(15) << solver_it << std::setw(15)
-                      << std::scientific << rtr_ref << std::setw(15) << r0r << std::setw(15) << rtr_abs << "\n";
+            for (int b = 0; b < this->num_block; b++) {
+                const int row_offset = nodec * this->block_row[b];
+                const int col_offset = nodec * this->block_col[b];
+                this->amat[j + this->block_id[b]] *= this->adiag[i + row_offset] * this->adiag[col + col_offset];
+            }
         }
-        return true;
-    } else if (NR_it == NR_it_max) {
-        if (myrank == 0) {
-            std::cout << "NR_it:" << std::setw(15) << NR_it << "\n";
-            std::cout << "NR can not converge" << "\n";
-        }
-        MPI_Abort(MPI_COMM_WORLD, -1);
     }
 
-    return false;
+    return;
+}
+
+void CrsMat::BuildDiagonalPreconditioner() {
+
+    VectorAssign(nodec * this->ndof, this->adiag);
+    this->ExtractDiagonal();
+    this->ComputeDiagonalInverseSqrt();
+    this->ApplyDiagonalScaling();
+
+    return;
+}
+
+void CrsMat::ScaleSolution(std::vector<double> &rr) {
+    const int var_size = this->x_lhs.size();
+
+    for (int n = 0; n < var_size; n++) {
+        if (this->FEM_flag) {
+            this->x_lhs[n] /= this->adiag[n];
+            rr[n] = this->b_rhs[n] * this->adiag[n];
+        } else {
+            if (this->adiag[n] < mtol) {
+                this->x_lhs[n] = 0.0e0;
+                rr[n] = 0.0e0;
+            } else {
+                this->x_lhs[n] /= this->adiag[n];
+                rr[n] = this->b_rhs[n] * this->adiag[n];
+            }
+        }
+    }
+
+    return;
+}
+
+void CrsMat::RestorSolution() {
+    const int var_size = this->x_lhs.size();
+
+    for (int n = 0; n < var_size; n++) {
+        if (this->FEM_flag) {
+            this->x_lhs[n] *= this->adiag[n];
+        } else {
+            if (this->adiag[n] > mtol) {
+                this->x_lhs[n] *= this->adiag[n];
+            } else {
+                this->x_lhs[n] = 0.0e0;
+            }
+        }
+    }
+
+    return;
 }

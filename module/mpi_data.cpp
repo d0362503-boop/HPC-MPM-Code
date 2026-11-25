@@ -46,11 +46,6 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
         int peer = -1;
         for (int i = 0; i < isb; ++i) {
             const int rank = naid[i];
-            if (rank < 0 || rank >= int(regions.size())) {
-                std::cerr << "particle migration error on rank " << myrank << ": invalid peer rank\n";
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-
             bool inside = true;
             for (int dir = 0; dir < 3; ++dir) {
                 if (element[dir] < regions[rank].elem_min[dir] || element[dir] > regions[rank].elem_max[dir]) {

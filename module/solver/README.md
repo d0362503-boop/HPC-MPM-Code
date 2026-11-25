@@ -11,9 +11,9 @@ Main files:
 | File | Role |
 |------|------|
 | `crsmat.h` | `CrsMat` definition |
-| `crsmat.cpp` | PETSc setup, assembly, solve, BC handling |
-| `crsmat_reduced.cpp` | Internal MPM equation compression, field numbering, and full-vector expansion |
-| `solver.cpp` | native fallback solvers (`GPBiCG`, `GPBiCGSafe`, `GPBiCGAR`) |
+| `crsmat.cpp` | Setup, run at initialization and DLB rebuild: CSR graph, ownership and PETSc numbering, matrix/vector/KSP creation |
+| `crsmat_solve.cpp` | Every Newton iteration: assembly, BC elimination, MPM equation compression, preconditioner setup, solve, recovery, residual norms |
+| `native_solver.cpp` | Native fallback solvers (`GPBiCG`, `GPBiCGSafe`, `GPBiCGAR`) and their diagonal-scaling helpers |
 
 ## 2. Indexing, Layout, and CRS Structure
 
@@ -117,7 +117,7 @@ For each assembled correction:
 1. `SolveSystem(NR_it)` calls `AssemblePetscMat()`, delegated to the owner.
 2. `SolveWithPetsc(NR_it)` collects current BC IDs and copies the full native RHS.
 3. Eliminate inactive and physical boundary rows/columns with prescribed values.
-4. For MPM, discard explicit zeros in a solve copy, compress, solve from zero
+4. For MPM, compress directly from the full matrix, drop explicit zeros from the compact copy, solve from zero
    and expand into the full PETSc vector. FEM solves the full matrix.
 5. `RecoverSolution()` fills native `x_lhs` through the owned/ghost scatter.
 
@@ -194,13 +194,16 @@ DLB or interpolation-support changes require a matching graph rebuild.
 
 Assembly skips rows marked inactive by the synchronized mask in Section 2.5.
 
-After the RHS and initial guess are assembled, PETSc applies
+After the RHS and initial guess are assembled, the inactive DOFs and the physical
+Dirichlet DOFs are merged into one sorted list and eliminated in a single call:
 
 ```cpp
-MatZeroRowsColumns(..., inactive_gids, 1.0, petsc_x, petsc_b);
+MatZeroRowsColumns(..., fixed_gids, 1.0, petsc_x, petsc_b);
 ```
 
-to every inactive non-Dirichlet DOF. Their initial guess is zero, so PETSc sets their RHS to zero and removes their row and column from every active equation. Physical Dirichlet DOFs are excluded from this list and are handled by the normal BC pass afterwards. This avoids weak empty-space DOFs feeding back into active MPM equations.
+MPM corrections start from an all-zero `x_lhs`, so every eliminated DOF has a zero
+prescribed value: PETSc sets its RHS to zero and removes its row and column from every
+active equation. This avoids weak empty-space DOFs feeding back into active MPM equations.
 
 #### Residual consistency for inactive MPM nodes
 
@@ -232,7 +235,9 @@ compression in `SolveWithPetsc()`. External assembly retains the existing CSR
 blocks, `nodec * ndof` RHS/correction vectors, and component-major indexing.
 
 After physical and inactive boundary elimination, `BuildReducedDofMap()` removes
-only rows containing exactly the unit diagonal with an exactly zero RHS.
+only rows whose sole nonzero is a unit diagonal and whose RHS is exactly zero; explicit zeros kept by
+`MAT_KEEP_NONZERO_PATTERN` are ignored in this test. Explicit zeros are then removed from the compact matrix only,
+so the full matrix is never duplicated.
 A zero RHS by itself does not mark an equation inactive. Nonzero prescribed
 boundary values are retained, and their column contributions have already been
 transferred to the RHS.

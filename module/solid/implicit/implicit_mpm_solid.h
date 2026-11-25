@@ -143,7 +143,6 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
 
     /**
      * @brief Tangent-modulus contribution for one particle-node pair.
-     * @param pid     Particle index.
      * @param ni      First local node index.
      * @param nj      Second local node index.
      * @param dsf     Shape-function gradients.
