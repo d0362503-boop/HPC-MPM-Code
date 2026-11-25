@@ -127,8 +127,12 @@ Implementation details are maintained in the relevant guides:
 
 - [Shared linear solver](module/solver/README.md): equation layout, preconditioners, and rebuild policy
 - [Implicit core](module/implicit/README.md): generalized-α integrator, implicit MPM kinematics, and the Newton driver
+- [Fluid MPM](module/fluid/MPM/README.md): stabilized MPM Navier–Stokes, transfers, inflow, and DLB use
+- [Fluid FEM](module/fluid/FEM/README.md): stabilized FEM Navier–Stokes with two-phase (VOF/phase-field) properties
+- [Explicit solid](module/solid/explicit/README.md): explicit MPM solid update
 - [Implicit solid](module/solid/implicit/README.md): nonlinear solve and solid preconditioning
 - [MPM–MPM FSI](work/src_fsi/MPM_MPM/README.md): coupled Newton loop, interface handling, and solver strategy
+- [MPM–FEM FSI](work/src_fsi/MPM_FEM/README.md): partitioned block iteration, interface force and added mass, Anderson relaxation
 - [Dynamic load balancing](module/DLB/README.md): fluid MPM partitioning
 - [AGENTS.md](AGENTS.md): engineering conventions and critical parallel rules; read before modifying the solver core
 
