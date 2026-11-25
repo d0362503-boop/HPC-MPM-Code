@@ -183,7 +183,7 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
 
     /** @brief Apply Dirichlet displacement increments for NR iteration. */
     void BCNRSet() {
-        this->implicit_.ApplyDisplacementBC(*this, this->ndispl);
+        this->ApplyDisplacementBC(this->ndispl);
         this->pbc.BCSetVal(0, this->npres);
 
         return;

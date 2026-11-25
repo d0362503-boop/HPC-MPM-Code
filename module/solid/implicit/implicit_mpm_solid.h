@@ -124,10 +124,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @brief Apply Dirichlet displacement increments for current NR iteration.
      */
     void BCNRSet() {
-        this->implicit_.ApplyDisplacementBC(*this, this->ndispl);
-        this->rigid_bc.BCSetDispl(nuc, this->ndispl, this->implicit_.integrator_, this->nvel, this->naccel);
-        this->rigid_bc.BCSetDispl(nvc, this->ndispl, this->implicit_.integrator_, this->nvel, this->naccel);
-        this->rigid_bc.BCSetDispl(nwc, this->ndispl, this->implicit_.integrator_, this->nvel, this->naccel);
+        this->ApplyDisplacementBC(this->ndispl);
 
         return;
     };

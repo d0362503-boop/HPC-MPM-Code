@@ -101,6 +101,18 @@ class MaterialPoint {
     }
 
     /**
+     * @brief Apply prescribed Dirichlet values to a nodal displacement increment.
+     * @param ndispl Displacement increment modified in-place at constrained DOFs.
+     */
+    virtual void ApplyDisplacementBC(std::vector<double> &ndispl) {
+        this->ubc.BCSetDispl(nuc, ndispl);
+        this->vbc.BCSetDispl(nvc, ndispl);
+        this->wbc.BCSetDispl(nwc, ndispl);
+
+        return;
+    }
+
+    /**
      * @brief Divide a nodal vector by a nodal weight with a small-weight cutoff.
      * @param result    Output vector (zero-initialized and overwritten in-place).
      * @param numerator Nodal vector to divide.

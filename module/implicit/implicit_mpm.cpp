@@ -15,14 +15,6 @@ void ImplicitMPM::ComputeNodeVelAccelFromDispl(const MaterialPoint &mp, std::vec
     return;
 }
 
-void ImplicitMPM::ApplyDisplacementBC(MaterialPoint &mp, std::vector<double> &ndispl) const noexcept {
-    mp.ubc.BCSetDispl(nuc, ndispl, this->integrator_, mp.nvel, mp.naccel);
-    mp.vbc.BCSetDispl(nvc, ndispl, this->integrator_, mp.nvel, mp.naccel);
-    mp.wbc.BCSetDispl(nwc, ndispl, this->integrator_, mp.nvel, mp.naccel);
-
-    return;
-}
-
 double ImplicitMPM::LumpedMass(const MaterialPoint &mp, int pid, double sfi) const noexcept {
     double emd = this->integrator_.da_du * sfi * mp.mass[pid];
 

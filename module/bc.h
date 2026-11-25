@@ -1,6 +1,5 @@
 #pragma once
 
-#include "module/implicit/generalized_alpha_integrator.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -44,15 +43,13 @@ class BoundaryCondition {
     void BCSetZero(int nn, std::vector<double> &variable);
 
     /**
-     * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.
+     * @brief Set the displacement increment `facl * dt * fbc` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
-     * @param variable Vector to be modified in-place.
-     * @param integrator Time integrator providing the Newmark weights `beta_nb` and `gamma_nb`.
-     * @param nvel     Nodal velocity at the start of the step.
-     * @param naccel   Nodal acceleration at the start of the step.
+     * @param variable Displacement increment modified in-place.
+     * @note Matches the Newmark endpoint velocity `facl * fbc` because the step-start
+     * `nvel` and `naccel` already hold `facl * fbc` and zero there (ApplyVelocityBC / ApplyAccelerationBC in P2G).
      */
-    void BCSetDispl(int nn, std::vector<double> &variable, const GeneralizedAlphaIntegrator &integrator,
-                    const std::vector<double> &nvel, const std::vector<double> &naccel);
+    void BCSetDispl(int nn, std::vector<double> &variable);
 
     /**
      * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.

@@ -73,19 +73,12 @@ void BoundaryCondition::BCSetZero(int nn, std::vector<double> &variable) {
     return;
 }
 
-void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, const GeneralizedAlphaIntegrator &integrator,
-                                   const std::vector<double> &nvel, const std::vector<double> &naccel) {
-
-    double beta = integrator.beta_nb;
-    double gamma = integrator.gamma_nb;
-    double coeff = beta / gamma;
+void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable) {
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = facl * coeff * dt * this->fbc[i] //
-                          + (1.0e0 - coeff) * dt * nvel[n] //
-                          + (0.5e0 - coeff) * dt * dt * naccel[n];
+            variable[n] = facl * dt * this->fbc[i];
         }
     }
 

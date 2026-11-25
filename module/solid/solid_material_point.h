@@ -187,6 +187,22 @@ class SolidMaterialPointBase : public MaterialPoint {
         return;
     }
 
+    /**
+     * @brief Apply prescribed Dirichlet values to a nodal displacement increment,
+     *        including rigid-body constraints.
+     * @param ndispl Displacement increment modified in-place at constrained DOFs.
+     */
+    void ApplyDisplacementBC(std::vector<double> &ndispl) override {
+
+        MaterialPoint::ApplyDisplacementBC(ndispl);
+
+        this->rigid_bc.BCSetDispl(nuc, ndispl);
+        this->rigid_bc.BCSetDispl(nvc, ndispl);
+        this->rigid_bc.BCSetDispl(nwc, ndispl);
+
+        return;
+    }
+
     /** @brief Advance the solid nodal solve using the selected explicit or implicit method. */
     virtual void SolveSolid() = 0;
 

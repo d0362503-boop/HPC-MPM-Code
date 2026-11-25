@@ -30,13 +30,6 @@ class ImplicitMPM {
                                       std::vector<double> &naccel_k) const noexcept;
 
     /**
-     * @brief Apply prescribed Dirichlet values to a nodal displacement increment.
-     * @param mp     Material-point object providing the velocity BCs and nodal kinematics.
-     * @param ndispl Nodal displacement increment modified in-place at constrained DOFs.
-     */
-    void ApplyDisplacementBC(MaterialPoint &mp, std::vector<double> &ndispl) const noexcept;
-
-    /**
      * @brief Lumped-mass contribution of one particle to the Newton tangent.
      * @param mp  Material-point object providing particle masses.
      * @param pid Particle index.
