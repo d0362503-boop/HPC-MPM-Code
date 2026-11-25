@@ -10,11 +10,11 @@ Key deps: MPI, PETSc 3.24.5 (auto-bootstrapped from `Ext/petsc-3.24.5.tar.gz` in
 
 ## 2. Build & Run
 
-**Current:** Root CMake workflow. Every driver under `work/` is built as its own executable via `mpm_add_driver()` (`cmake/MPMTools.cmake`): each executable is written to its driver's build directory, e.g. `build/work/src_fsi/MPM_MPM/MPM_MPM_FSI`, next to that driver's `file.dat`. `build/MPM` is a symlink to `MPM_DEFAULT_DRIVER` (default `MPM_MPM_FSI`) for the older `build/file.dat` workflow. Build: `cmake -S . -B build && cmake --build build -j8`. Parameter files are copied into `build/data/` only when missing (`mpm_copy_input_once`).
+**Current:** Root CMake workflow. Every driver under `work/` is built as its own executable via `mpm_add_driver()` (`cmake/MPMTools.cmake`): each executable is written to its driver's build directory, e.g. `build/work/src_fsi/MPM_MPM/MPM_MPM_FSI`, next to that driver's `file.dat`. Build: `cmake -S . -B build && cmake --build build -j8`. Parameter files are copied into `build/data/` only when missing (`mpm_copy_input_once`).
 
 **Never delete `build/`:** The `build/` directory contains generated runtime files, partitioned input data, job outputs, and local working state. Deleting it can destroy an ongoing or future simulation setup. If a clean configure is needed, remove only `CMakeCache.txt` and `CMakeFiles/` inside `build/` — never `rm -rf build`, and never use an alternative build directory.
 Run from the driver directory, e.g. `build/work/src_fsi/MPM_MPM`: `mpirun -np N ./MPM_MPM_FSI` (or from `build/`: `sh run.sh N work/src_fsi/MPM_MPM`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
-A convenience script `build/run.sh` exists but is gitignored. It runs the single `MPM_*` executable found in `RUN_DIR` (falling back to `build/MPM`) in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh N [CPU_LIST] [RUN_DIR]`, e.g. `sh run.sh 61 work/src_fsi/MPM_MPM`; logs go to `RUN_DIR/stdout` and `RUN_DIR/stderr`.
+A convenience script `build/run.sh` exists but is gitignored. It runs the single `MPM_*` executable found in `RUN_DIR` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh N [CPU_LIST] [RUN_DIR]`, e.g. `sh run.sh 61 work/src_fsi/MPM_MPM`; logs go to `RUN_DIR/stdout` and `RUN_DIR/stderr`.
 
 ### CMake target dependency rules
 

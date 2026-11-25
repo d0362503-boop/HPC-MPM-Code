@@ -1,4 +1,4 @@
 # -----------------------------------------------------------------------------
-# Fluid MPM driver -> build/MPM_FLUID
+# Fluid MPM driver -> build/work/src_fluid/MPM/MPM_FLUID
 # -----------------------------------------------------------------------------
 mpm_add_driver(MPM_FLUID)

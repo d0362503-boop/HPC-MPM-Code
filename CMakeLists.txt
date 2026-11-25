@@ -99,18 +99,7 @@ add_subdirectory(module)
 add_subdirectory(data)
 add_subdirectory(work)
 
-# ----------------------------------------------------------------------------
-# build/MPM: symlink to the default driver for the old build/-level workflow (build/file.dat)
-# ----------------------------------------------------------------------------
-set(MPM_DEFAULT_DRIVER MPM_MPM_FSI CACHE STRING "Driver executable that build/MPM points to")
 get_property(MPM_DRIVERS GLOBAL PROPERTY MPM_DRIVERS)
-if(NOT MPM_DEFAULT_DRIVER IN_LIST MPM_DRIVERS)
-    message(FATAL_ERROR "MPM_DEFAULT_DRIVER '${MPM_DEFAULT_DRIVER}' is not one of: ${MPM_DRIVERS}")
-endif()
-add_custom_target(mpm_default_link ALL
-    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_BINARY_DIR}/MPM
-    COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${MPM_DEFAULT_DRIVER}> ${CMAKE_BINARY_DIR}/MPM
-    DEPENDS ${MPM_DEFAULT_DRIVER})
 
 # ----------------------------------------------------------------------------
 # Configuration summary
@@ -126,7 +115,6 @@ message(STATUS "  C++ compiler      : ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILE
 message(STATUS "  Build type        : ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Native arch       : ${MPM_ENABLE_NATIVE_ARCH}")
 message(STATUS "  Drivers           : ${MPM_DRIVERS}")
-message(STATUS "  Default (MPM)     : ${MPM_DEFAULT_DRIVER}")
 message(STATUS "  MPI               : ${MPI_CXX_COMPILER} (USE_MPI=${USE_MPI})")
 message(STATUS "  PETSc             : ${PETSC_DIR} (system=${MPM_PETSC_USE_SYSTEM})")
 message(STATUS "  HDF5              : ${HDF5_INCLUDE_DIRS} (system=${MPM_HDF5_USE_SYSTEM})")

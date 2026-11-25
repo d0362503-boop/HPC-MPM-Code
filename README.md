@@ -24,8 +24,6 @@ Every driver is built as its own executable in its own directory under `build/wo
 | `work/src_fsi/MPM_FEM` | `build/work/src_fsi/MPM_FEM/MPM_FEM_FSI` |
 | `work/src_fsi/MPM_MPM` | `build/work/src_fsi/MPM_MPM/MPM_MPM_FSI` |
 
-`build/MPM` is a symlink to the default driver for the older `build/file.dat` workflow.
-Select it with `-DMPM_DEFAULT_DRIVER=<executable>` at configure time (default `MPM_MPM_FSI`).
 To build one driver only, use `cmake --build build --target <executable>`.
 
 ### Configure and compile
@@ -90,7 +88,7 @@ Per-rank files append the rank number to the input prefix, for example `griddata
 ### Background launcher and logging
 
 The host-local, gitignored `build/run.sh` launches a driver in the background. Pass the driver directory as `RUN_DIR`;
-the script runs the single `MPM_*` executable it finds there (falling back to `build/MPM`) with that directory's `file.dat`:
+the script runs the single `MPM_*` executable it finds there with that directory's `file.dat`:
 
 ```bash
 # from build/, with matching four-rank input

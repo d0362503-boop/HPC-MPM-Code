@@ -3,8 +3,8 @@
 # ----------------------------------------------------------------------------
 
 # Solver drivers.
-# Every work/ driver is built as its own executable (see mpm_add_driver);
-# build/MPM points to MPM_DEFAULT_DRIVER (root CMakeLists.txt).
+# Every work/ driver is built as its own executable in its driver build
+# directory (see mpm_add_driver).
 
 # Data generator / partitioner selection.
 # The active generator and partitioner cases are selected by uncommenting the
