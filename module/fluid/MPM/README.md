@@ -19,7 +19,8 @@ Shared helpers live outside this directory:
 
 - `module/particle_shifting.cpp` — `DeltaCorrectionPST()` and `PairwiseRepulsivePST()`.
 - `module/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
-- `module/material_point.cpp` — `CommitNodalKinematics`, closed-boundary position helpers, and `CommitImplicitParticleKinematics`.
+- `module/material_point.cpp` — closed-boundary position helpers.
+- `module/implicit_mpm.cpp` — `ImplicitMPM` (owned as `implicit_`): endpoint kinematics, inertia terms, `CommitNodalKinematics` and `CommitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
 ## Class and Defaults
@@ -66,25 +67,26 @@ See the [DLB guide](../../DLB/README.md) for the pipeline and its invariants.
 
 ### 1. Newmark-β / Generalized-α predictor
 
-Time-integration parameters belong to `MaterialPoint::integrator_`
-(`GeneralizedAlphaIntegrator`). Existing kinematic helper methods forward the
-particle object's nodal arrays to this independent component; particle commits
-and FLIP updates remain in `MaterialPoint`.
+Time-integration parameters belong to `implicit_.integrator_`
+(`GeneralizedAlphaIntegrator`). `implicit_` is the `ImplicitMPM` component
+(`module/implicit_mpm.h`) owned by the implicit MPM solvers. It holds only implicit
+state; its kinematics, inertia, particle-commit and FLIP-update functions take the
+particle object (`*this`) whose arrays they read or write. Explicit solvers do not carry it.
 
 At the start of each NR iteration the nodal displacement increment `ndispl` is used to predict velocity and acceleration:
 
 ```cpp
-ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
+implicit_.EndpointKinematics(*this, nvel_k, naccel_k);
 ```
 
-Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `GeneralizedAlphaParaSet` / `NewmarkBetaParaSet` in the base class.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
+Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `implicit_.integrator_.GeneralizedAlphaParaSet()` / `NewmarkBetaParaSet(dt)` in `DataInput`.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
 
 ### 2. Newton–Raphson loop (`SolveNS`)
 
 ```cpp
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet displacement/pressure values
-    ComputeNodeVelAccelFromDispl(...);     // predictor
+    implicit_.EndpointKinematics(...);     // predictor
     AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
     if CheckNRConvergence(...) break;       // check current physical RHS
     zero NS_.x_lhs;                        // new correction starts from zero
@@ -132,7 +134,7 @@ For each particle:
 This fluid assembly uses the gradients from `MakeSF` directly; it does not call
 the solid's `ImplicitDsfCorr` during NR assembly.
 
-The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `AddInertialForceToRHS` adds the inertial contribution.
+The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `implicit_.AddInertialForce` adds the inertial contribution.
 
 ### Linear solve (`SolveSystem`)
 
@@ -149,12 +151,12 @@ refresh, and full-vector recovery. Never classify compact fields using
 
 ### G2P and particle motion (`Node2Particle`)
 
-1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`CommitNodalKinematics`).
+1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`implicit_.CommitNodalKinematics`).
 2. Reset particle velocity/acceleration and TPIC/APIC state.
 3. Interpolate pressure, displacement, acceleration, and velocity back to particles (scheme-aware).
 4. Recompute APIC `inv_Dmat` if needed.
 5. Compute a particle-shifting correction (`PairwiseRepulsivePST` is currently active; `DeltaCorrectionPST` is available but commented out in `Node2Particle`).
-6. Commit particle kinematics (`CommitImplicitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
+6. Commit particle kinematics (`implicit_.CommitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
 
 The shared commit does not apply a closed-face coordinate clamp. Applying nodal velocity/displacement BCs does not by itself
 guarantee that a finite PIC displacement stays inside the domain. Particle

@@ -7,7 +7,7 @@ void MPMMPMMonolithicFSI::AssembleFluidSystem(const std::vector<double> &nvel_k,
 
     this->fluid_.AssembleSystem(this->fsi_sys, nvel_k, naccel_k);
 
-    const double af = this->fluid_.integrator_.alpha_f;
+    const double af = this->fluid_.implicit_.integrator_.alpha_f;
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);
@@ -27,7 +27,7 @@ void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &naccel_
 
     this->solid_.AssembleSystem(this->fsi_sys, naccel_k, stress_k);
 
-    const double af = this->solid_.integrator_.alpha_f;
+    const double af = this->solid_.implicit_.integrator_.alpha_f;
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;
         int ida = this->fsi_sys.FindIndex(n, n, ncol);
@@ -45,8 +45,8 @@ void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &naccel_
 void MPMMPMMonolithicFSI::AssembleInterfaceSystem(const std::vector<double> &nvel_f,
                                                  const std::vector<double> &nvel_s) {
 
-    const double cf = this->fluid_.integrator_.dv_du;
-    const double cs = this->solid_.integrator_.dv_du;
+    const double cf = this->fluid_.implicit_.integrator_.dv_du;
+    const double cs = this->solid_.implicit_.integrator_.dv_du;
 
     for (int n = 0; n < nodec; n++) {
         int ncol = 0;

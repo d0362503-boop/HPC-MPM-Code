@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "module/dataset.h"
+#include "module/implicit_mpm.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -24,6 +25,7 @@ class StabilizedMPM : public MaterialPoint {
     std::vector<double> tau1, tau2;
     // Navier-Stokes system matrix
     CrsMat NS_;
+    ImplicitMPM implicit_; // implicit time integration and kinematics
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
 
@@ -31,9 +33,9 @@ class StabilizedMPM : public MaterialPoint {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->do_dlb = false;
-        this->integrator_.gamma_nb = 1.0e0;
-        this->integrator_.beta_nb = 0.5e0;
-        this->integrator_.ode_order = 2;
+        this->implicit_.integrator_.gamma_nb = 1.0e0;
+        this->implicit_.integrator_.beta_nb = 0.5e0;
+        this->implicit_.integrator_.ode_order = 2;
         this->NS_.ndof = 4;
         this->NS_.block_row = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
         this->NS_.block_col = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
@@ -151,8 +153,8 @@ class StabilizedMPM : public MaterialPoint {
     };
 
     /** @brief Apply Dirichlet displacement increments for NR iteration. */
-    void BCNRSet() override {
-        this->ApplyDisplacementBC(this->ndispl);
+    void BCNRSet() {
+        this->implicit_.ApplyDisplacementBC(*this, this->ndispl);
         this->pbc.BCSetVal(0, this->npres);
 
         return;
@@ -169,7 +171,7 @@ class StabilizedMPM : public MaterialPoint {
                                 const std::vector<double> &naccel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
-    void UpdateNRIncrement() override;
+    void UpdateNRIncrement();
 
     /** @brief Generate inflow particles for all active directions. */
     void InflowParticles() override;

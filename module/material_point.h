@@ -7,7 +7,6 @@
 
 #include "module/bc.h"
 #include "module/dataset.h"
-#include "module/generalized_alpha_integrator.h"
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -102,18 +101,6 @@ class MaterialPoint {
     }
 
     /**
-     * @brief Zero out a vector at constrained Dirichlet DOFs (typical for displacement/residual).
-     * @param ndispl Vector to be zeroed in-place at constrained DOFs.
-     */
-    virtual void ApplyDisplacementBC(std::vector<double> &ndispl) {
-        this->ubc.BCSetDispl(nuc, ndispl, this->integrator_, this->nvel, this->naccel);
-        this->vbc.BCSetDispl(nvc, ndispl, this->integrator_, this->nvel, this->naccel);
-        this->wbc.BCSetDispl(nwc, ndispl, this->integrator_, this->nvel, this->naccel);
-
-        return;
-    }
-
-    /**
      * @brief Divide a nodal vector by a nodal weight with a small-weight cutoff.
      * @param result    Output vector (zero-initialized and overwritten in-place).
      * @param numerator Nodal vector to divide.
@@ -165,65 +152,7 @@ class MaterialPoint {
     virtual void RebuildBC() {}
     // ---------------
 
-    // --- For Implicit MPM ---
-    // --- Nonlinear time integration part ---
-    // --- Generalized-α part ---
-    GeneralizedAlphaIntegrator integrator_; // time integration state
-
-    /**
-     * @brief Delegate generalized-alpha weight setup to the owned integrator.
-     *
-     * Sets the weights in `integrator_` using its spectral radius and equation
-     * order. Call NewmarkBetaParaSet() separately to refresh its displacement coefficients.
-     */
-    void GeneralizedAlphaParaSet() {
-
-        this->integrator_.GeneralizedAlphaParaSet();
-
-        return;
-    }
-
-    /**
-     * @brief Compute nodal acceleration from nodal velocity by inverting the
-     *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
-     * @return Vector of derived accelerations sized to `nodec * 3`.
-     */
-    std::vector<double> ComputeNodeAccelFromVel() const {
-
-        return this->integrator_.ComputeNodeAccelFromVel(this->nvel, this->nvel_old, this->naccel, dt);
-    }
-
-    // --- Newmark-β part ---
-    /**
-     * @brief Refresh integrator displacement coefficients using the global time step.
-     */
-    void NewmarkBetaParaSet() {
-
-        this->integrator_.NewmarkBetaParaSet(dt);
-
-        return;
-    }
-
-    /**
-     * @brief Compute nodal velocity and acceleration from the nodal displacement
-     *        increment by inverting the Newmark-β relations (implicit path).
-     * @param nvel_k   Output nodal velocity vector (size `nodec * 3`).
-     * @param naccel_k Output nodal acceleration vector (size `nodec * 3`).
-     */
-    void ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept {
-
-        this->integrator_.ComputeNodeVelAccelFromDispl(this->ndispl, this->nvel, this->naccel, nvel_k, naccel_k);
-
-        return;
-    }
-    // ------------------------------
-
-    // --- Newton-Raphson ---
-    bool NR_flag = true;
-
-    // --- Need to define in each src folder ---
-    virtual void BCNRSet() {};
-
+    // --- Linear-system callbacks used by CrsMat ---
     virtual void BuildPetscBCList(CrsMat &mat) {};
 
     /**
@@ -246,61 +175,6 @@ class MaterialPoint {
 
     virtual void BCResidualSet(std::vector<double> &rr) {};
     // ------------------------------------------
-
-    virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
-        double emd = this->integrator_.da_du * sfi * this->mass[pid];
-
-        return emd;
-    }
-
-    /**
-     * @brief Add nodal inertial forces to the implicit system RHS.
-     * @param mat System receiving the inertial force residual.
-     * @param naccel Nodal acceleration at the inertia evaluation time level.
-     * @param offsets RHS offsets for the x, y and z momentum components.
-     */
-    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, //
-                                       const std::vector<int> &offsets) {
-
-        for (int n = 0; n < nodec; n++) {
-            // --- For Generalized-α (if α_m = 1, back to Newmark-β) ---
-            mat.b_rhs[n + offsets[0]] -= this->nmass[n] * naccel[n + nuc];
-            mat.b_rhs[n + offsets[1]] -= this->nmass[n] * naccel[n + nvc];
-            mat.b_rhs[n + offsets[2]] -= this->nmass[n] * naccel[n + nwc];
-        };
-
-        return;
-    }
-
-    virtual void UpdateNRIncrement() {};
-
-    /**
-     * @brief Commit the converged nodal velocity and acceleration for the time step.
-     * @param nvel_k   Converged nodal velocity vector.
-     * @param naccel_k Converged nodal acceleration vector.
-     */
-    void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
-
-    /**
-     * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
-     *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
-     * @param accel_old Particle acceleration from the previous step.
-     * @param disp Particle displacement increments interpolated from control points.
-     * @param disp_corr Per-particle shifting displacements; empty or zero disables shifting.
-     */
-    void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
-                                          const std::vector<std::array<double, 3>> &disp,
-                                          const std::vector<std::array<double, 3>> &disp_corr = {});
-
-    /**
-     * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
-     * @param nc     Node IDs of the element supporting the material point.
-     * @param nenode Number of nodes in the element.
-     * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
-     */
-    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
-    // ------------------------
-    // ------------------------
 
     // --- Particle part ---
     int num = 0;                          // --- Particle number ---

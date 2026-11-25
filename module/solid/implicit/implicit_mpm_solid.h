@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "module/dataset.h"
+#include "module/implicit_mpm.h"
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -16,7 +17,9 @@ namespace implicitmpm {
 class ImplicitSolidMPM : public SolidMaterialPointBase {
   public:
     CrsMat SM_;
-    std::vector<int> blocks; // target scalar block indices
+    ImplicitMPM implicit_;        // implicit time integration and kinematics
+    bool NR_flag;                 // Newton iterations; false for linear elasticity
+    std::vector<int> blocks;      // target scalar block indices
     int rhs_start;           // first target component index
 
     /** @brief Initialize the three-component implicit solid system and its PETSc owner. */
@@ -25,9 +28,9 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         this->rhs_start = 0;
         this->NR_flag = true;
         this->do_dlb = false;
-        this->integrator_.gamma_nb = 0.5e0;
-        this->integrator_.beta_nb = 0.25e0;
-        this->integrator_.ode_order = 2;
+        this->implicit_.integrator_.gamma_nb = 0.5e0;
+        this->implicit_.integrator_.beta_nb = 0.25e0;
+        this->implicit_.integrator_.ode_order = 2;
         this->cm_.implicit_flag = true;
         this->SM_.ndof = 3;
         this->SM_.block_row = {0, 0, 0, 1, 1, 1, 2, 2, 2};
@@ -93,11 +96,11 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     /**
      * @brief Apply Dirichlet displacement increments for current NR iteration.
      */
-    void BCNRSet() override {
-        this->ApplyDisplacementBC(this->ndispl);
-        this->rigid_bc.BCSetDispl(nuc, this->ndispl, this->integrator_, this->nvel, this->naccel);
-        this->rigid_bc.BCSetDispl(nvc, this->ndispl, this->integrator_, this->nvel, this->naccel);
-        this->rigid_bc.BCSetDispl(nwc, this->ndispl, this->integrator_, this->nvel, this->naccel);
+    void BCNRSet() {
+        this->implicit_.ApplyDisplacementBC(*this, this->ndispl);
+        this->rigid_bc.BCSetDispl(nuc, this->ndispl, this->implicit_.integrator_, this->nvel, this->naccel);
+        this->rigid_bc.BCSetDispl(nvc, this->ndispl, this->implicit_.integrator_, this->nvel, this->naccel);
+        this->rigid_bc.BCSetDispl(nwc, this->ndispl, this->implicit_.integrator_, this->nvel, this->naccel);
 
         return;
     };
@@ -155,7 +158,39 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     /**
      * @brief Add the current linear correction to the endpoint nodal displacement increment.
      */
-    void UpdateNRIncrement() override;
+    void UpdateNRIncrement();
+
+    /**
+     * @brief Lumped-mass contribution of one particle to the Newton tangent.
+     * @param pid Particle index.
+     * @param sfi Shape-function value at the control point.
+     * @return Diagonal inertia term; FSI solids add their added-mass contribution.
+     */
+    virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
+
+        return this->implicit_.LumpedMass(*this, pid, sfi);
+    }
+
+    /**
+     * @brief Add nodal inertial forces to the implicit system RHS.
+     * @param mat System receiving the inertial force residual.
+     * @param naccel Nodal acceleration at the inertia evaluation time level.
+     * @param offsets RHS offsets for the x, y and z momentum components.
+     */
+    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) {
+
+        this->implicit_.AddInertialForce(*this, mat, naccel, offsets);
+
+        return;
+    }
+
+    /**
+     * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
+     * @param nc     Node IDs of the element supporting the material point.
+     * @param nenode Number of nodes in the element.
+     * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
+     */
+    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
 };
 
 } // namespace implicitmpm

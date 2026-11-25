@@ -48,16 +48,19 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 
 ### 1. Time Integration — Newmark-β / Generalized-α
 
-`MaterialPoint::integrator_` owns the generalized-alpha/Newmark coefficients.
-`ComputeNodeVelAccelFromDispl()` predicts nodal kinematics from the current
-displacement iterate; `CommitNodalKinematics()` commits the converged state.
+`implicit_.integrator_` owns the generalized-alpha/Newmark coefficients; `implicit_`
+is the `ImplicitMPM` component (`module/implicit_mpm.h`) owned by `ImplicitSolidMPM`.
+`implicit_.EndpointKinematics()` predicts nodal kinematics from the current
+displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged state.
+`ComputeNRLumpedMassMat()` and `AddInertialForceToRHS()` stay virtual on
+`ImplicitSolidMPM` so FSI solids can add their added-mass terms.
 
 ### 2. Newton–Raphson Loop (`SolveSolid`)
 
 ```cpp
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
-    ComputeNodeVelAccelFromDispl(...);     // predictor step
+    implicit_.EndpointKinematics(...);     // predictor step
     AssembleSystem(SM_, naccel_k, stress_k);
     if NR_flag && CheckNRConvergence() break; // check current physical RHS
     zero SM_.x_lhs;                         // new correction starts from zero
@@ -137,7 +140,7 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 #### `Node2Particle`
 
 - Predict velocity / acceleration with Newmark-β
-- Commit nodal kinematics (`CommitNodalKinematics`)
+- Commit nodal kinematics (`implicit_.CommitNodalKinematics`)
 - G2P: update particle displacement gradient (`UpdateDefGrad`), stress, velocity, acceleration
 - Update particle position: `coord += disp + disp_corr`
 - Particle shifting (`DeltaCorrectionPST`) for uniform distribution

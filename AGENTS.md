@@ -34,7 +34,7 @@ Never point `file.dat` at source-tree paths in the repository `data/` directory.
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
-- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
+- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm) / `ExplicitSolidMPM`; `MaterialPoint` → `StabilizedMPM`. Implicit time integration (generalized-α integrator, endpoint kinematics, inertia terms, kinematic commits) lives in the `ImplicitMPM` component (`module/implicit_mpm.h`), owned as `implicit_` by `ImplicitSolidMPM` and `StabilizedMPM`; `StabilizedFEM` owns its own `integrator_`.
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h` / `map_and_interpolate.cpp`, selected by `solswitch` (`MapScheme` enum parsed from the input string).
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Parallel ownership and inactive-row handling are now explicit; see `module/solver/README.md`.
 - **Dynamic load balancing:** `module/DLB/` repartitions background elements across ranks from particle samples (fluid MPM only, `do_dlb` flag in `input.txt`). Regions are broadcast state — read them via `mpm_dlb::CurrentRegions()`; see `module/DLB/README.md`.

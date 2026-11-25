@@ -19,7 +19,6 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
     this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
     this->fluid_.rhs_start = 0;
     this->solid_.rhs_start = 4;
-    this->integrator_.ode_order = 2;
     this->fsi_sys.ndof = 10;
     this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
                                4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
@@ -58,10 +57,10 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
         VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
 
         this->fluid_.BCNRSet();
-        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
+        this->fluid_.implicit_.EndpointKinematics(this->fluid_, nvel_f, naccel_f);
 
         this->solid_.BCNRSet();
-        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
+        this->solid_.implicit_.EndpointKinematics(this->solid_, nvel_s, naccel_s);
 
         this->AssembleFluidSystem(nvel_f, naccel_f);
         this->AssembleSolidSystem(naccel_s, stress_k);

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "module/dataset.h"
+#include "module/generalized_alpha_integrator.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -24,6 +25,7 @@ class StabilizedFEM : public MaterialPoint {
     // Element density and viscosity
     std::vector<double> rhoe, rmue;
     // Navier-Stokes system matrix
+    GeneralizedAlphaIntegrator integrator_; // time integration state
     CrsMat NS_;
     // Phase-field system matrix
     CrsMat PF_;
@@ -76,6 +78,16 @@ class StabilizedFEM : public MaterialPoint {
     };
 
     /** @brief Solve the stabilized Navier-Stokes system. */
+    /**
+     * @brief Compute nodal acceleration from nodal velocity by inverting the
+     *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
+     * @return Vector of derived accelerations sized to `nodec * 3`.
+     */
+    std::vector<double> ComputeNodeAccelFromVel() const {
+
+        return this->integrator_.ComputeNodeAccelFromVel(this->nvel, this->nvel_old, this->naccel, dt);
+    }
+
     void SolveNS();
 
     /**

@@ -204,7 +204,8 @@ void MPMFEMFSIGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->solid_.integrator_.spec_rad;
+    double spec_rad; // read past; not used by the generator
+    infile >> dt >> mtol >> spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');

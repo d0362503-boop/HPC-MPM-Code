@@ -43,7 +43,7 @@ void MPMMPMMonolithicFSI::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->fluid_.integrator_.spec_rad >> this->solid_.integrator_.spec_rad;
+    infile >> dt >> mtol >> this->fluid_.implicit_.integrator_.spec_rad >> this->solid_.implicit_.integrator_.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -95,10 +95,10 @@ void MPMMPMMonolithicFSI::DataInput() {
     InitializeMeshAndTimeParameters();
 
     // --- Generalized α & Newmark β parameter Init ---
-    this->solid_.GeneralizedAlphaParaSet();
-    this->solid_.NewmarkBetaParaSet();
-    this->fluid_.GeneralizedAlphaParaSet();
-    this->fluid_.NewmarkBetaParaSet();
+    this->solid_.implicit_.integrator_.GeneralizedAlphaParaSet();
+    this->solid_.implicit_.integrator_.NewmarkBetaParaSet(dt);
+    this->fluid_.implicit_.integrator_.GeneralizedAlphaParaSet();
+    this->fluid_.implicit_.integrator_.NewmarkBetaParaSet(dt);
     // --------------------------------
 
     std::string filename = gridfile + std::to_string(myrank) + ".txt";

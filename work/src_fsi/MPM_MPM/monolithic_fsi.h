@@ -50,7 +50,7 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     void CorrectFluidPenetration();
 
     /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
-    void UpdateNRIncrement() override;
+    void UpdateNRIncrement();
 
     /**
      * @brief Register fixed and inactive monolithic components.

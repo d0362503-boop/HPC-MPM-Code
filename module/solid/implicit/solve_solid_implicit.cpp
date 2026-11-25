@@ -91,7 +91,7 @@ void ImplicitSolidMPM::SolveSolid() {
 
         this->BCNRSet();
 
-        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->implicit_.EndpointKinematics(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
         VectorAssign(this->SM_.nmata, this->SM_.amat);
         VectorAssign(nodec * 3, this->SM_.b_rhs);
@@ -123,9 +123,9 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
 
     const std::vector<int> offsets = this->RHSOffsets();
 
-    const double af = this->integrator_.alpha_f;
+    const double af = this->implicit_.integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
-    const double am = this->integrator_.alpha_m;
+    const double am = this->implicit_.integrator_.alpha_m;
     const double am0 = 1.0e0 - am;
 
     int nenode;
@@ -214,6 +214,28 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
     // --------------------------------------
 
     this->AddInertialForceToRHS(mat, naccel_am, offsets);
+
+    return;
+}
+
+void ImplicitSolidMPM::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
+                                    std::vector<std::array<double, 3>> &dsf) const noexcept {
+
+    std::array<std::array<double, 3>, 3> def_grad{};
+    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->implicit_.integrator_.alpha_f, dsf);
+
+    std::array<std::array<double, 3>, 3> def_grad_inv;
+    def_grad_inv = InvMat3(def_grad);
+
+    std::array<double, 3> dsf_temp{};
+
+    for (int ni = 0; ni < nenode; ni++) {
+        for (int j = 0; j < 3; j++) {
+            dsf_temp[j] = 0.0e0;
+            for (int i = 0; i < 3; i++) { dsf_temp[j] += dsf[ni][i] * def_grad_inv[i][j]; }
+        }
+        dsf[ni] = dsf_temp;
+    }
 
     return;
 }

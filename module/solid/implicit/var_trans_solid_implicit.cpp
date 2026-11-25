@@ -67,9 +67,9 @@ void ImplicitSolidMPM::Node2Particle() {
 
     // ---- Newmark beta velocity & acceleration ----
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
-    this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
+    this->implicit_.EndpointKinematics(*this, nvel_k, naccel_k);
 
-    this->CommitNodalKinematics(nvel_k, naccel_k);
+    this->implicit_.CommitNodalKinematics(*this, nvel_k, naccel_k);
 
     std::vector<std::array<double, 3>> accel_old;
     VectorAssign(this->num, accel_old);
@@ -121,7 +121,7 @@ void ImplicitSolidMPM::Node2Particle() {
     std::vector<std::array<double, 3>> disp_corr;
     disp_corr = this->DeltaCorrectionPST();
 
-    this->CommitImplicitParticleKinematics(accel_old, displ, disp_corr);
+    this->implicit_.CommitParticleKinematics(*this, accel_old, displ, disp_corr);
 
     return;
 }

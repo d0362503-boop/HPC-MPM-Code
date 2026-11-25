@@ -22,7 +22,8 @@ void SolidGenerator::LoadInput() {
 
     infile.ignore(1000, '\n');
     std::string solswitch_str;
-    infile >> solswitch_str >> this->NR_flag >> rstflag >> nlstep;
+    bool nr_flag; // read past; not used by the generator
+    infile >> solswitch_str >> nr_flag >> rstflag >> nlstep;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -30,7 +31,8 @@ void SolidGenerator::LoadInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->integrator_.spec_rad;
+    double spec_rad; // read past; not used by the generator
+    infile >> dt >> mtol >> spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');

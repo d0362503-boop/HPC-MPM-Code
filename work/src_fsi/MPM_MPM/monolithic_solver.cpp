@@ -186,10 +186,10 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
             if (this->fixed_dof[i]) continue;
             const double df = this->column_scale[n + d * nodec] * this->column_scale[n + d * nodec];
             const double ds = this->column_scale[n + (d + 4) * nodec] * this->column_scale[n + (d + 4) * nodec];
-            const double af = this->fluid_.integrator_.alpha_f;
-            const double as = this->solid_.integrator_.alpha_f;
-            const double cf = this->fluid_.integrator_.dv_du;
-            const double cs = this->solid_.integrator_.dv_du;
+            const double af = this->fluid_.implicit_.integrator_.alpha_f;
+            const double as = this->solid_.implicit_.integrator_.alpha_f;
+            const double cf = this->fluid_.implicit_.integrator_.dv_du;
+            const double cs = this->solid_.implicit_.integrator_.dv_du;
             this->column_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(af * af * df + as * as * ds));
             row_scale[i] = 1.0 / (this->nlm_lump[n] * std::sqrt(cf * cf * df + cs * cs * ds));
         }

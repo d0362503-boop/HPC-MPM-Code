@@ -62,7 +62,7 @@ void StabilizedMPM::SolveNS() {
 
         this->BCNRSet();
 
-        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->implicit_.EndpointKinematics(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
         VectorAssign(this->NS_.nmata, this->NS_.amat);
         VectorAssign(nodec * 4, this->NS_.b_rhs);
@@ -161,12 +161,12 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
 
     const std::vector<int> offsets = this->RHSOffsets();
 
-    const double af = this->integrator_.alpha_f;
+    const double af = this->implicit_.integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
-    const double am = this->integrator_.alpha_m;
+    const double am = this->implicit_.integrator_.alpha_m;
     const double am0 = 1.0e0 - am;
-    const double cv = this->integrator_.dv_du;
-    const double ca = this->integrator_.da_du;
+    const double cv = this->implicit_.integrator_.dv_du;
+    const double ca = this->implicit_.integrator_.da_du;
 
     std::vector<double> nvel_af(nodec * 3), naccel_am(nodec * 3);
     for (int n = 0; n < nodec * 3; n++) {
@@ -240,7 +240,7 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
                 double dsfi2 = dsf[ni][1];
                 double dsfi3 = dsf[ni][2];
                 // --- Mass Matrix (Galerkin part) ---
-                double emd_lu = this->ComputeNRLumpedMassMat(pid, sfi);
+                double emd_lu = this->implicit_.LumpedMass(*this, pid, sfi);
 
                 int ncol = 0;
                 for (int nj = 0; nj < nenode; nj++) {
@@ -336,7 +336,7 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
 
     NodeVarComm(mat.b_rhs, offsets);
 
-    this->AddInertialForceToRHS(mat, naccel_am, offsets);
+    this->implicit_.AddInertialForce(*this, mat, naccel_am, offsets);
 
     return;
 }
