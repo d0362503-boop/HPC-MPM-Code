@@ -62,7 +62,7 @@ void StabilizedMPM::SolveNS() {
 
         this->BCNRSet();
 
-        this->implicit_.EndpointKinematics(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
         VectorAssign(this->NS_.nmata, this->NS_.amat);
         VectorAssign(nodec * 4, this->NS_.b_rhs);

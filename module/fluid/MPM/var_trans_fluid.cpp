@@ -70,7 +70,7 @@ void StabilizedMPM::Node2Particle() {
 
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     // ---- Newmark beta velocity & acceleration ----
-    this->implicit_.EndpointKinematics(*this, nvel_k, naccel_k);
+    this->implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k);
 
     this->implicit_.CommitNodalKinematics(*this, nvel_k, naccel_k);
 

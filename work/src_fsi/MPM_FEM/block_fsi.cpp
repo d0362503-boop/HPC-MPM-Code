@@ -76,7 +76,7 @@ void MPMFEMBlockFSI::SolveFSISystem() {
 
         this->solid_.SolveSolid();
 
-        this->solid_.implicit_.EndpointKinematics(this->solid_, nvel_k, naccel_k);
+        this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, nvel_k, naccel_k);
 
         Anderson_relaxation_M1(block_it, u_s_old, nvel_k, r_k_old, this->fsi_intf);
         // Aitken_relaxation(block_it, this->relax_omega, nvel_k, r_k_old, this->fsi_intf);

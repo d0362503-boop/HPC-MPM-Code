@@ -50,7 +50,7 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 
 `implicit_.integrator_` owns the generalized-alpha/Newmark coefficients; `implicit_`
 is the `ImplicitMPM` component (`module/implicit_mpm.h`) owned by `ImplicitSolidMPM`.
-`implicit_.EndpointKinematics()` predicts nodal kinematics from the current
+`implicit_.ComputeNodeVelAccelFromDispl()` predicts nodal kinematics from the current
 displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged state.
 `ComputeNRLumpedMassMat()` and `AddInertialForceToRHS()` stay virtual on
 `ImplicitSolidMPM` so FSI solids can add their added-mass terms.
@@ -60,7 +60,7 @@ displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged 
 ```cpp
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet values
-    implicit_.EndpointKinematics(...);     // predictor step
+    implicit_.ComputeNodeVelAccelFromDispl(...);     // predictor step
     AssembleSystem(SM_, naccel_k, stress_k);
     if NR_flag && CheckNRConvergence() break; // check current physical RHS
     zero SM_.x_lhs;                         // new correction starts from zero

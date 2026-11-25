@@ -76,7 +76,7 @@ particle object (`*this`) whose arrays they read or write. Explicit solvers do n
 At the start of each NR iteration the nodal displacement increment `ndispl` is used to predict velocity and acceleration:
 
 ```cpp
-implicit_.EndpointKinematics(*this, nvel_k, naccel_k);
+implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k);
 ```
 
 Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `implicit_.integrator_.GeneralizedAlphaParaSet()` / `NewmarkBetaParaSet(dt)` in `DataInput`.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
@@ -86,7 +86,7 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad`
 ```cpp
 for NR_it = 0 .. iter_max
     BCNRSet();                              // apply Dirichlet displacement/pressure values
-    implicit_.EndpointKinematics(...);     // predictor
+    implicit_.ComputeNodeVelAccelFromDispl(...);     // predictor
     AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
     if CheckNRConvergence(...) break;       // check current physical RHS
     zero NS_.x_lhs;                        // new correction starts from zero

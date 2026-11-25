@@ -26,7 +26,8 @@ class ImplicitMPM {
      * @param nvel_k   Output nodal velocity vector (size `nodec * 3`).
      * @param naccel_k Output nodal acceleration vector (size `nodec * 3`).
      */
-    void EndpointKinematics(const MaterialPoint &mp, std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept;
+    void ComputeNodeVelAccelFromDispl(const MaterialPoint &mp, std::vector<double> &nvel_k,
+                                      std::vector<double> &naccel_k) const noexcept;
 
     /**
      * @brief Apply prescribed Dirichlet values to a nodal displacement increment.

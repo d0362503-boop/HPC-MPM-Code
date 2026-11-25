@@ -91,7 +91,7 @@ void ImplicitSolidMPM::SolveSolid() {
 
         this->BCNRSet();
 
-        this->implicit_.EndpointKinematics(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+        this->implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
 
         VectorAssign(this->SM_.nmata, this->SM_.amat);
         VectorAssign(nodec * 3, this->SM_.b_rhs);

@@ -7,8 +7,8 @@
 #include "module/material_point.h"
 #include "module/mesh.h"
 
-void ImplicitMPM::EndpointKinematics(const MaterialPoint &mp, std::vector<double> &nvel_k,
-                                     std::vector<double> &naccel_k) const noexcept {
+void ImplicitMPM::ComputeNodeVelAccelFromDispl(const MaterialPoint &mp, std::vector<double> &nvel_k,
+                                               std::vector<double> &naccel_k) const noexcept {
 
     this->integrator_.ComputeNodeVelAccelFromDispl(mp.ndispl, mp.nvel, mp.naccel, nvel_k, naccel_k);
 

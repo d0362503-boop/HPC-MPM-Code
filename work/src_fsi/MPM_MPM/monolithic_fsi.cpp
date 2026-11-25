@@ -57,10 +57,10 @@ void MPMMPMMonolithicFSI::SolveFSISystem() {
         VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
 
         this->fluid_.BCNRSet();
-        this->fluid_.implicit_.EndpointKinematics(this->fluid_, nvel_f, naccel_f);
+        this->fluid_.implicit_.ComputeNodeVelAccelFromDispl(this->fluid_, nvel_f, naccel_f);
 
         this->solid_.BCNRSet();
-        this->solid_.implicit_.EndpointKinematics(this->solid_, nvel_s, naccel_s);
+        this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, nvel_s, naccel_s);
 
         this->AssembleFluidSystem(nvel_f, naccel_f);
         this->AssembleSolidSystem(naccel_s, stress_k);
