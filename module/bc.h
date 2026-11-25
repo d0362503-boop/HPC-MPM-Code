@@ -47,8 +47,11 @@ class BoundaryCondition {
      * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
      * @param variable Vector to be modified in-place.
+     * @param integrator Time integrator providing the Newmark weights `beta_nb` and `gamma_nb`.
+     * @param nvel     Nodal velocity at the start of the step.
+     * @param naccel   Nodal acceleration at the start of the step.
      */
-    void BCSetDispl(int nn, std::vector<double> &variable, GeneralizedAlphaIntegrator &integrator,
+    void BCSetDispl(int nn, std::vector<double> &variable, const GeneralizedAlphaIntegrator &integrator,
                     const std::vector<double> &nvel, const std::vector<double> &naccel);
 
     /**

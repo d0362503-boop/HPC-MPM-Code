@@ -15,7 +15,7 @@ void ImplicitMPM::ComputeNodeVelAccelFromDispl(const MaterialPoint &mp, std::vec
     return;
 }
 
-void ImplicitMPM::ApplyDisplacementBC(MaterialPoint &mp, std::vector<double> &ndispl) {
+void ImplicitMPM::ApplyDisplacementBC(MaterialPoint &mp, std::vector<double> &ndispl) const noexcept {
     mp.ubc.BCSetDispl(nuc, ndispl, this->integrator_, mp.nvel, mp.naccel);
     mp.vbc.BCSetDispl(nvc, ndispl, this->integrator_, mp.nvel, mp.naccel);
     mp.wbc.BCSetDispl(nwc, ndispl, this->integrator_, mp.nvel, mp.naccel);
@@ -60,7 +60,7 @@ void ImplicitMPM::CommitParticleKinematics(MaterialPoint &mp, const std::vector<
         for (int i = 0; i < 3; i++) {
             if (mp.solswitch == MapScheme::FLIP) {
                 mp.vel[n][i] += dt * ((1.0e0 - this->integrator_.gamma_nb) * accel_old[n][i] //
-                                       + this->integrator_.gamma_nb * mp.accel[n][i]);
+                                      + this->integrator_.gamma_nb * mp.accel[n][i]);
             }
             mp.coord[n][i] += disp[n][i];
             if (has_shift) mp.coord[n][i] += disp_corr[n][i];

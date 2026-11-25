@@ -118,8 +118,7 @@ void ImplicitSolidMPM::Node2Particle() {
         }
     }
 
-    std::vector<std::array<double, 3>> disp_corr;
-    disp_corr = this->DeltaCorrectionPST();
+    std::vector<std::array<double, 3>> disp_corr = this->DeltaCorrectionPST();
 
     this->implicit_.CommitParticleKinematics(*this, accel_old, displ, disp_corr);
 

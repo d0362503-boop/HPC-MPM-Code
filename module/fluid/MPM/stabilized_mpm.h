@@ -23,9 +23,10 @@ class StabilizedMPM : public MaterialPoint {
 
     // SUPG/PSPG and LSIC stabilization coefficients
     std::vector<double> tau1, tau2;
-    // Navier-Stokes system matrix
-    CrsMat NS_;
+
+    CrsMat NS_;            // Navier-Stokes system matrix
     ImplicitMPM implicit_; // implicit time integration and kinematics
+
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
 

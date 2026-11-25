@@ -24,11 +24,11 @@ class StabilizedFEM : public MaterialPoint {
     std::vector<double> tau1, tau2;
     // Element density and viscosity
     std::vector<double> rhoe, rmue;
-    // Navier-Stokes system matrix
+
     GeneralizedAlphaIntegrator integrator_; // time integration state
-    CrsMat NS_;
-    // Phase-field system matrix
-    CrsMat PF_;
+    CrsMat NS_;                             // Navier-Stokes system matrix
+    CrsMat PF_;                             // Phase-field system matrix
+
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
     /**

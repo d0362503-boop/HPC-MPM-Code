@@ -73,7 +73,7 @@ void BoundaryCondition::BCSetZero(int nn, std::vector<double> &variable) {
     return;
 }
 
-void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, GeneralizedAlphaIntegrator &integrator,
+void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, const GeneralizedAlphaIntegrator &integrator,
                                    const std::vector<double> &nvel, const std::vector<double> &naccel) {
 
     double beta = integrator.beta_nb;

@@ -34,7 +34,7 @@ class ImplicitMPM {
      * @param mp     Material-point object providing the velocity BCs and nodal kinematics.
      * @param ndispl Nodal displacement increment modified in-place at constrained DOFs.
      */
-    void ApplyDisplacementBC(MaterialPoint &mp, std::vector<double> &ndispl);
+    void ApplyDisplacementBC(MaterialPoint &mp, std::vector<double> &ndispl) const noexcept;
 
     /**
      * @brief Lumped-mass contribution of one particle to the Newton tangent.
