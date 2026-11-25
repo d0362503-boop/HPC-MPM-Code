@@ -3,12 +3,6 @@
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
-#include "module/solid/solid_material_point.h"
-#include "module/solver/crsmat.h"
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <mpi.h>
 
 using namespace implicitmpm;
 
@@ -58,7 +52,7 @@ int main(int argc, char *argv[]) {
 
             sp.MoveParticle();
 
-            if (istep / iout * iout == istep) {
+            if (istep % iout == 0) {
                 iview++;
                 sp.OutputPointDataVTKHDF(iview);
             }

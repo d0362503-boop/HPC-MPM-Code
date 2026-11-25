@@ -1,21 +1,11 @@
-#include <mpi.h>
-
 #include <cmath>
-#include <iomanip>
-#include <iostream>
 
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/MPM/stabilized_mpm.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/solid/implicit/implicit_mpm_solid.h"
-#include "module/solver/crsmat.h"
 #include "work/src_fsi/MPM_MPM/monolithic_fsi.h"
 
-using namespace implicitmpm;
-using namespace stabilizedmpm;
 using namespace mpm_mpm_monolithic_fsi;
 
 int main(int argc, char *argv[]) {

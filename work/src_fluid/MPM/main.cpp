@@ -1,14 +1,8 @@
 #include "module/data_io.h"
 #include "module/dataset.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/solver/crsmat.h"
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <mpi.h>
 
 using namespace stabilizedmpm;
 

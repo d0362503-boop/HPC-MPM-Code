@@ -1,21 +1,9 @@
-#include <mpi.h>
-
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/FEM/stabilized_fem.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/solid/implicit/implicit_mpm_solid.h"
-#include "module/solver/crsmat.h"
 #include "work/src_fsi/MPM_FEM/block_fsi.h"
 
-using namespace implicitmpm;
-using namespace stabilizedfem;
 using namespace mpmfemblockfsi;
 
 int main(int argc, char *argv[]) {

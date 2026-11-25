@@ -290,7 +290,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
         const double shift_norm = NormVec3(disp_corr[n]);
         if (shift_norm > 0.0e0) {
             const double motion_norm = NormVec3(displ[n]);
-            const double max_shift = motion_norm / 20.0e0;
+            const double max_shift = motion_norm / 10.0e0;
             const double scale = std::min(max_shift, shift_norm) / shift_norm;
             for (int i = 0; i < 3; i++) { disp_corr[n][i] *= scale; }
         }
