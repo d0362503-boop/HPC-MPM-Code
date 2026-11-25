@@ -21,7 +21,7 @@ using namespace stabilizedmpm;
 void StabilizedMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 
     PCSetType(pc, PCFIELDSPLIT);
-    PCFieldSplitSetBlockSize(pc, mat.HasReducedLayout() ? 1 : mat.ndof);
+    PCFieldSplitSetBlockSize(pc, 1);
     mat.field_splits = {{"velocity", {0, 1, 2}}, {"pressure", {3}}};
     PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
     PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
@@ -72,7 +72,8 @@ void StabilizedMPM::AssembleNewtonSystem() {
 
     this->BCNRSet();
 
-    this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_, this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
+    this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_,
+                                                 this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
 
     VectorAssign(this->NS_.nmata, this->NS_.amat);
     VectorAssign(nodec * 4, this->NS_.b_rhs);

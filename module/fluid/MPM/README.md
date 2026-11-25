@@ -33,7 +33,7 @@ PIC, FLIP, TPIC, or APIC transfers.
 | Setting | MPM fluid | FEM fluid |
 |---------|-----------|-----------|
 | `ode_order` | 2 (displacement, velocity, acceleration) | 1 (velocity) |
-| Equation layout | Compact PETSc system, full native vectors | Full system |
+| Equation layout | Full system | Full system |
 | `NS_.rebuild_freq` | 1 | 20 |
 
 ## Driver Flow
@@ -147,9 +147,8 @@ additional pressure shift. FEM also uses unshifted SELFP and its own PC cadence.
 
 The constructor sets `NS_.ndof=4`; native assembly and vectors remain
 `nodec * 4`. `ConfigurePreconditioner()` declares velocity `{0,1,2}` and
-pressure `{3}`; `CrsMat` owns compression, compact field indices, KSP/PC
-refresh, and full-vector recovery. Never classify compact fields using
-`compact_index % 4`. See the [shared solver guide](../../solver/README.md).
+pressure `{3}`; `CrsMat` owns field index sets, KSP/PC refresh and solution
+recovery. See the [shared solver guide](../../solver/README.md).
 
 ### G2P and particle motion (`Node2Particle`)
 

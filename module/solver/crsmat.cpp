@@ -81,8 +81,6 @@ void CrsMat::BuildCrsMat(int num_block) {
 
 void CrsMat::ResetPetscSolver() {
 
-    this->ResetReducedSystem();
-
     if (this->scatter_to_all) { VecScatterDestroy(&this->scatter_to_all); }
     if (this->seq_x) { VecDestroy(&this->seq_x); }
     if (this->ksp) { KSPDestroy(&this->ksp); }
@@ -94,6 +92,7 @@ void CrsMat::ResetPetscSolver() {
 
     this->prev_ksp_its_ = -1;
     this->force_rebuild_next_ = false;
+    this->petsc_setup_done_ = false;
 
     return;
 }

@@ -127,7 +127,7 @@ PETSc prints the summary at normal finalization. Event times can overlap and sho
 
 Implementation details are maintained in the relevant guides:
 
-- [Shared linear solver](module/solver/README.md): equation layout, compression, preconditioners, and rebuild policy
+- [Shared linear solver](module/solver/README.md): equation layout, preconditioners, and rebuild policy
 - [Implicit core](module/implicit/README.md): generalized-α integrator, implicit MPM kinematics, and the Newton driver
 - [Implicit solid](module/solid/implicit/README.md): nonlinear solve and solid preconditioning
 - [MPM–MPM FSI](work/src_fsi/MPM_MPM/README.md): coupled Newton loop, interface handling, and solver strategy

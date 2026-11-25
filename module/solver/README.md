@@ -12,7 +12,7 @@ Main files:
 |------|------|
 | `crsmat.h` | `CrsMat` definition |
 | `crsmat.cpp` | Setup, run at initialization and DLB rebuild: CSR graph, ownership and PETSc numbering, matrix/vector/KSP creation |
-| `crsmat_solve.cpp` | Every Newton iteration: assembly, BC elimination, MPM equation compression, preconditioner setup, solve, recovery, residual norms |
+| `crsmat_solve.cpp` | Every Newton iteration: assembly, BC elimination, preconditioner setup/reuse, solve, recovery, residual norms |
 | `native_solver.cpp` | Native fallback solvers (`GPBiCG`, `GPBiCGSafe`, `GPBiCGAR`) and their diagonal-scaling helpers |
 
 ## 2. Indexing, Layout, and CRS Structure
@@ -117,12 +117,11 @@ For each assembled correction:
 1. `SolveSystem(NR_it)` calls `AssemblePetscMat()`, delegated to the owner.
 2. `SolveWithPetsc(NR_it)` collects current BC IDs and copies the full native RHS.
 3. Eliminate inactive and physical boundary rows/columns with prescribed values.
-4. For MPM, compress directly from the full matrix, drop explicit zeros from the compact copy, solve from zero
-   and expand into the full PETSc vector. FEM solves the full matrix.
+4. Solve the full matrix from zero; eliminated rows are unit rows with zero RHS, so their
+   correction stays zero. MPM and FEM share this path.
 5. `RecoverSolution()` fills native `x_lhs` through the owned/ghost scatter.
 
-`ResetPetscSolver()` releases compact maps/matrices as well as full PETSc
-objects. `BuildCrsMat()` calls it before a DLB ownership rebuild; see the
+`ResetPetscSolver()` releases the PETSc objects. `BuildCrsMat()` calls it before a DLB ownership rebuild; see the
 [DLB guide](../DLB/README.md).
 
 ### 3.1 Ownership
@@ -159,9 +158,9 @@ MatSetOption(mat, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
 MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
 ```
 
-The full matrix retains `MatSetBlockSize(mat, this->ndof)` metadata.
-The compact MPM operator may not contain complete nodal blocks; its field
-groups use explicit index sets rather than assuming the original block stride.
+The matrix retains `MatSetBlockSize(mat, this->ndof)` metadata. Its sparsity
+pattern is fixed by the CSR graph until a DLB rebuild; `MatZeroEntries()` and
+`MatZeroRowsColumns()` change values only, so PETSc reuses the symbolic PC setup.
 
 `MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE` is **required for MPM**. See Section 3.4.
 
@@ -228,61 +227,35 @@ the mass-based indicator across shared nodes. The RHS monitor tests local nodal
 mass directly and does not consume that mask; consistency relies on synchronized
 nodal masses. It does not depend on a previous PETSc assembly or solve.
 
-### 3.5 Transparent MPM equation compression
+### 3.5 Full-matrix MPM solve
 
-PETSc MPM systems use the same internal
-compression in `SolveWithPetsc()`. External assembly retains the existing CSR
-blocks, `nodec * ndof` RHS/correction vectors, and component-major indexing.
-
-After physical and inactive boundary elimination, `BuildReducedDofMap()` removes
-only rows whose sole nonzero is a unit diagonal and whose RHS is exactly zero; explicit zeros kept by
-`MAT_KEEP_NONZERO_PATTERN` are ignored in this test. Explicit zeros are then removed from the compact matrix only,
-so the full matrix is never duplicated.
-A zero RHS by itself does not mark an equation inactive. Nonzero prescribed
-boundary values are retained, and their column contributions have already been
-transferred to the RHS.
-
-The retained index set refers to full global equations. Its local entries follow
-PETSc row ownership; empty local retained sets are valid. An `MPI_Allreduce`
-makes any layout change rebuild the map on every rank. `SolveReducedSystem()` constructs the retained operator, solves
-from zero, and expands the correction into the full PETSc vector.
-`RecoverSolution()` then uses the existing owned/ghost scatter to fill the full
-native `x_lhs`.
+MPM and FEM solve the full PETSc operator. After `MatZeroRowsColumns()`,
+inactive (`nmass <= mtol`) and fixed equations are unit rows with zero RHS and
+zero columns, so they are decoupled: Krylov keeps their correction at zero and
+ASM/ILU treats them exactly. Explicit zeros kept by `MAT_KEEP_NONZERO_PATTERN`
+stay in the operator. External assembly keeps the CSR blocks, `nodec * ndof`
+RHS/correction vectors and component-major indexing.
 
 Physical owners declare `field_splits` as a tree of split names, original
-components and optional children. During reduced setup,
-`SetFieldSplitComponents()` converts these components into explicit compact
-index sets, optionally within a parent component group. It requires an
-initialized reduced map; compact indices must never be classified using
-`index % ndof`. `ConfigureReducedPreconditioner()` sets up that hierarchy
-inside `CrsMat`.
-FEM keeps its full-system solve path and defines its fields directly through
-PETSc. `HasReducedLayout()` reports whether the compact map exists.
-The retained global equation IDs, `reduced_active_is_` and `reduced_matrix_`
-remain private state.
+components and optional children. `SetFieldSplitComponents()` converts them
+into index sets of the full numbering (global ID modulo `ndof`), optionally
+within a parent component group. Root sets are set once when the KSP is built;
+nested sets are set by `ConfigureNestedFieldSplits()` on the first solve after
+(re)initialization, once the operator is assembled. FEM defines its fields
+directly through PETSc.
 
-An empty retained system uses `PCNONE` and skips physical field-split setup;
-full-vector recovery still fills removed components with zero.
-
-Compact values update every solve. KSP recreation and numerical-PC refresh
-follow the [rebuild policy](#6-preconditioner-rebuild-policy); a mesh/DLB reset
-releases both full and compact PETSc state.
-
-This stage reduces the equations seen by Krylov and the preconditioner.
-Native CSR allocation, full PETSc preallocation, and assembly communication have
-not yet been compressed. Their later optimization belongs inside `CrsMat`,
-while preserving the external assembly and vector contract.
+The cost is that Krylov vector operations and matrix products cover every
+equation, including inactive ones; the gain is a persistent KSP/PC with reused
+symbolic setup and no per-solve submatrix extraction.
 
 ### 3.6 Shared preconditioner configuration
 
 `CrsMat::ConfigurePreconditioner(PC)` delegates PC choices and the physical
-`field_splits` tree to the owner, then converts its root groups to compact
+`field_splits` tree to the owner, then converts its root groups to full-numbering
 index sets. Each `FieldSplit` contains a PETSc name, original component IDs
 and optional child groups.
 
-`CrsMat::ConfigureReducedPreconditioner()` is a normal member used by every
-PETSc MPM solve. It sets compact operators, reads options, handles empty
-systems with `PCNONE` and creates the root sub-solvers. The private
+`BuildKSPSolver()` applies it once and reads options. The private
 `ConfigureNestedFieldSplits()` converts child groups to their enclosing
 numbering and sets up nested solvers. For a PCKSP child it uses the enclosing
 preconditioning matrix as both inner operators, retaining the assembled-Pmat
@@ -291,7 +264,7 @@ strategy without repeated fluid elimination.
 Pure fluid declares velocity/pressure; pure solid has no field groups and keeps
 ASM/ILU. No function callback or extra virtual function is needed.
 The existing owner virtual `ConfigurePreconditioner()` supplies physical choices;
-generic traversal, PETSc setup, compression and recovery stay in `CrsMat`.
+generic traversal, PETSc setup and recovery stay in `CrsMat`.
 
 ## 4. Boundary Conditions
 
@@ -324,7 +297,7 @@ The owner supplies the actual PETSc PC type; no separate field-split switch is s
 ### 5.1 Stabilized fluid
 
 Original components are velocity `{0,1,2}` and pressure `{3}`.
-Pure MPM fluid uses `SetFieldSplitComponents()` for compact index sets and
+Pure MPM fluid uses `SetFieldSplitComponents()` index sets and
 FieldSplit block size 1. FEM keeps its full block size 4 and field strides.
 
 Both use lower Schur factorization and PETSc SELFP. Current code leaves the
@@ -355,7 +328,7 @@ release another's preconditioner.
 ## 6. Preconditioner Rebuild Policy
 
 `rebuild_freq` controls scheduled reconfiguration, including
-ASM/FieldSplit. It does not delay assembly or compact-matrix value updates.
+ASM/FieldSplit. It does not delay assembly or matrix value updates.
 
 | System | Frequency / iteration-growth policy |
 |--------|-------------------------------------|
@@ -367,23 +340,20 @@ ASM/FieldSplit. It does not delay assembly or compact-matrix value updates.
 one, later Newton iterations (`NR_it>0`) do not request scheduled
 reconfiguration; the first correction follows the step cadence.
 
-In MPM, changed retained equations on any rank force all ranks to rebuild
-the compact layout and KSP/PC. Compact matrix values are recreated every solve.
-When the KSP survives, `KSPSetReusePreconditioner(false)` still permits PC
-setup for the new operator. A KSP rebuild restores its type, prefix and tolerances,
-calls `ConfigureReducedPreconditioner()` to configure the physical PC, read
-options and initialize its declared field hierarchy.
+The KSP/PC persists between DLB rebuilds. A rebuild solve sets
+`PCSetReusePreconditioner(false)`: PETSc refreshes the numerical PC and reuses
+its symbolic setup because the pattern is unchanged. Other solves (later Newton
+iterations of the same step) set `true`, keeping the step-start numerical PC
+while Krylov iterates with the current operator. A forced rebuild after more
+than 2x iteration growth refreshes it on the next solve.
 
-FEM retains the full operator. A scheduled rebuild disables PC reuse.
-`PetscObjectTypeCompare(..., PCFIELDSPLIT, ...)` checks the actual PC type:
-FieldSplit keeps its group definitions, while other PC types are reset and
-reconfigured through the owner. Between rebuilds the numerical PC is reused.
-Mesh/DLB reset releases both full and compact state.
+FEM additionally resets and reconfigures non-FieldSplit PCs through the owner on
+a rebuild; FieldSplit keeps its group definitions. Mesh/DLB reset releases all
+PETSc state.
 
 ## 7. Solution Recovery and Memory
 
-After a compact solve, retained components are copied into the full PETSc
-solution vector and removed components remain zero. Each rank scatters only
+Eliminated components of the solution are zero. Each rank scatters only
 its owned/ghost `nodec * ndof` entries into `seq_x`, then fills native `x_lhs`.
 The full global solution is not gathered onto every rank.
 
@@ -395,7 +365,7 @@ and are reset when their mesh/numbering is rebuilt.
 
 ### Required properties
 
-- retain full-matrix block metadata and explicit compact field index sets
+- retain full-matrix block metadata and explicit field index sets
 - keep each physical solver's PC resources independent
 - keep solid temporary arrays released after solve
 - use local solution scatter, not global `CreateToAll`
@@ -407,7 +377,6 @@ and are reset when their mesh/numbering is rebuilt.
 - gathering the full global PETSc solution on every rank
 - using a loosely set `rtol` (e.g. `1.0e-8`) for unscaled mixed u-p systems, which can accept a trivial initial guess as "converged"
 - treating the current solid matrix as safely CG-compatible without further proof
-- classifying compressed equations with `compact_index % ndof`
 
 ## Current Convergence Limitations
 
