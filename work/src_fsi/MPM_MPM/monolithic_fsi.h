@@ -5,11 +5,17 @@
 
 #include "module/bc.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/implicit/newton_solver.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 
 namespace mpm_mpm_monolithic_fsi {
 
-class MPMMPMMonolithicFSI : public MaterialPoint {
+/**
+ * @brief Monolithic MPM-MPM FSI solved as one Newton problem.
+ * @note fluid_ and solid_ are NonlinearProblems themselves, but here only their field pieces
+ * (BCs, kinematics, assembly helpers) are used; their own Newton steps are not called.
+ */
+class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
   public:
     static constexpr int kStoredBlocks = 37;
     static constexpr int max_NR_it = 100;
@@ -49,8 +55,30 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
      */
     void CorrectFluidPenetration();
 
+    // Newton steps driven by SolveNewton().
+    /** @brief Build interface weights and active components, freeze stabilization and reset increments and scratch state. */
+    void BeginNewtonStep() override;
+
+    /** @brief Apply iterate BCs and kinematics of both fields, then assemble the coupled system. */
+    void AssembleNewtonSystem() override;
+
+    /**
+     * @brief Check the four coupled residuals.
+     * @param NR_it Current Newton iteration.
+     * @param ksp_its Krylov iterations of the previous coupled correction.
+     * @return Whether all field residuals meet tolerance.
+     */
+    bool CheckNewtonConvergence(int NR_it, int ksp_its) override;
+
+    /**
+     * @brief Solve the coupled system for the physical increments.
+     * @param NR_it Current Newton iteration.
+     * @return Krylov iterations used.
+     */
+    int SolveNewtonCorrection(int NR_it) override;
+
     /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
-    void UpdateNRIncrement();
+    void UpdateNRIncrement() override;
 
     /**
      * @brief Register fixed and inactive monolithic components.
@@ -147,6 +175,12 @@ class MPMMPMMonolithicFSI : public MaterialPoint {
     // Interface geometry.
     /** @brief Integrate the two-phase volume-fraction gradient measure into lumped nodal interface-area weights. */
     void LumpedLagrangeMultiplier();
+
+    // Newton scratch state of the current step.
+    std::vector<double> nvel_f_, nvel_s_;                // fluid and solid nodal velocity at the iterate
+    std::vector<double> naccel_f_, naccel_s_;            // fluid and solid nodal acceleration at the iterate
+    std::vector<std::array<double, 6>> stress_k_;        // solid particle stress snapshot for tangent assembly
+    std::array<double, 4> initial_norm_;                 // RMS residual references saved on iteration zero
 };
 
 } // namespace mpm_mpm_monolithic_fsi

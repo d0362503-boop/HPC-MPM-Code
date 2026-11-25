@@ -1,7 +1,7 @@
 #include <cmath>
 #include <vector>
 
-#include "module/generalized_alpha_integrator.h"
+#include "module/implicit/generalized_alpha_integrator.h"
 
 void GeneralizedAlphaIntegrator::GeneralizedAlphaParaSet() {
 

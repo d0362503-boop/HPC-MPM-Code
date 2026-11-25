@@ -12,7 +12,7 @@ or the native iterative solver. This is not a direct factorization of the full t
 | File                             | Responsibility                                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `implicit_mpm_solid.h`         | Class declaration, constructor wiring (`SM_.owner_ = this`)                                    |
-| `solve_solid_implicit.cpp`     | NR loop, system assembly, tangent-modulus computation, diagonal preconditioner                   |
+| `solve_solid_implicit.cpp`     | Newton steps, system assembly, tangent-modulus computation, diagonal preconditioner                   |
 | `var_trans_solid_implicit.cpp` | P2G (`Particle2Node`), G2P (`Node2Particle`), deformation-gradient update, particle shifting |
 
 ## Class Architecture
@@ -49,7 +49,7 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 ### 1. Time Integration — Newmark-β / Generalized-α
 
 `implicit_.integrator_` owns the generalized-alpha/Newmark coefficients; `implicit_`
-is the `ImplicitMPM` component (`module/implicit_mpm.h`) owned by `ImplicitSolidMPM`.
+is the `ImplicitMPM` component (`module/implicit/implicit_mpm.h`) owned by `ImplicitSolidMPM`.
 `implicit_.ComputeNodeVelAccelFromDispl()` predicts nodal kinematics from the current
 displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged state.
 `ComputeNRLumpedMassMat()` and `AddInertialForceToRHS()` stay virtual on
@@ -57,15 +57,18 @@ displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged 
 
 ### 2. Newton–Raphson Loop (`SolveSolid`)
 
+`ImplicitSolidMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
+`SolveSolid()` sets `max_NR_it` from `NR_flag` and calls
+`SolveNewton(*this, max_NR_it)`, which runs the steps in this order:
+
 ```cpp
-for NR_it = 0 .. iter_max
-    BCNRSet();                              // apply Dirichlet values
-    implicit_.ComputeNodeVelAccelFromDispl(...);     // predictor step
-    AssembleSystem(SM_, naccel_k, stress_k);
-    if NR_flag && CheckNRConvergence() break; // check current physical RHS
-    zero SM_.x_lhs;                         // new correction starts from zero
-    iter = SM_.SolveSystem(NR_it);           // PETSc or native linear solve
+BeginNewtonStep();                          // zero ndispl, snapshot stress_k_
+for NR_it = 0 .. max_NR_it
+    AssembleNewtonSystem();                 // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
+    if CheckNewtonConvergence(NR_it, ksp_its) break; // NR_flag: SM_.CheckNRConvergence; else print only
+    ksp_its = SolveNewtonCorrection(NR_it); // SM_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
+EndNewtonStep();                            // release SM_ storage
 ```
 
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)

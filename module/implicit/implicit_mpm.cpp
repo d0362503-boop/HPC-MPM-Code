@@ -1,4 +1,4 @@
-#include "module/implicit_mpm.h"
+#include "module/implicit/implicit_mpm.h"
 
 #include <algorithm>
 #include <vector>

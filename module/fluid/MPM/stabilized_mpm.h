@@ -4,7 +4,8 @@
 #include <vector>
 
 #include "module/dataset.h"
-#include "module/implicit_mpm.h"
+#include "module/implicit/implicit_mpm.h"
+#include "module/implicit/newton_solver.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -12,8 +13,10 @@
 
 namespace stabilizedmpm {
 
-class StabilizedMPM : public MaterialPoint {
+class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
   public:
+    static constexpr int max_NR_it = 100; // last Newton iteration index
+
     // Inflow particle buffer
     MaterialPoint ifp;
 
@@ -69,6 +72,31 @@ class StabilizedMPM : public MaterialPoint {
 
     /** @brief Solve the stabilized Navier-Stokes system. */
     void SolveNS();
+
+    // Newton steps driven by SolveNewton().
+    /** @brief Freeze stabilization coefficients and reset the displacement, pressure and Newton scratch state. */
+    void BeginNewtonStep() override;
+
+    /** @brief Apply iterate BCs and kinematics, then assemble the Navier-Stokes tangent and residual. */
+    void AssembleNewtonSystem() override;
+
+    /**
+     * @brief Check the Navier-Stokes residual.
+     * @param NR_it Current Newton iteration.
+     * @param ksp_its Krylov iterations of the previous correction.
+     * @return Whether the Newton iteration has converged.
+     */
+    bool CheckNewtonConvergence(int NR_it, int ksp_its) override;
+
+    /**
+     * @brief Solve the Navier-Stokes system for the velocity-pressure correction.
+     * @param NR_it Current Newton iteration.
+     * @return Krylov iterations used.
+     */
+    int SolveNewtonCorrection(int NR_it) override;
+
+    /** @brief Release the Navier-Stokes linear-system storage. */
+    void EndNewtonStep() override;
 
     /**
      * @brief Configure the velocity-pressure Schur field-split preconditioner.
@@ -172,7 +200,7 @@ class StabilizedMPM : public MaterialPoint {
                                 const std::vector<double> &naccel_k);
 
     /** @brief Apply converged NR increment to nodal variables. */
-    void UpdateNRIncrement();
+    void UpdateNRIncrement() override;
 
     /** @brief Generate inflow particles for all active directions. */
     void InflowParticles() override;
@@ -192,6 +220,11 @@ class StabilizedMPM : public MaterialPoint {
      * @param infbc Inflow boundary condition.
      */
     void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
+
+  private:
+    // Newton scratch state of the current step.
+    std::vector<double> nvel_k_, naccel_k_; // nodal velocity and acceleration at the iterate
+    double r0r_;                            // initial residual reference
 };
 
 } // namespace stabilizedmpm

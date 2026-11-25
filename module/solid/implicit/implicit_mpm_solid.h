@@ -5,7 +5,8 @@
 #include <vector>
 
 #include "module/dataset.h"
-#include "module/implicit_mpm.h"
+#include "module/implicit/implicit_mpm.h"
+#include "module/implicit/newton_solver.h"
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -14,11 +15,12 @@
 
 namespace implicitmpm {
 
-class ImplicitSolidMPM : public SolidMaterialPointBase {
+class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem {
   public:
     CrsMat SM_;
     ImplicitMPM implicit_;        // implicit time integration and kinematics
     bool NR_flag;                 // Newton iterations; false for linear elasticity
+    int max_NR_it;                // last Newton iteration index, set per step from NR_flag
     std::vector<int> blocks;      // target scalar block indices
     int rhs_start;           // first target component index
 
@@ -60,6 +62,31 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Driver for one implicit solid time step.
      */
     void SolveSolid() override;
+
+    // Newton steps driven by SolveNewton().
+    /** @brief Reset the displacement increment and Newton scratch state. */
+    void BeginNewtonStep() override;
+
+    /** @brief Apply iterate BCs and kinematics, then assemble the solid tangent and residual. */
+    void AssembleNewtonSystem() override;
+
+    /**
+     * @brief Check the solid residual; linear elasticity only reports and never converges early.
+     * @param NR_it Current Newton iteration.
+     * @param ksp_its Krylov iterations of the previous correction.
+     * @return Whether the Newton iteration has converged.
+     */
+    bool CheckNewtonConvergence(int NR_it, int ksp_its) override;
+
+    /**
+     * @brief Solve the solid system for the displacement correction.
+     * @param NR_it Current Newton iteration.
+     * @return Krylov iterations used.
+     */
+    int SolveNewtonCorrection(int NR_it) override;
+
+    /** @brief Release the solid linear-system storage. */
+    void EndNewtonStep() override;
 
     /**
      * @brief Configure solid BoomerAMG with Euclid smoothing.
@@ -158,7 +185,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     /**
      * @brief Add the current linear correction to the endpoint nodal displacement increment.
      */
-    void UpdateNRIncrement();
+    void UpdateNRIncrement() override;
 
     /**
      * @brief Lumped-mass contribution of one particle to the Newton tangent.
@@ -191,6 +218,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
      */
     void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
+
+  private:
+    // Newton scratch state of the current step.
+    std::vector<double> nvel_k_, naccel_k_;           // nodal velocity and acceleration at the iterate
+    std::vector<std::array<double, 6>> stress_k_;     // particle stress snapshot for tangent assembly
+    double r0r_;                                      // initial residual reference
 };
 
 } // namespace implicitmpm

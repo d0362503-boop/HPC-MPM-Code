@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "module/dataset.h"
-#include "module/generalized_alpha_integrator.h"
+#include "module/implicit/generalized_alpha_integrator.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"

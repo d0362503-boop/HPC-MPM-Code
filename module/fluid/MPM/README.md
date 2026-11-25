@@ -18,9 +18,9 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 Shared helpers live outside this directory:
 
 - `module/particle_shifting.cpp` — `DeltaCorrectionPST()` and `PairwiseRepulsivePST()`.
-- `module/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
+- `module/implicit/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
 - `module/material_point.cpp` — closed-boundary position helpers.
-- `module/implicit_mpm.cpp` — `ImplicitMPM` (owned as `implicit_`): endpoint kinematics, inertia terms, `CommitNodalKinematics` and `CommitParticleKinematics`.
+- `module/implicit/implicit_mpm.cpp` — `ImplicitMPM` (owned as `implicit_`): endpoint kinematics, inertia terms, `CommitNodalKinematics` and `CommitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
 ## Class and Defaults
@@ -69,7 +69,7 @@ See the [DLB guide](../../DLB/README.md) for the pipeline and its invariants.
 
 Time-integration parameters belong to `implicit_.integrator_`
 (`GeneralizedAlphaIntegrator`). `implicit_` is the `ImplicitMPM` component
-(`module/implicit_mpm.h`) owned by the implicit MPM solvers. It holds only implicit
+(`module/implicit/implicit_mpm.h`) owned by the implicit MPM solvers. It holds only implicit
 state; its kinematics, inertia, particle-commit and FLIP-update functions take the
 particle object (`*this`) whose arrays they read or write. Explicit solvers do not carry it.
 
@@ -83,15 +83,17 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad`
 
 ### 2. Newton–Raphson loop (`SolveNS`)
 
+`StabilizedMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
+`SolveNS()` calls `SolveNewton(*this, max_NR_it)` (`max_NR_it = 100`), which runs:
+
 ```cpp
-for NR_it = 0 .. iter_max
-    BCNRSet();                              // apply Dirichlet displacement/pressure values
-    implicit_.ComputeNodeVelAccelFromDispl(...);     // predictor
-    AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
-    if CheckNRConvergence(...) break;       // check current physical RHS
-    zero NS_.x_lhs;                        // new correction starts from zero
-    iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
+BeginNewtonStep();                          // freeze stabilization, zero ndispl/npres
+for NR_it = 0 .. max_NR_it
+    AssembleNewtonSystem();                 // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
+    if CheckNewtonConvergence(NR_it, ksp_its) break; // NS_.CheckNRConvergence on the physical RHS
+    ksp_its = SolveNewtonCorrection(NR_it); // NS_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
+EndNewtonStep();                            // release NS_ storage
 ```
 
 `CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise. PETSc divergence is reported by the KSP reason; it does not automatically switch solvers.

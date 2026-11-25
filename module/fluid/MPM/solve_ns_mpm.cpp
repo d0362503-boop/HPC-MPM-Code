@@ -1,6 +1,7 @@
 #include "module/bc.h"
 #include "module/dataset.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
+#include "module/implicit/newton_solver.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -48,33 +49,48 @@ void StabilizedMPM::UpdateNRIncrement() {
 
 void StabilizedMPM::SolveNS() {
 
-    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
+    SolveNewton(*this, max_NR_it);
 
-    const int iter_max = 100;
+    return;
+}
+
+void StabilizedMPM::BeginNewtonStep() {
+
+    this->nvel_k_.assign(nodec * 3, 0.0e0);
+    this->naccel_k_.assign(nodec * 3, 0.0e0);
 
     this->MakeNSStabCoeff(this->nvel);
 
     VectorAssign(nodec * 3, this->ndispl);
     VectorAssign(nodec, this->npres);
-    double r0r = 0.0e0;
-    int iter = 0;
-    for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
+    this->r0r_ = 0.0e0;
 
-        this->BCNRSet();
+    return;
+}
 
-        this->implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+void StabilizedMPM::AssembleNewtonSystem() {
 
-        VectorAssign(this->NS_.nmata, this->NS_.amat);
-        VectorAssign(nodec * 4, this->NS_.b_rhs);
-        VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
-        this->AssembleSystem(this->NS_, nvel_k, naccel_k);
+    this->BCNRSet();
 
-        if (this->NS_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
+    this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_, this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
 
-        iter = this->NS_.SolveSystem(NR_it);
+    VectorAssign(this->NS_.nmata, this->NS_.amat);
+    VectorAssign(nodec * 4, this->NS_.b_rhs);
+    VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
+    this->AssembleSystem(this->NS_, this->nvel_k_, this->naccel_k_);
 
-        this->UpdateNRIncrement();
-    }
+    return;
+}
+
+bool StabilizedMPM::CheckNewtonConvergence(int NR_it, int ksp_its) {
+
+    return this->NS_.CheckNRConvergence(NR_it, max_NR_it, ksp_its, this->r0r_);
+}
+
+int StabilizedMPM::SolveNewtonCorrection(int NR_it) { return this->NS_.SolveSystem(NR_it); }
+
+void StabilizedMPM::EndNewtonStep() {
+
     // --- Memory clear ---
     std::vector<double>().swap(this->NS_.adiag);
     std::vector<double>().swap(this->NS_.amat);

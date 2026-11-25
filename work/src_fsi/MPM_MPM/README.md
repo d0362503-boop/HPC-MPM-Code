@@ -124,10 +124,13 @@ Newton criteria remain independent of this preconditioning layer.
 
 ## Newton iteration
 
-`SolveFSISystem()` builds the lumped interface weights and active-component mask
+`MPMMPMMonolithicFSI` is a `NonlinearProblem` (`module/implicit/newton_solver.h`), and
+`SolveFSISystem()` calls `SolveNewton(*this, max_NR_it)`. Its `BeginNewtonStep()`
+builds the lumped interface weights and active-component mask
 once at the beginning of the time step. Fluid stabilization coefficients
 are computed from the step-start nodal velocity and remain frozen during Newton.
-Each Newton iteration then performs:
+Each Newton iteration (`AssembleNewtonSystem`, `CheckNewtonConvergence`,
+`SolveNewtonCorrection`, `UpdateNRIncrement`) then performs:
 
 1. Clear the coupled matrix and RHS.
 2. Apply phase boundary values and compute trial nodal velocity/acceleration.

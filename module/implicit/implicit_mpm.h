@@ -3,7 +3,7 @@
 #include <array>
 #include <vector>
 
-#include "module/generalized_alpha_integrator.h"
+#include "module/implicit/generalized_alpha_integrator.h"
 #include "module/solver/crsmat.h"
 
 class MaterialPoint;
