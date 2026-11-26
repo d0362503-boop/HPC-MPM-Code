@@ -131,6 +131,7 @@ Implementation details are maintained in the relevant guides:
 - [Fluid FEM](module/fluid/FEM/README.md): stabilized FEM Navier–Stokes with two-phase (VOF/phase-field) properties
 - [Explicit solid](module/solid/explicit/README.md): explicit MPM solid update
 - [Implicit solid](module/solid/implicit/README.md): nonlinear solve and solid preconditioning
+- [Constitutive models](module/solid/constitutive_model.md): solid material models, stress update, and Voigt storage
 - [MPM–MPM FSI](work/src_fsi/MPM_MPM/README.md): coupled Newton loop, interface handling, and solver strategy
 - [MPM–FEM FSI](work/src_fsi/MPM_FEM/README.md): partitioned block iteration, interface force and added mass, Anderson relaxation
 - [Dynamic load balancing](module/DLB/README.md): fluid MPM partitioning
