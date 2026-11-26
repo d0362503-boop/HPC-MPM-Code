@@ -25,7 +25,7 @@ class FluidDivider : public DataPartitioner {
      * Velocity/pressure BCs are control-point based; inflow BCs are element based.
      * Must be called after MeshPartition.
      */
-    void PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max);
+    void PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max);
 
     MaterialPoint points_;            // loaded fluid particles
     MaterialPoint partition_points_;  // partitioned fluid particles

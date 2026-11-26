@@ -11,7 +11,8 @@
 
 inline int nprocs, myrank;
 inline int isb, isubc, isubl;
-inline std::vector<int> naid, nsbc, nsubc, nsbl, nsubl, nxyr(3);
+inline std::vector<int> naid, nsbc, nsubc, nsbl, nsubl;
+inline std::array<int, 3> nxyr{};
 inline std::vector<double> dbc, dbl;
 
 /// MPI datatype for `T`; unsupported types fail at compile time (incomplete type).

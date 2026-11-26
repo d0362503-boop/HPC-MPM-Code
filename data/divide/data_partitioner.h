@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -29,10 +30,10 @@ class DataPartitioner {
      */
     static void BCRenumber(BoundaryCondition &partition_bc,
                            const BoundaryCondition &source_bc,
-                           const std::vector<int> &local_counts,
-                           const std::vector<int> &global_counts,
-                           const std::vector<int> &local_min,
-                           const std::vector<int> &local_max,
+                           const std::array<int, 3> &local_counts,
+                           const std::array<int, 3> &global_counts,
+                           const std::array<int, 3> &local_min,
+                           const std::array<int, 3> &local_max,
                            bool compute_values = true);
 
   protected:
@@ -100,13 +101,13 @@ class DataPartitioner {
      */
     void MeshPartition(int rank_id);
 
-    std::vector<int> nexyr1_{3}, nexyr2_{3};     // per-direction rank element counts (coarse/fine)
-    std::vector<int> nr1_{3}, nr2_{3};           // rank counts with coarse/fine division
-    std::vector<int> nxyr1_{3}, nxyr2_{3};       // per-direction rank node counts (coarse/fine)
-    std::vector<double> drxy1_{3}, drxy2_{3};    // rank window sizes (coarse/fine)
-    std::vector<double> bound12_{3};             // coarse/fine window boundary coordinates
-    std::vector<int> inxyminc_{3}, inxymaxc_{3}; // rank control-point window (inclusive)
-    std::vector<int> inxyminl_{3}, inxymaxl_{3}; // rank element window (min, max+1)
+    std::array<int, 3> nexyr1_{}, nexyr2_{};     // per-direction rank element counts (coarse/fine)
+    std::array<int, 3> nr1_{}, nr2_{};           // rank counts with coarse/fine division
+    std::array<int, 3> nxyr1_{}, nxyr2_{};       // per-direction rank node counts (coarse/fine)
+    std::array<double, 3> drxy1_{}, drxy2_{};    // rank window sizes (coarse/fine)
+    std::array<double, 3> bound12_{};            // coarse/fine window boundary coordinates
+    std::array<int, 3> inxyminc_{}, inxymaxc_{}; // rank control-point window (inclusive)
+    std::array<int, 3> inxyminl_{}, inxymaxl_{}; // rank element window (min, max+1)
 
   private:
     /**

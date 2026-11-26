@@ -18,6 +18,6 @@
  * @param sf       Output shape-function values.
  * @param dsf      Output shape-function gradients.
  */
-void MakeSF(const int m, const std::array<double, 3> &xyg, const std::vector<int> &idimc,
-            const std::vector<int> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
+void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int, 3> &idimc,
+            const std::array<int, 3> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
             std::vector<std::array<double, 3>> &dsf);

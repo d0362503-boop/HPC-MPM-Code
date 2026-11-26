@@ -13,7 +13,7 @@ void MPMFEMFSIFluidDivider::LoadBoundaryData(std::ifstream &infile) {
     return;
 }
 
-void MPMFEMFSIFluidDivider::PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max) {
+void MPMFEMFSIFluidDivider::PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max) {
 
     DataPartitioner::BCRenumber(this->partition_mesh_.ubc, this->mesh_.ubc, xynodec, xynodecw, cp_min, cp_max);
     DataPartitioner::BCRenumber(this->partition_mesh_.vbc, this->mesh_.vbc, xynodec, xynodecw, cp_min, cp_max);

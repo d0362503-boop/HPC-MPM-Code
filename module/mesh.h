@@ -6,17 +6,16 @@
 
 // ----- Mesh & node data -----
 inline int node, nodew, nelem, nelemw, nu, nv, nw, np;
-inline std::vector<int> xynode(3), xyelem(3), aelemmin(3), aelemmax(3);
-inline std::vector<int> xynodew(3), xyelemw(3);
-inline std::vector<double> dxy(3), xymin(3), xymax(3), xyminw(3), xymaxw(3);
-inline std::vector<double> rhoe, rmue;
+inline std::array<int, 3> xynode{}, xyelem{}, aelemmin{}, aelemmax{};
+inline std::array<int, 3> xynodew{}, xyelemw{};
+inline std::array<double, 3> dxy{}, xymin{}, xymax{}, xyminw{}, xymaxw{};
 inline std::vector<std::array<int, 8>> nc;
 inline std::vector<std::array<double, 3>> xyn;
 // ----------------------------
 
 // ----- Control point data -----
 inline int nodec, nodecw, nuc, nvc, nwc, npc;
-inline std::vector<int> xynodec(3), xynodecw(3), idimc(3), idiml(3);
+inline std::array<int, 3> xynodec{}, xynodecw{}, idimc{}, idiml{};
 inline std::vector<double> nvol;
 inline std::vector<std::vector<int>> ncc;
 inline std::vector<std::array<double, 3>> xyc;
@@ -47,7 +46,7 @@ inline void InitializeMeshAndTimeParameters() {
  * @param ne Number of background elements along x/y/z (typically the global `xyelem`).
  * @return Element indices along x/y/z.
  */
-inline std::array<int, 3> IndexToIJK(int m, const std::vector<int> &ne) {
+inline std::array<int, 3> IndexToIJK(int m, const std::array<int, 3> &ne) {
 
     const int ize = m / (ne[0] * ne[1]);
     const int iye = (m - ize * (ne[0] * ne[1])) / ne[0];
@@ -62,7 +61,7 @@ inline std::array<int, 3> IndexToIJK(int m, const std::vector<int> &ne) {
  * @param ne Number of background elements along x/y/z.
  * @return Linear element index with x varying fastest, then y, then z.
  */
-inline int IJKToIndex(const std::array<int, 3> &ijk, const std::vector<int> &ne) {
+inline int IJKToIndex(const std::array<int, 3> &ijk, const std::array<int, 3> &ne) {
     return ijk[0] + ne[0] * (ijk[1] + ne[1] * ijk[2]);
 }
 

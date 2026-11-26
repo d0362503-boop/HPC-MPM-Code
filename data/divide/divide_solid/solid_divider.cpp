@@ -59,7 +59,7 @@ void SolidDivider::PartitionPoints(int rank_id) {
     return;
 }
 
-void SolidDivider::PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max) {
+void SolidDivider::PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max) {
 
     this->BCRenumber(this->partition_points_.ubc, this->points_.ubc, xynodec, xynodecw, cp_min, cp_max);
     this->BCRenumber(this->partition_points_.vbc, this->points_.vbc, xynodec, xynodecw, cp_min, cp_max);

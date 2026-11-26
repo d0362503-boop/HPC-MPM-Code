@@ -139,8 +139,8 @@ void DataPartitioner::PartitionInitialDataset() {
 }
 
 void DataPartitioner::BCRenumber(BoundaryCondition &partition_bc, const BoundaryCondition &source_bc,
-                                 const std::vector<int> &local_counts, const std::vector<int> &global_counts,
-                                 const std::vector<int> &local_min, const std::vector<int> &local_max,
+                                 const std::array<int, 3> &local_counts, const std::array<int, 3> &global_counts,
+                                 const std::array<int, 3> &local_min, const std::array<int, 3> &local_max,
                                  bool compute_values) {
 
     partition_bc.nbc.resize(source_bc.ibc);

@@ -24,7 +24,7 @@ class SolidDivider : public DataPartitioner {
      *
      * Must be called after MeshPartition.
      */
-    void PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max);
+    void PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max);
 
     MaterialPoint points_;            // loaded solid particles
     MaterialPoint partition_points_;  // partitioned solid particles

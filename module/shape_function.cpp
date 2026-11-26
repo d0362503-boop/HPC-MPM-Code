@@ -5,8 +5,8 @@
 #include <array>
 #include <vector>
 
-void MakeSF(const int m, const std::array<double, 3> &xyg, const std::vector<int> &idimc,
-            const std::vector<int> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
+void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int, 3> &idimc,
+            const std::array<int, 3> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
             std::vector<std::array<double, 3>> &dsf) {
 
     const int max_nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);

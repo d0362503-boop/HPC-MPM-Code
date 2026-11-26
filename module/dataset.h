@@ -9,11 +9,12 @@ inline int ista, iend, iout, istep, nlstep, rstflag, nmat, npropmax;
 inline double dt, dti, real_time, dlstep, facl = 1.0e0;
 inline double mtol, dtol;
 inline std::string parafile, gridfile, outfile, pointfile;
-inline std::vector<int> npxye(3);
-inline std::vector<double> bb(3), matflag, iprop, nprop;
+inline std::array<int, 3> npxye{};
+inline std::array<double, 3> bb{};
+inline std::vector<double> matflag, iprop, nprop;
 inline std::vector<std::vector<double>> mat_prop;
-inline std::array<std::array<int, 3>, 3> idm = {{{{0, 5, 4}}, {{5, 1, 3}}, {{4, 3, 2}}}};
-inline std::array<std::array<double, 3>, 3> eye_mat = {
+inline constexpr std::array<std::array<int, 3>, 3> idm = {{{{0, 5, 4}}, {{5, 1, 3}}, {{4, 3, 2}}}}; // Voigt index map
+inline constexpr std::array<std::array<double, 3>, 3> eye_mat = {                                // 3x3 identity
     {{{1.0e0, 0.0e0, 0.0e0}}, {{0.0e0, 1.0e0, 0.0e0}}, {{0.0e0, 0.0e0, 1.0e0}}}};
 
 enum class MapScheme { PIC, FLIP, TPIC, APIC };

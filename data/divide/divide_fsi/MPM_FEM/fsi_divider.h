@@ -26,7 +26,7 @@ class MPMFEMFSIFluidDivider {
      *
      * Must be called after the coordinator's MeshPartition.
      */
-    void PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max);
+    void PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max);
 
     /** @brief Write partitioned FEM-fluid BCs (uwbc/vwbc/wwbc/hpbc). */
     void WriteBoundaryData(std::ofstream &outfile);

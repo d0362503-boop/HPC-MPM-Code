@@ -24,7 +24,7 @@ void CrsMat::BuildCrsMat(int num_block) {
     int nyp = xynodec[1];
     int nzp = xynodec[2];
 
-    int idimp2 = *max_element(begin(idimc), end(idimc));
+    int idimp2 = *std::max_element(idimc.begin(), idimc.end());
 
     int nmatptmp = nodec * std::pow((idimp2 + idimp2 + 1), 3);
     std::vector<int> matcolidp(nmatptmp, -1);
