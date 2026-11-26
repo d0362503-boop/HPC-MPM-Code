@@ -44,8 +44,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
      */
     void DataInput();
 
-    /** @brief Solve the coupled fields with interface endpoint-velocity continuity. */
-    void SolveFSISystem();
+    /**
+     * @brief Solve the coupled fields with interface endpoint-velocity continuity.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void SolveFSISystem(const TimeState &ts);
 
     /**
      * @brief Apply one final-phase normal correction to penetrated fluid centres.
@@ -59,8 +62,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     /** @brief Build interface weights and active components, freeze stabilization and reset increments and scratch state. */
     void BeginNewtonStep() override;
 
-    /** @brief Apply iterate BCs and kinematics of both fields, then assemble the coupled system. */
-    void AssembleNewtonSystem() override;
+    /**
+     * @brief Apply iterate BCs and kinematics of both fields, then assemble the coupled system.
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     */
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the four coupled residuals.
@@ -111,17 +117,19 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
      * @brief Assemble the fluid field and its multiplier load into the coupled system.
      * @param nvel_k Fluid nodal velocity at the current endpoint iterate.
      * @param naccel_k Fluid nodal acceleration at the current endpoint iterate.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
     void AssembleFluidSystem(const std::vector<double> &nvel_k, //
-                             const std::vector<double> &naccel_k);
+                             const std::vector<double> &naccel_k, const TimeState &ts);
 
     /**
      * @brief Assemble the solid field and its multiplier load into the coupled system.
      * @param naccel_k Solid nodal acceleration at the current endpoint iterate.
      * @param stress_k Particle stress state for the current Newton iterate.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
     void AssembleSolidSystem(const std::vector<double> &naccel_k, //
-                             std::vector<std::array<double, 6>> &stress_k);
+                             std::vector<std::array<double, 6>> &stress_k, const TimeState &ts);
 
     /**
      * @brief Constrain the fluid and solid nodal velocities to agree at the current time-step endpoint.

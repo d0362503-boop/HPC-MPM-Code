@@ -56,13 +56,13 @@ void StabilizedMPM::InputPointData(std::ifstream &infile) {
     return;
 }
 
-void StabilizedMPM::OutputPointDataVTKHDF(int iview) {
+void StabilizedMPM::OutputPointDataVTKHDF(int iview, const TimeState &ts) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
     vtkhdf::VTKHDFWriter writer(filename);
     auto info = vtkhdf::WriteParticleTopology(writer, this->coord);
-    writer.SetTime(real_time);
+    writer.SetTime(ts.real_time);
 
     writer.CreatePointDataGroup();
     writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, this->vel);

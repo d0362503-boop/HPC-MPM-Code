@@ -50,25 +50,31 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
 
     /**
      * @brief Map solid particle mass/volume/momentum/force to control points (P2G).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Particle2Node() override;
+    void Particle2Node(const TimeState &ts) override;
 
     /**
      * @brief Map updated nodal kinematics back to solid particles (G2P).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Node2Particle() override;
+    void Node2Particle(const TimeState &ts) override;
 
     /**
      * @brief Driver for one implicit solid time step.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void SolveSolid() override;
+    void SolveSolid(const TimeState &ts) override;
 
     // Newton steps driven by SolveNewton().
     /** @brief Reset the displacement increment and Newton scratch state. */
     void BeginNewtonStep() override;
 
-    /** @brief Apply iterate BCs and kinematics, then assemble the solid tangent and residual. */
-    void AssembleNewtonSystem() override;
+    /**
+     * @brief Apply iterate BCs and kinematics, then assemble the solid tangent and residual.
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     */
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the solid residual; linear elasticity only reports and never converges early.
@@ -122,9 +128,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
 
     /**
      * @brief Apply Dirichlet displacement increments for current NR iteration.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
      */
-    void BCNRSet() {
-        this->ApplyDisplacementBC(this->ndispl);
+    void BCNRSet(const TimeState &ts) {
+        this->ApplyDisplacementBC(this->ndispl, ts);
 
         return;
     };
@@ -164,9 +171,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @param mat Target system, cleared by the caller before assembly.
      * @param naccel_k Nodal acceleration at the current endpoint iterate.
      * @param stress_k  Particle stress state for tangent assembly.
+     * @param ts        Current time state (load factor for body forces).
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                std::vector<std::array<double, 6>> &stress_k);
+                                std::vector<std::array<double, 6>> &stress_k, const TimeState &ts);
 
     /**
      * @brief Tangent-modulus contribution for one particle-node pair.

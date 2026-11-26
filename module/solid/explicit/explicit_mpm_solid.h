@@ -24,18 +24,21 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
 
     /**
      * @brief Map solid particle mass/volume/momentum/force to control points (P2G).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Particle2Node() override;
+    void Particle2Node(const TimeState &ts) override;
 
     /**
      * @brief Map updated nodal kinematics back to solid particles (G2P).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Node2Particle() override;
+    void Node2Particle(const TimeState &ts) override;
 
     /**
      * @brief Compute nodal acceleration from force/mass and apply BCs.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void SolveSolid() override;
+    void SolveSolid(const TimeState &ts) override;
 
   private:
     // Incremental deformation gradient for the current step.
@@ -48,8 +51,9 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
 
     /**
      * @brief MUSL velocity projection.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void DoMUSL();
+    void DoMUSL(const TimeState &ts);
 
     /**
      * @brief Update particle deformation gradient.

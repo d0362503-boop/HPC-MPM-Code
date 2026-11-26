@@ -75,9 +75,9 @@ std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
     return adv_vel;
 }
 
-void StabilizedFEM::AssembleNewtonSystem() {
+void StabilizedFEM::AssembleNewtonSystem(const TimeState &ts) {
 
-    this->BCNRSet();
+    this->BCNRSet(ts);
 
     std::vector<double> adv_vel = this->ComputeAdvectionVel();
 
@@ -88,14 +88,14 @@ void StabilizedFEM::AssembleNewtonSystem() {
     VectorAssign(this->NS_.nmata, this->NS_.amat);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
     VectorAssign(nodec * 4, this->NS_.x_lhs);
-    this->AssembleSystem(this->NS_, adv_vel);
+    this->AssembleSystem(this->NS_, adv_vel, ts);
 
     return;
 }
 
-void StabilizedFEM::SolveNS() {
+void StabilizedFEM::SolveNS(const TimeState &ts) {
 
-    SolveNewton(*this, this->max_NR_it);
+    SolveNewton(*this, ts, this->max_NR_it);
 
     return;
 }
@@ -180,11 +180,11 @@ void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
     return;
 }
 
-void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_vel) {
+void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_vel, const TimeState &ts) {
 
-    double fx = bb[0] * facl;
-    double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+    double fx = bb[0] * ts.facl;
+    double fy = bb[1] * ts.facl;
+    double fz = bb[2] * ts.facl;
 
     const std::vector<int> offsets = this->RHSOffsets();
 

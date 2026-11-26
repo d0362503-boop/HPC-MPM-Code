@@ -3,9 +3,9 @@
 using namespace mpm_mpm_monolithic_fsi;
 
 void MPMMPMMonolithicFSI::AssembleFluidSystem(const std::vector<double> &nvel_k, //
-                                              const std::vector<double> &naccel_k) {
+                                              const std::vector<double> &naccel_k, const TimeState &ts) {
 
-    this->fluid_.AssembleSystem(this->fsi_sys, nvel_k, naccel_k);
+    this->fluid_.AssembleSystem(this->fsi_sys, nvel_k, naccel_k, ts);
 
     const double af = this->fluid_.implicit_.integrator_.alpha_f;
     for (int n = 0; n < nodec; n++) {
@@ -23,9 +23,9 @@ void MPMMPMMonolithicFSI::AssembleFluidSystem(const std::vector<double> &nvel_k,
 }
 
 void MPMMPMMonolithicFSI::AssembleSolidSystem(const std::vector<double> &naccel_k, //
-                                              std::vector<std::array<double, 6>> &stress_k) {
+                                              std::vector<std::array<double, 6>> &stress_k, const TimeState &ts) {
 
-    this->solid_.AssembleSystem(this->fsi_sys, naccel_k, stress_k);
+    this->solid_.AssembleSystem(this->fsi_sys, naccel_k, stress_k, ts);
 
     const double af = this->solid_.implicit_.integrator_.alpha_f;
     for (int n = 0; n < nodec; n++) {

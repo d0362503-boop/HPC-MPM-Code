@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
         int iview = istep / iout;
         real_time = dt * double(istep);
 
-        wp.OutputPointDataVTKHDF(iview);
+        wp.OutputPointDataVTKHDF(iview, g_time);
 
         for (istep = ista; istep <= iend; istep++) {
 
@@ -44,11 +44,11 @@ int main(int argc, char *argv[]) {
 
             wp.MeshPointLinklist();
 
-            wp.Particle2Node();
+            wp.Particle2Node(g_time);
 
-            wp.SolveNS();
+            wp.SolveNS(g_time);
 
-            wp.Node2Particle();
+            wp.Node2Particle(g_time);
 
             const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
 
@@ -56,12 +56,12 @@ int main(int argc, char *argv[]) {
 
             if (istep % iout == 0) {
                 iview++;
-                wp.OutputPointDataVTKHDF(iview);
+                wp.OutputPointDataVTKHDF(iview, g_time);
 
                 if (rstflag == 2 || rstflag == 3) wp.RestartOutput();
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, g_time); }
         }
     }
 

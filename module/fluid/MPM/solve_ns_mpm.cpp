@@ -47,9 +47,9 @@ void StabilizedMPM::UpdateNRIncrement() {
     return;
 }
 
-void StabilizedMPM::SolveNS() {
+void StabilizedMPM::SolveNS(const TimeState &ts) {
 
-    SolveNewton(*this, this->max_NR_it);
+    SolveNewton(*this, ts, this->max_NR_it);
 
     return;
 }
@@ -68,9 +68,9 @@ void StabilizedMPM::BeginNewtonStep() {
     return;
 }
 
-void StabilizedMPM::AssembleNewtonSystem() {
+void StabilizedMPM::AssembleNewtonSystem(const TimeState &ts) {
 
-    this->BCNRSet();
+    this->BCNRSet(ts);
 
     this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_,
                                                  this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
@@ -78,7 +78,7 @@ void StabilizedMPM::AssembleNewtonSystem() {
     VectorAssign(this->NS_.nmata, this->NS_.amat);
     VectorAssign(nodec * 4, this->NS_.b_rhs);
     VectorAssign(nodec * 4, this->NS_.x_lhs); // ---- Initialize LHS x value ----
-    this->AssembleSystem(this->NS_, this->nvel_k_, this->naccel_k_);
+    this->AssembleSystem(this->NS_, this->nvel_k_, this->naccel_k_, ts);
 
     return;
 }
@@ -165,16 +165,16 @@ void StabilizedMPM::MakeNSStabCoeff(const std::vector<double> &nvel_k) {
 }
 
 void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_k, //
-                                   const std::vector<double> &naccel_k) {
+                                   const std::vector<double> &naccel_k, const TimeState &ts) {
 
     // double A = 5.0e0 / 180.0e0 * M_PI;
     // double theta = A * std::sin(5.47e0 * real_time);
     // double fx = bb[2] * std::sin(theta);
-    // double fy = bb[1] * facl;
+    // double fy = bb[1] * ts.facl;
     // double fz = bb[2] * std::cos(theta);
-    double fx = bb[0] * facl;
-    double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+    double fx = bb[0] * ts.facl;
+    double fy = bb[1] * ts.facl;
+    double fz = bb[2] * ts.facl;
 
     const std::vector<int> offsets = this->RHSOffsets();
 

@@ -79,11 +79,12 @@ class MaterialPoint {
     /**
      * @brief Apply prescribed Dirichlet boundary values to a velocity/displacement vector.
      * @param nvel Vector to be modified in-place at constrained DOFs.
+     * @param ts   Current time state; its load factor `facl` scales the prescribed values.
      */
-    virtual void ApplyVelocityBC(std::vector<double> &nvel) {
-        this->ubc.BCSetVal(nuc, nvel);
-        this->vbc.BCSetVal(nvc, nvel);
-        this->wbc.BCSetVal(nwc, nvel);
+    virtual void ApplyVelocityBC(std::vector<double> &nvel, const TimeState &ts) {
+        this->ubc.BCSetVal(nuc, nvel, ts.facl);
+        this->vbc.BCSetVal(nvc, nvel, ts.facl);
+        this->wbc.BCSetVal(nwc, nvel, ts.facl);
 
         return;
     }
@@ -103,11 +104,13 @@ class MaterialPoint {
     /**
      * @brief Apply prescribed Dirichlet values to a nodal displacement increment.
      * @param ndispl Displacement increment modified in-place at constrained DOFs.
+     * @param ts     Current time state; the increment is `facl * dt` times the prescribed velocity.
      */
-    virtual void ApplyDisplacementBC(std::vector<double> &ndispl) {
-        this->ubc.BCSetDispl(nuc, ndispl);
-        this->vbc.BCSetDispl(nvc, ndispl);
-        this->wbc.BCSetDispl(nwc, ndispl);
+    virtual void ApplyDisplacementBC(std::vector<double> &ndispl, const TimeState &ts) {
+        const double scale = ts.facl * dt;
+        this->ubc.BCSetDispl(nuc, ndispl, scale);
+        this->vbc.BCSetDispl(nvc, ndispl, scale);
+        this->wbc.BCSetDispl(nwc, ndispl, scale);
 
         return;
     }
@@ -208,7 +211,12 @@ class MaterialPoint {
 
     virtual void RestartInput() {};
 
-    virtual void OutputPointDataVTKHDF(int iview) {};
+    /**
+     * @brief Write this material-point set to a VTK HDF5 file for view `iview`.
+     * @param iview Output view index.
+     * @param ts Current time state; its physical time is written with the data.
+     */
+    virtual void OutputPointDataVTKHDF(int iview, const TimeState &ts) {};
 
     virtual void RestartOutput() {};
 
@@ -360,7 +368,11 @@ class MaterialPoint {
     APIC apic;
     TPIC tpic;
 
-    virtual void Particle2Node() {};
+    /**
+     * @brief Map particle quantities to the control points (P2G) and apply nodal BCs.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    virtual void Particle2Node(const TimeState &ts) {};
 
     void PICFamilyVelReset() {
         if (this->solswitch != MapScheme::FLIP) { VectorAssign(this->num, this->vel); }
@@ -422,7 +434,11 @@ class MaterialPoint {
     void PICFamilyAccelG2P(int pid, int ni, int nid, double sfi, //
                            const std::vector<std::array<double, 3>> &dsf);
 
-    virtual void Node2Particle() {};
+    /**
+     * @brief Map the nodal solution back to the particles (G2P) and update particle state.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    virtual void Node2Particle(const TimeState &ts) {};
 
     /**
      * @brief Map a per-particle scalar variable to control points without mass weighting.

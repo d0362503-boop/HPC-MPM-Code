@@ -18,7 +18,7 @@
 using namespace std;
 using namespace explicitmpm;
 
-void ExplicitSolidMPM::Particle2Node() {
+void ExplicitSolidMPM::Particle2Node(const TimeState &ts) {
 
     int nenode;
     std::vector<int> ncm;
@@ -42,7 +42,7 @@ void ExplicitSolidMPM::Particle2Node() {
                 this->StandardVarP2G(pid, nid, sfi, this->vol, this->nvof);
                 this->VelP2G(pid, nid, sfi);
                 std::array<double, 3> nfint = this->ComputeInternalForce(ni, pid, dsf, sts);
-                std::array<double, 3> nfext = this->ComputeExternalForce(pid, sfi);
+                std::array<double, 3> nfext = this->ComputeExternalForce(pid, sfi, ts);
                 this->nforce[nid + nuc] += nfint[0] + nfext[0];
                 this->nforce[nid + nvc] += nfint[1] + nfext[1];
                 this->nforce[nid + nwc] += nfint[2] + nfext[2];
@@ -57,12 +57,12 @@ void ExplicitSolidMPM::Particle2Node() {
     NodeVarComm(this->nforce, {nuc, nvc, nwc});
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
-    this->ApplyVelocityBC(this->nvel);
+    this->ApplyVelocityBC(this->nvel, ts);
 
     return;
 }
 
-void ExplicitSolidMPM::SolveSolid() {
+void ExplicitSolidMPM::SolveSolid(const TimeState &ts) {
 
     this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {nuc, nvc, nwc});
     this->ApplyAccelerationBC(this->naccel);
@@ -70,7 +70,7 @@ void ExplicitSolidMPM::SolveSolid() {
     return;
 }
 
-void ExplicitSolidMPM::DoMUSL() {
+void ExplicitSolidMPM::DoMUSL(const TimeState &ts) {
 
     int nenode;
     std::vector<int> ncm;
@@ -95,16 +95,16 @@ void ExplicitSolidMPM::DoMUSL() {
     NodeVarComm(this->nmome, {nuc, nvc, nwc});
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
-    this->ApplyVelocityBC(this->nvel);
+    this->ApplyVelocityBC(this->nvel, ts);
 
     return;
 }
 
-void ExplicitSolidMPM::Node2Particle() {
+void ExplicitSolidMPM::Node2Particle(const TimeState &ts) {
 
     this->G2PVelocity();
 
-    this->DoMUSL();
+    this->DoMUSL(ts);
 
     this->UpdateDeformationGradient();
 

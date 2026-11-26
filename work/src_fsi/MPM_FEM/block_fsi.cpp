@@ -54,7 +54,7 @@ void MPMFEMBlockFSI::UpdateFSIInterfaceBC() {
     return;
 }
 
-void MPMFEMBlockFSI::SolveFSISystem() {
+void MPMFEMBlockFSI::SolveFSISystem(const TimeState &ts) {
 
     this->DetectFSIInterface();
 
@@ -70,11 +70,11 @@ void MPMFEMBlockFSI::SolveFSISystem() {
     this->solid_.SM_.force_rebuild_next_ = true;
     for (int block_it = 0; block_it <= this->max_block_iter; block_it++) {
 
-        this->fluid_.SolveNS();
+        this->fluid_.SolveNS(ts);
 
         this->CalFSIForce();
 
-        this->solid_.SolveSolid();
+        this->solid_.SolveSolid(ts);
 
         this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, nvel_k, naccel_k);
 
@@ -374,11 +374,11 @@ double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
     return emd;
 }
 
-std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
+std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept {
 
-    double fx = bb[0] * facl;
-    double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+    double fx = bb[0] * ts.facl;
+    double fy = bb[1] * ts.facl;
+    double fz = bb[2] * ts.facl;
 
     std::array<double, 3> nfext;
     nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);

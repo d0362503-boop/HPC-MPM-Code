@@ -16,9 +16,9 @@ using namespace mpmfemblockfsi;
 // --- BCResidualSet & BCSet is used for self-defined solver ---
 // --- BCPetscBCList is used for petsc solver ---
 
-void FSIFluid::BCNRSet() {
+void FSIFluid::BCNRSet(const TimeState &ts) {
 
-    StabilizedFEM::BCNRSet();
+    StabilizedFEM::BCNRSet(ts);
 
     int num = this->fsi_.fsi_intf.ibc;
     if (num == 0) return;

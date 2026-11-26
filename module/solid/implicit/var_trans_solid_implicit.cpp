@@ -18,7 +18,7 @@
 
 using namespace implicitmpm;
 
-void ImplicitSolidMPM::Particle2Node() {
+void ImplicitSolidMPM::Particle2Node(const TimeState &ts) {
 
     int nenode;
     std::vector<int> ncm;
@@ -55,7 +55,7 @@ void ImplicitSolidMPM::Particle2Node() {
     for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
-    this->ApplyVelocityBC(this->nvel);
+    this->ApplyVelocityBC(this->nvel, ts);
 
     this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {nuc, nvc, nwc});
     this->ApplyAccelerationBC(this->naccel);
@@ -63,7 +63,7 @@ void ImplicitSolidMPM::Particle2Node() {
     return;
 }
 
-void ImplicitSolidMPM::Node2Particle() {
+void ImplicitSolidMPM::Node2Particle(const TimeState &ts) {
 
     // ---- Newmark beta velocity & acceleration ----
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);

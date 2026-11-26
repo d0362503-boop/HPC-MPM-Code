@@ -29,11 +29,12 @@ class BoundaryCondition {
     void BCOutput(std::ofstream &outfile, std::string bc_name, bool if_fbc = true);
 
     /**
-     * @brief Apply prescribed boundary values to `variable` at constrained DOFs.
+     * @brief Apply prescribed boundary values `scale * fbc` to `variable` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
      * @param variable Vector to be modified in-place.
+     * @param scale    Load factor applied to the prescribed values (the current `facl`).
      */
-    void BCSetVal(int nn, std::vector<double> &variable);
+    void BCSetVal(int nn, std::vector<double> &variable, double scale);
 
     /**
      * @brief Zero out `variable` at constrained DOFs.
@@ -43,13 +44,14 @@ class BoundaryCondition {
     void BCSetZero(int nn, std::vector<double> &variable);
 
     /**
-     * @brief Set the displacement increment `facl * dt * fbc` at constrained DOFs.
+     * @brief Set the displacement increment `scale * fbc` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
      * @param variable Displacement increment modified in-place.
+     * @param scale    Velocity-to-increment factor `facl * dt` of the current step.
      * @note Matches the Newmark endpoint velocity `facl * fbc` because the step-start
      * `nvel` and `naccel` already hold `facl * fbc` and zero there (ApplyVelocityBC / ApplyAccelerationBC in P2G).
      */
-    void BCSetDispl(int nn, std::vector<double> &variable);
+    void BCSetDispl(int nn, std::vector<double> &variable, double scale);
 
     /**
      * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.

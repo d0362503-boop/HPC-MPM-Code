@@ -32,9 +32,9 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
 
 MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); }
 
-void MPMMPMMonolithicFSI::SolveFSISystem() {
+void MPMMPMMonolithicFSI::SolveFSISystem(const TimeState &ts) {
 
-    SolveNewton(*this, this->max_NR_it);
+    SolveNewton(*this, ts, this->max_NR_it);
 
     return;
 }
@@ -63,19 +63,19 @@ void MPMMPMMonolithicFSI::BeginNewtonStep() {
     return;
 }
 
-void MPMMPMMonolithicFSI::AssembleNewtonSystem() {
+void MPMMPMMonolithicFSI::AssembleNewtonSystem(const TimeState &ts) {
 
     VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
     VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
 
-    this->fluid_.BCNRSet();
+    this->fluid_.BCNRSet(ts);
     this->fluid_.implicit_.ComputeNodeVelAccelFromDispl(this->fluid_, this->nvel_f_, this->naccel_f_);
 
-    this->solid_.BCNRSet();
+    this->solid_.BCNRSet(ts);
     this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, this->nvel_s_, this->naccel_s_);
 
-    this->AssembleFluidSystem(this->nvel_f_, this->naccel_f_);
-    this->AssembleSolidSystem(this->naccel_s_, this->stress_k_);
+    this->AssembleFluidSystem(this->nvel_f_, this->naccel_f_, ts);
+    this->AssembleSolidSystem(this->naccel_s_, this->stress_k_, ts);
     this->AssembleInterfaceSystem(this->nvel_f_, this->nvel_s_);
 
     return;

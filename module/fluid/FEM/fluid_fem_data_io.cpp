@@ -67,7 +67,7 @@ void StabilizedFEM::RestartOutput() {
     return;
 }
 
-void StabilizedFEM::OutputMeshDataVTKHDF(int iview) {
+void StabilizedFEM::OutputMeshDataVTKHDF(int iview, const TimeState &ts) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
@@ -86,7 +86,7 @@ void StabilizedFEM::OutputMeshDataVTKHDF(int iview) {
     vtkhdf::VTKHDFWriter::ComputeGlobalInfo(local_npts, point_global_offset, total_npts, MPI_COMM_WORLD);
 
     auto info = vtkhdf::WriteHexMeshTopology(writer, xyn, nc, point_global_offset);
-    writer.SetTime(real_time);
+    writer.SetTime(ts.real_time);
 
     writer.CreatePointDataGroup();
     writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.point_global_offset, velocity);

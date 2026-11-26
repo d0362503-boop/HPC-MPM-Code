@@ -77,12 +77,12 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
     return K_mat;
 }
 
-void ImplicitSolidMPM::SolveSolid() {
+void ImplicitSolidMPM::SolveSolid(const TimeState &ts) {
 
     // --- NR_flag true for nonlinear elasticity and false for linear elasticity ---
     this->max_NR_it = (NR_flag) ? 100 : 0;
 
-    SolveNewton(*this, this->max_NR_it);
+    SolveNewton(*this, ts, this->max_NR_it);
 
     return;
 }
@@ -100,16 +100,16 @@ void ImplicitSolidMPM::BeginNewtonStep() {
     return;
 }
 
-void ImplicitSolidMPM::AssembleNewtonSystem() {
+void ImplicitSolidMPM::AssembleNewtonSystem(const TimeState &ts) {
 
-    this->BCNRSet();
+    this->BCNRSet(ts);
 
     this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_, this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
 
     VectorAssign(this->SM_.nmata, this->SM_.amat);
     VectorAssign(nodec * 3, this->SM_.b_rhs);
     VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
-    this->AssembleSystem(this->SM_, this->naccel_k_, this->stress_k_);
+    this->AssembleSystem(this->SM_, this->naccel_k_, this->stress_k_, ts);
 
     return;
 }
@@ -138,7 +138,7 @@ void ImplicitSolidMPM::EndNewtonStep() {
 }
 
 void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                      std::vector<std::array<double, 6>> &stress_k) {
+                                      std::vector<std::array<double, 6>> &stress_k, const TimeState &ts) {
 
     const std::vector<int> offsets = this->RHSOffsets();
 
@@ -215,7 +215,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
                 // --- For Generalized-α (if α_f = 1, back to Newmark-β) ---
                 std::array<double, 3> nfint, nfext;
                 nfint = this->ComputeInternalForce(ni, pid, dsf, sts_af);
-                nfext = this->ComputeExternalForce(pid, sfi);
+                nfext = this->ComputeExternalForce(pid, sfi, ts);
 
                 mat.b_rhs[nid + offsets[0]] += nfint[0] + nfext[0];
                 mat.b_rhs[nid + offsets[1]] += nfint[1] + nfext[1];

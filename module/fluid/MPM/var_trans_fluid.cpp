@@ -15,7 +15,7 @@
 
 using namespace stabilizedmpm;
 
-void StabilizedMPM::Particle2Node() {
+void StabilizedMPM::Particle2Node(const TimeState &ts) {
 
     int nenode;
     std::vector<int> ncm;
@@ -55,10 +55,10 @@ void StabilizedMPM::Particle2Node() {
     for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
 
     this->CutOffSmallNodalVar(this->npres_old, this->nmass, {0});
-    this->pbc.BCSetVal(0, this->npres_old);
+    this->pbc.BCSetVal(0, this->npres_old, ts.facl);
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
-    this->ApplyVelocityBC(this->nvel);
+    this->ApplyVelocityBC(this->nvel, ts);
 
     this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {nuc, nvc, nwc});
     this->ApplyAccelerationBC(this->naccel);
@@ -66,7 +66,7 @@ void StabilizedMPM::Particle2Node() {
     return;
 }
 
-void StabilizedMPM::Node2Particle() {
+void StabilizedMPM::Node2Particle(const TimeState &ts) {
 
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
     // ---- Newmark beta velocity & acceleration ----

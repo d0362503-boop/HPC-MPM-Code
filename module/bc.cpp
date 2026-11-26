@@ -49,12 +49,12 @@ void BoundaryCondition::BCOutput(std::ofstream &outfile, std::string bc_name, bo
     return;
 }
 
-void BoundaryCondition::BCSetVal(int nn, std::vector<double> &variable) {
+void BoundaryCondition::BCSetVal(int nn, std::vector<double> &variable, double scale) {
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = this->fbc[i] * facl;
+            variable[n] = this->fbc[i] * scale;
         }
     }
 
@@ -73,12 +73,12 @@ void BoundaryCondition::BCSetZero(int nn, std::vector<double> &variable) {
     return;
 }
 
-void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable) {
+void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, double scale) {
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = facl * dt * this->fbc[i];
+            variable[n] = scale * this->fbc[i];
         }
     }
 

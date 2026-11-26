@@ -25,8 +25,11 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
     void BCResidualSet(std::vector<double> &rr) override;
 
   protected:
-    /** @brief Apply fluid BCs and the solid interface velocity to the n+1 Newton iterate. */
-    void BCNRSet() override;
+    /**
+     * @brief Apply fluid BCs and the solid interface velocity to the n+1 Newton iterate.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
+     */
+    void BCNRSet(const TimeState &ts) override;
 };
 
 class FSISolid : public implicitmpm::ImplicitSolidMPM {
@@ -37,7 +40,15 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
 
     double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
+    /**
+     * @brief Nodal external force from one solid particle: body force on the solid plus
+     *        added fluid mass, and the particle traction force.
+     * @param pid Solid particle index.
+     * @param sfi Shape-function value of the node at the particle.
+     * @param ts Current time state; its load factor `facl` scales the body force.
+     * @return Force contribution of this particle to the node.
+     */
+    std::array<double, 3> ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept override;
 
     /**
      * @brief Add solid inertia, added-mass inertia and FSI forces to the RHS.
@@ -83,7 +94,11 @@ class MPMFEMBlockFSI {
 
     void UpdateFSIInterfaceBC();
 
-    void SolveFSISystem();
+    /**
+     * @brief Advance one time step with partitioned (block-iterative) fluid-solid coupling.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void SolveFSISystem(const TimeState &ts);
 
     void CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k);
 

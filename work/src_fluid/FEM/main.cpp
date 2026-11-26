@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
         real_time = dt * double(istep);
 
         fluid.Cp2NodeVTK();
-        fluid.OutputMeshDataVTKHDF(iview);
+        fluid.OutputMeshDataVTKHDF(iview, g_time);
 
         for (istep = ista; istep <= iend; istep++) {
 
@@ -51,19 +51,19 @@ int main(int argc, char *argv[]) {
 
             fluid.SetPFDomain();
 
-            fluid.SolveNS();
+            fluid.SolveNS(g_time);
 
             fluid.CommitNodalKinematics();
 
             if (istep % iout == 0) {
                 iview++;
                 fluid.Cp2NodeVTK();
-                fluid.OutputMeshDataVTKHDF(iview);
+                fluid.OutputMeshDataVTKHDF(iview, g_time);
 
                 if (rstflag == 2 || rstflag == 3) fluid.RestartOutput();
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, g_time); }
         }
     }
 

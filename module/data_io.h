@@ -105,13 +105,13 @@ void InputParaGriddata(std::ifstream &infile, Grid &grid);
 /**
  * @brief Print a progress message to stdout showing current step and view index.
  * @param iview Output view index.
- * @param istep Current time step.
+ * @param ts    Current time state (step index and physical time are printed).
  */
-inline void OutputMessage(int iview, int istep) {
+inline void OutputMessage(int iview, const TimeState &ts) {
 
     std::cout << " ===== Now Computing ===== " << "\n";
-    std::cout << "istep:" << std::setw(10) << istep << "\n";
-    std::cout << "time:" << std::setw(15) << real_time << " s" << std::setw(10) //
+    std::cout << "istep:" << std::setw(10) << ts.istep << "\n";
+    std::cout << "time:" << std::setw(15) << ts.real_time << " s" << std::setw(10) //
               << "iview:" << std::setw(10) << iview << "\n";
     std::cout << "========================== " << "\n";
 

@@ -38,9 +38,9 @@ int main(int argc, char *argv[]) {
 
         fsi.solid_.DetermineRigidBC();
 
-        fsi.solid_.OutputPointDataVTKHDF(iview);
+        fsi.solid_.OutputPointDataVTKHDF(iview, g_time);
 
-        fsi.fluid_.OutputPointDataVTKHDF(iview);
+        fsi.fluid_.OutputPointDataVTKHDF(iview, g_time);
 
         for (istep = ista; istep <= iend; istep++) {
             // -----------------------------------------------
@@ -66,15 +66,15 @@ int main(int argc, char *argv[]) {
 
             fsi.fluid_.MeshPointLinklist();
 
-            fsi.solid_.Particle2Node();
+            fsi.solid_.Particle2Node(g_time);
 
-            fsi.fluid_.Particle2Node();
+            fsi.fluid_.Particle2Node(g_time);
 
-            fsi.SolveFSISystem(); // --- Monolithic Newton iteration ---
+            fsi.SolveFSISystem(g_time); // --- Monolithic Newton iteration ---
 
-            fsi.solid_.Node2Particle();
+            fsi.solid_.Node2Particle(g_time);
 
-            fsi.fluid_.Node2Particle();
+            fsi.fluid_.Node2Particle(g_time);
 
             fsi.solid_.MoveParticle();
 
@@ -84,8 +84,8 @@ int main(int argc, char *argv[]) {
 
             if (istep % iout == 0) {
                 iview++;
-                fsi.solid_.OutputPointDataVTKHDF(iview);
-                fsi.fluid_.OutputPointDataVTKHDF(iview);
+                fsi.solid_.OutputPointDataVTKHDF(iview, g_time);
+                fsi.fluid_.OutputPointDataVTKHDF(iview, g_time);
 
                 if (rstflag == 2 || rstflag == 3) {
                     fsi.fluid_.RestartOutput();
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, g_time); }
         }
     }
 

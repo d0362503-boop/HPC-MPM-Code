@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
         int iview = istep / iout;
         real_time = dt * double(istep);
 
-        sp.OutputPointDataVTKHDF(iview);
+        sp.OutputPointDataVTKHDF(iview, g_time);
 
         for (istep = ista; istep <= iend; istep++) {
 
@@ -42,20 +42,20 @@ int main(int argc, char *argv[]) {
 
             sp.MeshPointLinklist();
 
-            sp.Particle2Node();
+            sp.Particle2Node(g_time);
 
-            sp.SolveSolid();
+            sp.SolveSolid(g_time);
 
-            sp.Node2Particle();
+            sp.Node2Particle(g_time);
 
             sp.MoveParticle();
 
             if (istep % iout == 0) {
                 iview++;
-                sp.OutputPointDataVTKHDF(iview);
+                sp.OutputPointDataVTKHDF(iview, g_time);
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, g_time); }
         }
 
         if (rstflag == 2 || rstflag == 3) sp.RestartOutput();

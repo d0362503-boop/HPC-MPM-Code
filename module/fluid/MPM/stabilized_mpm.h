@@ -64,21 +64,33 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /** @brief Initialize fluid particle state. */
     void InitializePointData() override;
 
-    /** @brief Map fluid particle mass/momentum to control points (P2G). */
-    void Particle2Node() override;
+    /**
+     * @brief Map fluid particle mass/momentum to control points (P2G).
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void Particle2Node(const TimeState &ts) override;
 
-    /** @brief Map nodal velocity/pressure back to fluid particles (G2P). */
-    void Node2Particle() override;
+    /**
+     * @brief Map nodal velocity/pressure back to fluid particles (G2P).
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void Node2Particle(const TimeState &ts) override;
 
-    /** @brief Solve the stabilized Navier-Stokes system. */
-    void SolveNS();
+    /**
+     * @brief Solve the stabilized Navier-Stokes system.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void SolveNS(const TimeState &ts);
 
     // Newton steps driven by SolveNewton().
     /** @brief Freeze stabilization coefficients and reset the displacement, pressure and Newton scratch state. */
     void BeginNewtonStep() override;
 
-    /** @brief Apply iterate BCs and kinematics, then assemble the Navier-Stokes tangent and residual. */
-    void AssembleNewtonSystem() override;
+    /**
+     * @brief Apply iterate BCs and kinematics, then assemble the Navier-Stokes tangent and residual.
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     */
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the Navier-Stokes residual.
@@ -132,8 +144,9 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Write fluid particle data to VTK HDF5 files.
      * @param iview Output view index.
+     * @param ts Current time state; its physical time is written with the data.
      */
-    void OutputPointDataVTKHDF(int iview) override;
+    void OutputPointDataVTKHDF(int iview, const TimeState &ts) override;
 
     /** @brief Write fluid restart data. */
     void RestartOutput() override;
@@ -181,10 +194,13 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
         return;
     };
 
-    /** @brief Apply Dirichlet displacement increments for NR iteration. */
-    void BCNRSet() {
-        this->ApplyDisplacementBC(this->ndispl);
-        this->pbc.BCSetVal(0, this->npres);
+    /**
+     * @brief Apply Dirichlet displacement increments for NR iteration.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
+     */
+    void BCNRSet(const TimeState &ts) {
+        this->ApplyDisplacementBC(this->ndispl, ts);
+        this->pbc.BCSetVal(0, this->npres, ts.facl);
 
         return;
     };
@@ -195,9 +211,10 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      * @param mat Target system, cleared by the caller before assembly.
      * @param naccel_k Nodal acceleration at the current endpoint iterate.
      * @param nvel_k Nodal velocity at the current endpoint iterate.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_k, //
-                                const std::vector<double> &naccel_k);
+                                const std::vector<double> &naccel_k, const TimeState &ts);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;

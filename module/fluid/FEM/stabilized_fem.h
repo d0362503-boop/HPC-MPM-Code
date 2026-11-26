@@ -106,8 +106,9 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      *
      * Leaves `nvel`, `npres` and `naccel` at time level n; call
      * CommitNodalKinematics() once the time step is accepted.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void SolveNS();
+    void SolveNS(const TimeState &ts);
 
     // Newton steps driven by SolveNewton().
     /**
@@ -120,8 +121,9 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @brief Apply BCs to the n+1 iterate, update the n+1 acceleration and the
      *        SUPG/PSPG/LSIC coefficients at n+α_f, then assemble the Picard tangent
      *        and residual (derivatives of τ are neglected).
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
      */
-    void AssembleNewtonSystem() override;
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the Navier-Stokes residual.
@@ -176,18 +178,22 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Write fluid mesh data to VTK HDF5 files.
      * @param iview Output view index.
+     * @param ts Current time state; its physical time is written with the data.
      */
-    void OutputMeshDataVTKHDF(int iview);
+    void OutputMeshDataVTKHDF(int iview, const TimeState &ts);
 
     std::vector<double> nvel_k, naccel_k, npres_k; // n+1 Newton iterate
 
   protected:
     double r0r = 0.0e0;
 
-    /** @brief Apply velocity and pressure boundary conditions to the n+1 iterate. */
-    virtual void BCNRSet() {
-        this->ApplyVelocityBC(this->nvel_k);
-        this->pbc.BCSetVal(0, this->npres_k);
+    /**
+     * @brief Apply velocity and pressure boundary conditions to the n+1 iterate.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
+     */
+    virtual void BCNRSet(const TimeState &ts) {
+        this->ApplyVelocityBC(this->nvel_k, ts);
+        this->pbc.BCSetVal(0, this->npres_k, ts.facl);
 
         return;
     };
@@ -235,8 +241,9 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @brief Assemble the stabilized Navier-Stokes Picard tangent and residual (RHS = -R).
      * @param mat Target system; fluid blocks and rows follow `blocks` and `RHSOffsets()`.
      * @param adv_vel Nodal advection velocity at n+α_f used in convection and SUPG weights.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
-    virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &adv_vel);
+    virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &adv_vel, const TimeState &ts);
 };
 
 } // namespace stabilizedfem
