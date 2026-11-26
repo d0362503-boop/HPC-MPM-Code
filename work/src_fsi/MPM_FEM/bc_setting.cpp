@@ -16,17 +16,17 @@ using namespace mpmfemblockfsi;
 // --- BCResidualSet & BCSet is used for self-defined solver ---
 // --- BCPetscBCList is used for petsc solver ---
 
-void FSIFluid::BCSet() {
+void FSIFluid::BCNRSet() {
 
-    StabilizedFEM::BCSet();
+    StabilizedFEM::BCNRSet();
 
     int num = this->fsi_.fsi_intf.ibc;
     if (num == 0) return;
     for (int i = 0; i < num; i++) {
         int nid = this->fsi_.fsi_intf.nbc[i];
-        this->nvel[nid + nuc] = this->fsi_.fsi_intf.fbc[i + 0 * num];
-        this->nvel[nid + nvc] = this->fsi_.fsi_intf.fbc[i + 1 * num];
-        this->nvel[nid + nwc] = this->fsi_.fsi_intf.fbc[i + 2 * num];
+        this->nvel_k[nid + nuc] = this->fsi_.fsi_intf.fbc[i + 0 * num];
+        this->nvel_k[nid + nvc] = this->fsi_.fsi_intf.fbc[i + 1 * num];
+        this->nvel_k[nid + nwc] = this->fsi_.fsi_intf.fbc[i + 2 * num];
     }
 
     return;

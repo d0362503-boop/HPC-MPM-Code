@@ -49,7 +49,7 @@ void StabilizedMPM::UpdateNRIncrement() {
 
 void StabilizedMPM::SolveNS() {
 
-    SolveNewton(*this, max_NR_it);
+    SolveNewton(*this, this->max_NR_it);
 
     return;
 }

@@ -54,27 +54,30 @@ DetectFSIInterface()       // solid nphi = clamp(nvof / nvol, 0, 1); interface n
 UpdateFSIInterfaceBC()     // initial interface velocity = solid step-start nodal velocity
 force a PC rebuild of NS_ and SM_
 for block_it = 0 .. max_block_iter
-    fluid_.SolveNS()                        // interface velocity imposed by FSIFluid
+    fluid_.SolveNS()                        // n+1 iterate only; nvel/npres stay at level n
     CalFSIForce()                           // added mass and fluid stress force on the solid
     solid_.SolveSolid()                     // Newton with the FSISolid overrides
     v_s = solid endpoint velocity from the displacement increment
     Anderson_relaxation_M1(...)             // update the imposed interface velocity
     residual of v_s - v_f on the interface; converged -> break
     block_it == max_block_iter -> MPI_Abort
-fluid_.naccel = ComputeNodeAccelFromVel(); fluid_.UpdateNodalVar()
+fluid_.CommitNodalKinematics()              // naccel, nvel, npres <- n+1, once per step
 ```
+
+The interface residual compares `v_s` with the fluid iterate `fluid_.nvel_k`.
 
 ### Fluid side (`FSIFluid`)
 
-`BCSet()` applies the regular fluid BCs, then sets `nvel` at the interface
-nodes to the relaxed interface velocity `fsi_intf.fbc`. `BuildPetscBCList()` and
+`BCNRSet()` applies the regular fluid BCs to the n+1 iterate, then sets
+`nvel_k` at the interface nodes to the relaxed interface velocity `fsi_intf.fbc`. `BuildPetscBCList()` and
 `BCResidualSet()` add the interface velocity components to the constrained
 rows, so the PETSc and native paths treat them as Dirichlet values.
 
 ### FSI force and added mass (`CalFSIForce`)
 
 - Added mass: `added_mass[n] = sum over solid particles of sf_n * rhol * vol_p`.
-- Fluid stress at `n + alpha_f`: `sigma = mu (grad v + grad v^T) - p I`, with
+- Fluid stress at `n + alpha_f` (blended from `nvel`/`npres` and `nvel_k`/`npres_k`):
+  `sigma = mu (grad v + grad v^T) - p I`, with
   `mu` blended from `rmul`/`rmug` by `nphi`.
 - The force is integrated over the fluid quadrature points with weight
   `cell volume / (npxye_x * npxye_y * npxye_z)`, multiplied by the solid `nphi` of

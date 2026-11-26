@@ -24,7 +24,9 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
     // --- For self-defined ---
     void BCResidualSet(std::vector<double> &rr) override;
 
-    void BCSet() override;
+  protected:
+    /** @brief Apply fluid BCs and the solid interface velocity to the n+1 Newton iterate. */
+    void BCNRSet() override;
 };
 
 class FSISolid : public implicitmpm::ImplicitSolidMPM {
@@ -91,6 +93,18 @@ class MPMFEMBlockFSI {
      * @brief Specifically for Turek CFD problem (Cylinder flow)
      */
     void CalDragLiftCoeffForTurekCFD();
+
+  private:
+    /**
+     * @brief Check fluid-solid interface velocity agreement for the current block iteration.
+     *
+     * Aborts the run when the iteration reaches `max_block_iter` without converging.
+     * @param block_it Current block iteration index; iteration 0 sets the reference residual.
+     * @param nvel_k Solid nodal velocity at n+1 from this block iteration.
+     * @param r0r_ref Interface velocity mismatch norm of the first iteration; written when `block_it == 0`.
+     * @return Whether the interface velocity mismatch is within the relative or absolute tolerance.
+     */
+    bool CheckBlockConvergence(int block_it, const std::vector<double> &nvel_k, double &r0r_ref);
 };
 
 } // namespace mpmfemblockfsi

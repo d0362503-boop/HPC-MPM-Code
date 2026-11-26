@@ -59,7 +59,7 @@ void MPMFEMBlockFSI::SolveFSISystem() {
     this->DetectFSIInterface();
 
     int num = this->fsi_intf.ibc;
-    double rtr_fsi_ref, r0r_fsi_ref, rkr_fsi_ref, rtr_fsi_abs;
+    double r0r_fsi_ref = 0.0e0;
     std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3), //
         r_k_old(num * 3, 0.0e0), r_k_older(num * 3, 0.0e0),     //
         u_s_old(num * 3, 0.0e0), u_s_older(num * 3, 0.0e0);
@@ -82,40 +82,47 @@ void MPMFEMBlockFSI::SolveFSISystem() {
         // Aitken_relaxation(block_it, this->relax_omega, nvel_k, r_k_old, this->fsi_intf);
         // Anderson_relaxation_M2(block_it, nvel_k, u_s_old, u_s_older, r_k_old, r_k_older, this->fsi_intf);
 
-        if (block_it == 0) {
-            this->CalFSIResidual(r0r_fsi_ref, rtr_fsi_abs, nvel_k);
-            rkr_fsi_ref = r0r_fsi_ref;
-        } else {
-            this->CalFSIResidual(rkr_fsi_ref, rtr_fsi_abs, nvel_k);
-        }
-        rtr_fsi_ref = (r0r_fsi_ref > 1.0e-12) ? (rkr_fsi_ref / r0r_fsi_ref) : 0.0e0;
-
-        // --- Convergence check ---
-        if (rtr_fsi_ref < this->tol_ref || r0r_fsi_ref < this->tol_ref || //
-            rtr_fsi_abs < this->tol_abs) {
-            if (myrank == 0) {
-                std::cout << "Block_converge:" << std::setw(10) << block_it  //
-                          << std::setw(15) << std::scientific << rtr_fsi_ref //
-                          << std::setw(15) << std::scientific << r0r_fsi_ref //
-                          << std::setw(15) << std::scientific << rtr_fsi_abs << "\n";
-            }
-            break;
-        } else if (block_it == this->max_block_iter) {
-            if (myrank == 0) {
-                std::cout << "Block_it:" << std::setw(10) << block_it << "\n";
-                std::cout << "Block iteration can not converge" << "\n";
-            }
-            MPI_Abort(MPI_COMM_WORLD, -1);
-        }
+        if (this->CheckBlockConvergence(block_it, nvel_k, r0r_fsi_ref)) { break; }
     }
+
+    this->fluid_.CommitNodalKinematics();
 
     // this->CalDragLiftCoeffForTurekCFD();
 
-    this->fluid_.naccel = this->fluid_.ComputeNodeAccelFromVel();
-
-    this->fluid_.UpdateNodalVar();
-
     return;
+}
+
+bool MPMFEMBlockFSI::CheckBlockConvergence(int block_it, const std::vector<double> &nvel_k, double &r0r_ref) {
+
+    double rkr_ref, rtr_abs;
+    if (block_it == 0) {
+        this->CalFSIResidual(r0r_ref, rtr_abs, nvel_k);
+        rkr_ref = r0r_ref;
+    } else {
+        this->CalFSIResidual(rkr_ref, rtr_abs, nvel_k);
+    }
+    const double rtr_ref = (r0r_ref > 1.0e-12) ? (rkr_ref / r0r_ref) : 0.0e0;
+
+    // --- Convergence check ---
+    if (rtr_ref < this->tol_ref || r0r_ref < this->tol_ref || rtr_abs < this->tol_abs) {
+        if (myrank == 0) {
+            std::cout << "Block_converge:" << std::setw(10) << block_it  //
+                      << std::setw(15) << std::scientific << rtr_ref     //
+                      << std::setw(15) << std::scientific << r0r_ref     //
+                      << std::setw(15) << std::scientific << rtr_abs << "\n";
+        }
+        return true;
+    }
+
+    if (block_it == this->max_block_iter) {
+        if (myrank == 0) {
+            std::cout << "Block_it:" << std::setw(10) << block_it << "\n";
+            std::cout << "Block iteration can not converge" << "\n";
+        }
+        MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    return false;
 }
 
 void MPMFEMBlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k) {
@@ -128,9 +135,9 @@ void MPMFEMBlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std:
         double us2 = nvel_k[nid + nvc];
         double us3 = nvel_k[nid + nwc];
 
-        double uf1 = this->fluid_.nvel[nid + nuc];
-        double uf2 = this->fluid_.nvel[nid + nvc];
-        double uf3 = this->fluid_.nvel[nid + nwc];
+        double uf1 = this->fluid_.nvel_k[nid + nuc];
+        double uf2 = this->fluid_.nvel_k[nid + nvc];
+        double uf3 = this->fluid_.nvel_k[nid + nwc];
 
         double dr1 = us1 - uf1;
         double dr2 = us2 - uf2;
@@ -278,10 +285,10 @@ void MPMFEMBlockFSI::CalFSIForce() {
 
     std::vector<double> nvel_af(nodec * 3), npres_af(nodec);
     for (int n = 0; n < nodec * 3; n++) { //
-        nvel_af[n] = af0 * this->fluid_.nvel_old[n] + af * this->fluid_.nvel[n];
+        nvel_af[n] = af0 * this->fluid_.nvel[n] + af * this->fluid_.nvel_k[n];
     }
     for (int n = 0; n < nodec; n++) { //
-        npres_af[n] = af0 * this->fluid_.npres_old[n] + af * this->fluid_.npres[n];
+        npres_af[n] = af0 * this->fluid_.npres[n] + af * this->fluid_.npres_k[n];
     }
     // -----------------------------------------------------
 

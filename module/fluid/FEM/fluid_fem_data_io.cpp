@@ -34,9 +34,7 @@ void StabilizedFEM::RestartInput() {
     for (int n = 0; n < nodec; n++) {
         reinfile >> this->naccel[n + nuc] >> this->naccel[n + nvc] >> this->naccel[n + nwc]        //
             >> this->nvel[n + nuc] >> this->nvel[n + nvc] >> this->nvel[n + nwc]                   //
-            >> this->nvel_old[n + nuc] >> this->nvel_old[n + nvc] >> this->nvel_old[n + nwc]       //
-            >> this->nvel_older[n + nuc] >> this->nvel_older[n + nvc] >> this->nvel_older[n + nwc] //
-            >> this->npres[n] >> this->npres_old[n] >> this->nphi[n];
+            >> this->npres[n] >> this->nphi[n];
         reinfile.ignore(1000, '\n');
     }
 
@@ -60,14 +58,7 @@ void StabilizedFEM::RestartOutput() {
                   << std::setw(15) << this->nvel[n + nuc]       //
                   << std::setw(15) << this->nvel[n + nvc]       //
                   << std::setw(15) << this->nvel[n + nwc]       //
-                  << std::setw(15) << this->nvel_old[n + nuc]   //
-                  << std::setw(15) << this->nvel_old[n + nvc]   //
-                  << std::setw(15) << this->nvel_old[n + nwc]   //
-                  << std::setw(15) << this->nvel_older[n + nuc] //
-                  << std::setw(15) << this->nvel_older[n + nvc] //
-                  << std::setw(15) << this->nvel_older[n + nwc] //
                   << std::setw(15) << this->npres[n]            //
-                  << std::setw(15) << this->npres_old[n]        //
                   << std::setw(15) << this->nphi[n] << "\n";
     }
 
