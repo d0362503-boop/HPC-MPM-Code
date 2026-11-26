@@ -1,10 +1,10 @@
-# ConstitutiveModel Class Documentation
+# `module/solid/` — Constitutive Models
 
-## 1. Overview
+## Overview
 
 `ConstitutiveModel` encapsulates all constitutive model implementations for the MPM solid mechanics solver. It performs per-particle stress updates and, when running in implicit mode, assembles the material stiffness matrix. The class does not own particle state arrays; instead, it operates on a single particle's stress in-place.
 
-## 2. Class Structure
+## Class Structure
 
 ```cpp
 class ConstitutiveModel {
@@ -36,14 +36,14 @@ public:
 };
 ```
 
-### 2.1 Member Variables
+### Member Variables
 
 | Variable | Type | Description |
 |----------|------|-------------|
 | `implicit_flag` | `bool` | Implicit solver flag. When `true`, each constitutive model assembles `stif_mat` after updating stress; when `false`, stiffness computation is skipped for efficiency. |
 | `stif_mat` | `std::array<std::array<double,6>,6>` | 6x6 material tangent stiffness matrix $\mathbf{C}$ in Voigt notation, used for tangent modulus assembly in implicit Newton-Raphson iterations. The index mapping follows `kVoigtIndex[3][3]` (`module/cal_mat.h`). |
 
-### 2.2 Public Interface
+### Public Interface
 
 #### `UpdateStress`
 
@@ -67,9 +67,9 @@ Dispatcher that selects the constitutive model based on `model_type`.
 
 ---
 
-## 3. Constitutive Model Details
+## Constitutive Model Details
 
-### 3.1 Rigid Body (`MatRigid`)
+### Rigid Body (`MatRigid`)
 
 **Usage**: Rigid boundary conditions or inactive particles.
 
@@ -85,7 +85,7 @@ $$
 
 ---
 
-### 3.2 Linear Elasticity (`MatLinElast`)
+### Linear Elasticity (`MatLinElast`)
 
 **Material parameters**:
 - `mat_prop[0]` — Young's modulus $E$
@@ -141,7 +141,7 @@ $$
 
 ---
 
-### 3.3 Neo-Hookean Hyperelasticity (`MatNeoHookean`)
+### Neo-Hookean Hyperelasticity (`MatNeoHookean`)
 
 **Material parameters**:
 - `mat_prop[0]` — Young's modulus $E$
@@ -176,7 +176,7 @@ $$
 
 ---
 
-### 3.4 St. Venant-Kirchhoff Hyperelasticity (`MatStVk`)
+### St. Venant-Kirchhoff Hyperelasticity (`MatStVk`)
 
 **Material parameters**:
 - `mat_prop[0]` — Young's modulus $E$
@@ -217,7 +217,7 @@ $$
 
 ---
 
-### 3.5 Mooney-Rivlin Hyperelasticity (`MatMooneyRivlin`)
+### Mooney-Rivlin Hyperelasticity (`MatMooneyRivlin`)
 
 **Material parameters**:
 - `mat_prop[0]` — $C_1$
@@ -291,15 +291,15 @@ $$
 
 ---
 
-## 4. Storage Format
+## Storage Format
 
-### 4.1 Stress Vector (Voigt Notation)
+### Stress Vector (Voigt Notation)
 
 $$
 \boldsymbol{\sigma} = \begin{bmatrix} \sigma_{xx} & \sigma_{yy} & \sigma_{zz} & \sigma_{yz} & \sigma_{xz} & \sigma_{xy} \end{bmatrix}^\mathrm{T}
 $$
 
-### 4.2 Stiffness Matrix Index Mapping
+### Stiffness Matrix Index Mapping
 
 The fourth-order tensor $C_{ijkl}$ is mapped to a $6\times6$ Voigt matrix via `kVoigtIndex[3][3]` (`module/cal_mat.h`):
 
@@ -319,7 +319,7 @@ $$
 
 ---
 
-## 5. Usage Example
+## Usage Example
 
 Typical call flow (implicit MPM):
 

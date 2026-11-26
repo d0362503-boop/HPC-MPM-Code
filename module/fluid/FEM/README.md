@@ -1,4 +1,4 @@
-# `fluid/FEM/` — Stabilized FEM Fluid Solver
+# `module/fluid/FEM/` — Stabilized FEM Fluid Solver
 
 ## Overview
 
@@ -57,19 +57,19 @@ EndNewtonStep
 `SolveNS` does not commit; the owner calls `CommitNodalSolution` once the
 time step is accepted.
 
-### 1. Generalized-α Time Levels
+### Generalized-α Time Levels
 `nvel` / `npres` / `naccel` hold time level n; `nvel_k` / `npres_k` / `naccel_k` hold the
 n+1 Newton iterate. The advection velocity is evaluated at n+α_f:
 ```cpp
 adv_vel  = (1 - α_f) · nvel   +  α_f · nvel_k     // v^{n+α_f}
 p_af     = (1 - α_f) · npres  +  α_f · npres_k    // p^{n+α_f}
-accel_am = (1 - α_m) · naccel +  α_m · naccel_k   // a^{n+α_m}
+naccel_am = (1 - α_m) · naccel + α_m · naccel_k   // a^{n+α_m}
 ```
 Only ∂v/∂t is evaluated at n+α_m; convection, viscosity, pressure, and the
 stabilization terms are evaluated at n+α_f (pressure follows Scheme-2 of
 Liu et al. 2020).
 
-### 2. SUPG/PSPG Stabilization Coefficients
+### SUPG/PSPG Stabilization Coefficients
 Per-element values `tau_supg` (SUPG/PSPG, Tezduyar type) and `tau_lsic` (LSIC) are
 recomputed from v^{n+α_f} at every nonlinear iteration, using:
 - Element size `he`
@@ -78,7 +78,7 @@ recomputed from v^{n+α_f} at every nonlinear iteration, using:
 
 Their derivatives are not included in the tangent (as in Bazilevs et al. 2008).
 
-### 3. System Assembly (`AssembleSystem`)
+### System Assembly (`AssembleSystem`)
 For each particle inside each element, shape functions are evaluated and the following matrices are accumulated into `NS_.amat`:
 
 | Block | Physics |
@@ -101,10 +101,10 @@ Tangent coefficients (unknowns Δv^{n+1}, Δp^{n+1}):
 The convection tangent is Picard: only (v·∇)δv is kept; (δv·∇)v and the
 velocity derivatives of the SUPG/PSPG weights are omitted.
 
-The RHS `NS_.b_rhs` is the negative residual, evaluated with `accel_am`,
+The RHS `NS_.b_rhs` is the negative residual, evaluated with `naccel_am`,
 `adv_vel`, `p_af`, and the body force.
 
-### 4. Linear Solve (`SolveNewtonCorrection`)
+### Linear Solve (`SolveNewtonCorrection`)
 ```cpp
 if (NS_.use_petsc)  →  PETSc KSP
 else                 →  GPBiCGAR (custom iterative solver)
@@ -130,7 +130,7 @@ matrix values update while the numerical PC can be reused; FieldSplit groups
 are preserved by checking the actual PC type. See the
 [shared solver guide](../../solver/README.md).
 
-### 5. Time-History Update (`CommitNodalSolution`)
+### Time-History Update (`CommitNodalSolution`)
 Called once per accepted time step (after FSI block convergence, not inside `SolveNS`):
 ```
 naccel ← (nvel_k − nvel)/(γΔt) − (1−γ)/γ · naccel

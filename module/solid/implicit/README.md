@@ -1,4 +1,4 @@
-# `solid/implicit/` — Implicit MPM Solid Solver
+# `module/solid/implicit/` — Implicit MPM Solid Solver
 
 ## Overview
 
@@ -25,14 +25,14 @@ SolidMaterialPointBase
 
 `ImplicitSolidMPM` exposes its time-step entry points and assembly helpers publicly.
 
-### Public interface
+### Public Interface
 
 - `DataInput()` — loads the standalone implicit-solid case input (orchestration file, parameter file, mesh/time scalars, BC data, particle data).
 - `Particle2Node()` — P2G transfer for mass, volume, momentum, and force.
 - `Node2Particle()` — G2P transfer and particle kinematic update.
 - `SolveSolid()` — driver for one implicit time step.
 
-### Assembly helpers / overrides
+### Assembly Helpers / Overrides
 
 The following overrides are invoked polymorphically through the `MaterialPoint` base class or called internally by `SolveSolid`:
 
@@ -46,7 +46,7 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 
 ## Numerical Method
 
-### 1. Time Integration — Newmark-β / Generalized-α
+### Time Integration — Newmark-β / Generalized-α
 
 `implicit_.integrator_` owns the generalized-alpha/Newmark coefficients; `implicit_`
 is the `ImplicitMPM` component (`module/implicit/implicit_mpm.h`) owned by `ImplicitSolidMPM`.
@@ -55,7 +55,7 @@ displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged 
 `ComputeNRLumpedMassMat()` and `AddInertialForceToRHS()` stay virtual on
 `ImplicitSolidMPM` so FSI solids can add their added-mass terms.
 
-### 2. Newton–Raphson Loop (`SolveSolid`)
+### Newton–Raphson Loop (`SolveSolid`)
 
 `ImplicitSolidMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
 `SolveSolid(ts)` sets `max_NR_it` from `NR_flag` and calls
@@ -74,7 +74,7 @@ EndNewtonStep();                            // release SM_ storage
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
 - `NR_flag = false` → linear elasticity (0 NR iterations, single linear solve)
 
-### 3. Linear solver and reduced equations
+### Linear Solver and Reduced Equations
 
 The standalone PETSc configuration is FGMRES, restart 200, with ASM overlap 1.
 Local sub-solvers apply PREONLY + ILU(1), nonzero shift `1e-3`, through the
@@ -88,7 +88,7 @@ test. Each correction refreshes compact values and the numerical PC; layout
 changes or scheduled rebuilding recreate the KSP. See the
 [shared solver guide](../../solver/README.md) for compression and lifecycle details.
 
-### 4. System Assembly (`AssembleSystem`)
+### System Assembly (`AssembleSystem`)
 
 For each particle inside each element:
 
@@ -122,7 +122,7 @@ norm. Linear solves bypass this check and perform one solve. For norm and
 threshold caveats, see the
 [solver limitations](../../solver/README.md#current-convergence-limitations).
 
-### 5. Tangent Modulus (`ComputeTangentModulus`)
+### Tangent Modulus (`ComputeTangentModulus`)
 
 Computes the 3×3 nodal stiffness block from the 4th-order material tangent `C` (stored in `cm_.stif_mat`) and the current stress state:
 
@@ -132,7 +132,7 @@ K_ij = Σ_k,l  dsf[k][ni] · C[i][k][j][l] · dsf[l][nj]
 
 If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 
-### 6. Variable Transfer (`var_trans_solid_implicit.cpp`)
+### Variable Transfer (`var_trans_solid_implicit.cpp`)
 
 #### `Particle2Node`
 

@@ -1,4 +1,4 @@
-# Partitioned MPM-FEM FSI
+# `work/src_fsi/MPM_FEM/` — Partitioned MPM-FEM FSI
 
 `MPMFEMBlockFSI` couples a two-phase stabilized FEM fluid (`StabilizedFEM`,
 liquid/gas on the background mesh) with an implicit MPM solid
@@ -15,7 +15,7 @@ Each sub-solver keeps its own linear system: fluid `NS_` (FEM, 4 components)
 and solid `SM_` (3 components). There is no monolithic matrix; compare the
 [MPM-MPM FSI](../MPM_MPM/README.md) for the monolithic alternative.
 
-## Source responsibilities
+## File Inventory
 
 | File | Responsibility |
 |------|----------------|
@@ -29,7 +29,7 @@ and solid `SM_` (3 components). There is no monolithic matrix; compare the
 The sub-solvers are documented in the [fluid FEM](../../../module/fluid/FEM/README.md)
 and [implicit solid](../../../module/solid/implicit/README.md) guides.
 
-## Time step
+## Time Step
 
 `main.cpp` advances each step in this order:
 
@@ -47,7 +47,7 @@ The fluid is Eulerian: its liquid fraction is projected once at start-up by
 `Particle2NodePhi()`, and no fluid particles move. The phase-field system `PF_`
 is reserved and not advanced (see the fluid FEM guide).
 
-## Block iteration (`SolveFSISystem`)
+## Block Iteration (`SolveFSISystem`)
 
 ```text
 DetectFSIInterface()       // solid nphi = clamp(nvof / nvol, 0, 1); interface nodes: nphi > phi_cut
@@ -66,14 +66,14 @@ fluid_.CommitNodalSolution()                // naccel, nvel, npres <- n+1, once 
 
 The interface residual compares `v_s` with the fluid iterate `fluid_.nvel_k`.
 
-### Fluid side (`FSIFluid`)
+### Fluid Side (`FSIFluid`)
 
 `BCNRSet()` applies the regular fluid BCs to the n+1 iterate, then sets
 `nvel_k` at the interface nodes to the relaxed interface velocity `fsi_intf.fbc`. `BuildPetscBCList()` and
 `BCResidualSet()` add the interface velocity components to the constrained
 rows, so the PETSc and native paths treat them as Dirichlet values.
 
-### FSI force and added mass (`CalFSIForce`)
+### FSI Force and Added Mass (`CalFSIForce`)
 
 - Added mass: `added_mass[n] = sum over solid particles of sf_n * rhol * vol_p`.
 - Fluid stress at `n + alpha_f` (blended from `nvel`/`npres` and `nvel_k`/`npres_k`):
@@ -83,7 +83,7 @@ rows, so the PETSc and native paths treat them as Dirichlet values.
   `cell volume / (npxye_x * npxye_y * npxye_z)`, multiplied by the solid `nphi` of
   the node, and set to zero where `nphi < phi_cut`.
 
-### Solid side (`FSISolid`)
+### Solid Side (`FSISolid`)
 
 | Override | Change to the implicit solid |
 |----------|------------------------------|
@@ -94,7 +94,7 @@ rows, so the PETSc and native paths treat them as Dirichlet values.
 The solid Newton loop itself is the shared one (`SolveNewton`, see the
 [implicit core](../../../module/implicit/README.md)).
 
-### Relaxation and convergence
+### Relaxation and Convergence
 
 `Anderson_relaxation_M1` uses the interface residual `R = v_s - v_bar`, where
 `v_bar` is the currently imposed interface velocity:
@@ -129,7 +129,7 @@ Rank 0 prints `Block_converge: block_it  rkr/r0r  r0r  rms`. Failure at
 | `tol_abs` | 1e-6 | RMS interface velocity difference [m/s] |
 | `relax_omega` | 0.1 | Aitken only |
 
-## Linear solvers
+## Linear Solvers
 
 Both systems use the shared `CrsMat` path; see the
 [shared solver guide](../../../module/solver/README.md).
@@ -139,7 +139,7 @@ Both systems use the shared `CrsMat` path; see the
 
 `SolveFSISystem()` forces a PC rebuild of both at the start of each time step.
 
-## Input and run
+## Input and Run
 
 - Parameters: `data/generate/fsi/MPM_FEM/input.txt`. The blocks are:
   1. `solswitch rstflag nlstep`

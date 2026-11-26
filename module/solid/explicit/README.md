@@ -1,4 +1,4 @@
-# Explicit Solid MPM
+# `module/solid/explicit/` — Explicit MPM Solid Solver
 
 `module/solid/explicit/` implements the explicit time-integration solid MPM solver as the `ExplicitSolidMPM` class.
 
@@ -12,7 +12,7 @@
 
 The class supports the same interpolation family as the fluid MPM path (PIC, FLIP, TPIC, APIC) through the shared `MapScheme` switch and helpers in `map_and_interpolate.h`.
 
-## Files
+## File Inventory
 
 | File | Purpose |
 |------|---------|
@@ -27,7 +27,7 @@ The class supports the same interpolation family as the fluid MPM path (PIC, FLI
 `Node2Particle()` perform the cycle above. `DoMUSL()` reprojects particle
 momentum after the velocity update, before updating position and deformation.
 
-## F-bar projection
+## F-bar Projection
 
 When `Fbar_flag` is enabled, `ComputeDefGradBar()` corrects the volumetric
 part of the incremental deformation gradient to reduce locking.

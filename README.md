@@ -12,7 +12,7 @@ Shared modules provide generalized-alpha/Newmark integration and VTK HDF5 visual
 
 Requires a C++17-capable GCC, MPI, CMake ≥ 3.20, and Zlib. CMake bootstraps PETSc 3.24.5 and HDF5 1.14.5 from `Ext/` into `external/`, reusing existing installations there. Hypre 3.0.0 is optional during the PETSc build.
 
-### Solver executables
+### Solver Executables
 
 Every driver is built as its own executable in its own directory under `build/work/`, next to that driver's `file.dat`; no CMake edit is needed to switch solvers:
 
@@ -26,7 +26,7 @@ Every driver is built as its own executable in its own directory under `build/wo
 
 To build one driver only, use `cmake --build build --target <executable>`.
 
-### Configure and compile
+### Configure and Compile
 
 Run from the repository root:
 
@@ -85,7 +85,7 @@ Per-rank files append the rank number to the input prefix, for example `griddata
 
 **The MPI process count must match the partition topology, and the input mesh dimensions must match the generated partition data.**
 
-### Background launcher and logging
+### Background Launcher and Logging
 
 The host-local, gitignored `build/run.sh` launches a driver in the background. Pass the driver directory as `RUN_DIR`;
 the script runs the single `MPM_*` executable it finds there with that directory's `file.dat`:
@@ -131,6 +131,7 @@ Implementation details are maintained in the relevant guides:
 - [Fluid FEM](module/fluid/FEM/README.md): stabilized FEM Navier–Stokes with two-phase (VOF/phase-field) properties
 - [Explicit solid](module/solid/explicit/README.md): explicit MPM solid update
 - [Implicit solid](module/solid/implicit/README.md): nonlinear solve and solid preconditioning
+- [Constitutive models](module/solid/constitutive_model.md): solid material models, stress update, and Voigt storage
 - [MPM–MPM FSI](work/src_fsi/MPM_MPM/README.md): coupled Newton loop, interface handling, and solver strategy
 - [MPM–FEM FSI](work/src_fsi/MPM_FEM/README.md): partitioned block iteration, interface force and added mass, Anderson relaxation
 - [Dynamic load balancing](module/DLB/README.md): fluid MPM partitioning

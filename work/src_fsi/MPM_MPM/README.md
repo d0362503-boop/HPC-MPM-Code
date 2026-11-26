@@ -1,4 +1,4 @@
-# Monolithic MPM-MPM FSI
+# `work/src_fsi/MPM_MPM/` — Monolithic MPM-MPM FSI
 
 `MPMMPMMonolithicFSI` assembles fluid, solid, and interface multipliers into one
 PETSc system. The ten components are fluid displacement (3), fluid pressure (1),
@@ -28,7 +28,7 @@ Their local ILU factors use RCM ordering and nonzero shift `1e-3`.
 The inner tolerances below control preconditioning work; physical acceptance
 is determined separately by the four Newton residuals.
 
-## Source responsibilities
+## File Inventory
 
 | File | Responsibility |
 |------|----------------|
@@ -45,7 +45,7 @@ The class header documents the driver operations and physics callbacks.
 CMake collects this directory's `.cpp` files; see the
 [root build guide](../../../README.md#build) for configuration and compilation.
 
-## Linear-system boundary
+## Linear-System Boundary
 
 The FSI coordinator assembles with the original control points and ten components.
 Native RHS and correction vectors keep their full `nodec * ndof` length and
@@ -83,7 +83,7 @@ components with another PETSc `selfp` Schur split. Solid remains FGMRES with
 rtol 0.1 and max 100, ASM overlap 1, and local PREONLY/ILU(1) with nonzero shift
 1e-3. The new coupled iteration uses rtol 0.5 and max 100. These are
 preconditioning solves; the outer and physical Newton tolerances control the
-final correction. `BuildInterfaceSchur` remains removed.
+final correction.
 
 `SolveSystem(NR_it, istep)` preserves the unscaled physical RHS, zeros the native
 correction, scales the matrix/RHS and solves through `CrsMat`. It then multiplies
@@ -122,7 +122,7 @@ and the four physical Newton criteria below determine correction acceptance.
 The native CSR graph, full PETSc assembly, material parameters, and physical
 Newton criteria remain independent of this preconditioning layer.
 
-## Newton iteration
+## Newton Iteration
 
 `MPMMPMMonolithicFSI` is a `NonlinearProblem` (`module/implicit/newton_solver.h`), and
 `SolveFSISystem(ts)` calls `SolveNewton(*this, ts, max_NR_it)`. Its `BeginNewtonStep()`
@@ -179,7 +179,7 @@ so repeated assembly can accumulate trial stress across iterations. This remains
 a limitation of that material path; hyperelastic models evaluate stress from
 the trial deformation gradient.
 
-## Interface activation
+## Interface Activation
 
 `LumpedLagrangeMultiplier()` interpolates the step-start solid and fluid volume
 fractions and their gradients with `MakeSF()` at quadrature points. It integrates
@@ -210,7 +210,7 @@ weights at control points where `nlm_lump` is zero. The assembled multiplier
 equations enforce nodal endpoint-velocity continuity; their convergence
 alone does not establish particle nonpenetration.
 
-## Particle penetration correction
+## Particle Penetration Correction
 
 The driver calls the following sequence after the coupled solve:
 

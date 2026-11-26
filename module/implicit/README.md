@@ -1,4 +1,4 @@
-# Implicit core
+# `module/implicit/` — Implicit Core
 
 Shared building blocks of the implicit (generalized-α / Newton) solvers. The
 physics-specific Newton steps stay in each solver; linear algebra stays in
@@ -13,7 +13,7 @@ physics-specific Newton steps stay in each solver; linear algebra stays in
 `ImplicitMPM` holds only implicit state; each function takes the owning
 `MaterialPoint` and reads (`const`) or writes its arrays.
 
-## Newton driver
+## Newton Driver
 
 ```cpp
 problem.BeginNewtonStep();
