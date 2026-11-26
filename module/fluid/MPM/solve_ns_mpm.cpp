@@ -110,8 +110,8 @@ void StabilizedMPM::MakeNSStabCoeff(const std::vector<double> &nvel_k) {
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(this->num, this->tau1);
-    VectorAssign(this->num, this->tau2);
+    VectorAssign(this->num, this->tau_pspg);
+    VectorAssign(this->num, this->tau_lsic);
     for (int m = 0; m < nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
@@ -147,15 +147,15 @@ void StabilizedMPM::MakeNSStabCoeff(const std::vector<double> &nvel_k) {
                 double t1 = this->rho * dti;
                 double t2 = 2.0e0 * this->rho * std::sqrt(uvw) / he;
                 double t3 = 4.0e0 * this->rmu / (he * he);
-                this->tau1[pid] = 1.0e0 / (t1 + t2 + t3);
-                this->tau2[pid] = (he * he) / (4.0e0 * this->tau1[pid]);
+                this->tau_pspg[pid] = 1.0e0 / (t1 + t2 + t3);
+                this->tau_lsic[pid] = (he * he) / (4.0e0 * this->tau_pspg[pid]);
             } else if constexpr (this->stab_coeff == StabCoeff::PSPG) { // ---- PSPG ----
                 double t1 = (2.0e0 * dti) * (2.0e0 * dti);
                 double t2 = 4.0e0 * uvw / (he * he);
                 double t3 = std::pow((4.0e0 * rnu / (he * he)), 2);
                 double tau = 1.0e0 / std::sqrt(t1 + t2 + t3);
-                this->tau1[pid] = tau / this->rho;
-                this->tau2[pid] = tau * uvw * this->rho;
+                this->tau_pspg[pid] = tau / this->rho;
+                this->tau_lsic[pid] = tau * uvw * this->rho;
             }
             pid = this->idp2p[pid];
         }
@@ -207,8 +207,8 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
             std::array<double, 3> xyp = this->coord[pid];
             MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
 
-            double t1 = this->tau1[pid];
-            double t2 = this->tau2[pid];
+            double t1 = this->tau_pspg[pid];
+            double t2 = this->tau_lsic[pid];
             double volp = this->vol[pid];
             double massp = this->mass[pid];
 
@@ -283,17 +283,17 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
                     double svw = volp * (dsfi3 * dsfj2) * this->rmu;
                     double swu = volp * (dsfi1 * dsfj3) * this->rmu;
                     double swv = volp * (dsfi2 * dsfj3) * this->rmu;
-                    // --- Preesure (Galerkin part) ---
+                    // --- Pressure (Galerkin part) ---
                     double esgx = volp * dsfi1 * sfj;
                     double esgy = volp * dsfi2 * sfj;
                     double esgz = volp * dsfi3 * sfj;
-                    // --- Preesure (Stabilized part) ---
+                    // --- Pressure (PSPG): ∫ (τ/ρ) ∇N_i·∇N_j ---
                     double elt = volp * (dsfi1 * dsfj1 + dsfi2 * dsfj2 + dsfi3 * dsfj3) * t1;
                     // --- Continuity (Galerkin part) ---
                     double Cow1 = volp * sfi * dsfj1;
                     double Cow2 = volp * sfi * dsfj2;
                     double Cow3 = volp * sfi * dsfj3;
-                    // --- Shock Capturing (Stabilized part) ---
+                    // --- LSIC (grad-div): ∫ ρ τ_LSIC ∂N_i/∂x_k ∂N_j/∂x_l ---
                     double scu = volp * dsfi1 * dsfj1 * t2;
                     double scv = volp * dsfi2 * dsfj2 * t2;
                     double scw = volp * dsfi3 * dsfj3 * t2;

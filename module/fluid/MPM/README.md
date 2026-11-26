@@ -26,7 +26,7 @@ Shared helpers live outside this directory:
 ## Class and Defaults
 
 `StabilizedMPM` inherits from `MaterialPoint` and owns the four-component
-`NS_` system, inflow buffer `ifp`, and per-particle `tau1/tau2`.
+`NS_` system, inflow buffer `ifp`, and per-particle `tau_pspg/tau_lsic`.
 The compile-time `stab_coeff` selects VMS or PSPG; `solswitch` selects
 PIC, FLIP, TPIC, or APIC transfers.
 
@@ -119,7 +119,7 @@ After overlap communication (`NodeVarComm`), nodal velocity and acceleration are
 
 ### Stabilization coefficients (`MakeNSStabCoeff`)
 
-`tau1` and `tau2` are computed at each particle from the local velocity magnitude and element size.  The compile-time selector chooses between:
+`tau_pspg` (PSPG τ divided by ρ) and `tau_lsic` (ρ times the LSIC grad-div coefficient) are computed at each particle from the local velocity magnitude and element size. Unlike the FEM solver, MPM has no SUPG term, and these coefficients already contain ρ.  The compile-time selector chooses between:
 
 - `StabCoeff::VMS` (default) — VMS-style `τ`.
 - `StabCoeff::PSPG` — PSPG-style `τ`.

@@ -24,8 +24,8 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     // Stabilization-coefficient selector
     static constexpr StabCoeff stab_coeff = StabCoeff::VMS;
 
-    // SUPG/PSPG and LSIC stabilization coefficients
-    std::vector<double> tau1, tau2;
+    // Per-particle PSPG tau/rho and rho*tau_LSIC
+    std::vector<double> tau_pspg, tau_lsic;
 
     CrsMat NS_;            // Navier-Stokes system matrix
     ImplicitMPM implicit_; // implicit time integration and kinematics
