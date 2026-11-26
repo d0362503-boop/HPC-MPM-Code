@@ -4,13 +4,13 @@
 > material-point distribution. The calling material owner selects whether and
 > when to enable repartitioning through `do_dlb` and `ApplyDLB()`.
 
-## 1. Purpose
+## Purpose
 
 DLB adjusts background-element cuts to follow particle load, then migrates
 particles and rebuilds partition-dependent data. The Cartesian rank grid
 `nxyr` stays fixed; only the cuts move.
 
-## 2. Files and Entry Points
+## File Inventory and Entry Points
 
 | File                     | Role                                                                                                |
 | ------------------------ | --------------------------------------------------------------------------------------------------- |
@@ -29,14 +29,14 @@ std::vector<Region> ComputeDLBRegions(const Grid &, local_samples);  // gather �
 void UpdateDLBRegions(const std::vector<Region> &, Grid &);          // apply + rebuild overlap metadata
 ```
 
-## 3. Activation and Call Sites
+## Activation and Call Sites
 
 - The caller sets `do_dlb` and selects a collective repartitioning cadence.
 - One possible caller policy replaces ordinary migration at output steps
   when DLB is enabled and more than one rank participates:
 
 ```cpp
-const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
+const bool is_dlb_step = wp.do_dlb && (ts.istep % params.iout == 0);
 if (nprocs != 1) is_dlb_step ? wp.ApplyDLB() : wp.MoveParticle();
 ```
 
@@ -44,7 +44,7 @@ if (nprocs != 1) is_dlb_step ? wp.ApplyDLB() : wp.MoveParticle();
   Navier–Stokes matrix structure (`NS_.BuildCrsMat(16)`); the implicit solid override
   does the same with `SM_.BuildCrsMat(9)`.
 
-## 4. The `ApplyDLB()` Pipeline
+## The `ApplyDLB()` Pipeline
 
 `MaterialPoint::ApplyDLB()` (`module/mpi_data.cpp`) runs six stages in order:
 
@@ -62,14 +62,14 @@ ComputeNodalVol(); RebuildBC();         // 6. partition-dependent data
 
 The physics class then rebuilds its solver system after these six stages.
 
-## 5. Region Model and Invariants
+## Region Model and Invariants
 
 ```cpp
 struct Region { std::array<int,3> elem_min, elem_max; };  // inclusive, global element indices
 ```
 
 - **Tiling invariant:** the `nprocs` regions must be pairwise disjoint and cover the
-  whole `xyelemw` mesh exactly. It holds *by construction* (§7) and is re-validated at
+  whole `xyelemw` mesh exactly. It holds *by construction* (see [Repartitioning](#repartitioning-recursive-coordinate-bisection)) and is re-validated at
   runtime: `UpdateDLBRegions` bounds-checks every region, and the migration builders
   `MPI_Abort` on any particle that is covered by zero or two regions.
 - The regions live in `Partition::regions` of the rank's `Grid`. Other code reads
@@ -79,7 +79,7 @@ struct Region { std::array<int,3> elem_min, elem_max; };  // inclusive, global e
   `InputParaGriddata()` collects the initial regions from `griddata`, and
   `UpdateDLBRegions()` refreshes them after DLB.
 
-## 6. Sampling
+## Sampling
 
 The sampling-rate target is `kSamplesPerRank = 256` times the rank count globally,
 distributed approximately in proportion to each rank's particle count. The minimum
@@ -97,7 +97,7 @@ sampling, not random sampling; particle ordering can bias the sample distributio
 `GatherSamplesToRoot` packs `(x,y,z)` into a flat double array and uses
 `MPI_Gather`/`MPI_Gatherv`; only the root keeps the global sample set.
 
-## 7. Repartitioning: Recursive Coordinate Bisection
+## Repartitioning: Recursive Coordinate Bisection
 
 `ComputeDLBRegions` (root only) cuts the fixed rank grid `nxyr = (nx, ny, nz)` in z,
 then y, then x:
@@ -126,7 +126,7 @@ for each z-slice:
 
 Result is broadcast (`MPI_Bcast`) so all ranks hold the identical region table.
 
-## 8. Particle Redistribution
+## Particle Redistribution
 
 Two different migration builders exist; DLB requires the global one:
 
@@ -151,7 +151,7 @@ Note the ordering: particles are redistributed **while the old mesh data is stil
 place**, because destinations are computed from global element indices
 (`LocateGlobalElement` + region bounds), not from local mesh structures.
 
-## 9. Region and Metadata Update
+## Region and Metadata Update
 
 `UpdateDLBRegions` applies the new partition and rebuilds everything that depends on
 it, in this order:
@@ -174,7 +174,7 @@ Nodal *state* is intentionally not preserved: the fluid MPM rebuilds all nodal f
 from particles at the next `Particle2Node()` anyway (arrays are re-`VectorAssign`ed
 per step with the current `nodec`).
 
-## 10. Boundary-Condition Persistence
+## Boundary-Condition Persistence
 
 Local BC IDs are meaningless after a repartition, so BCs are cached as **global IDs**
 at input time (`InputBCData`, when `do_dlb = 1`):
@@ -194,14 +194,14 @@ at input time (`InputBCData`, when `do_dlb = 1`):
 (`InitializeInflowBC`, `infbc_isfilled = false`), so the next inflow check
 re-evaluates boundary-cell fill under the new partition.
 
-## 11. Integration
+## Integration
 
 - Ordinary fluid/solid migration reads `Partition::regions`.
 - `PairwiseRepulsivePST` intersects particle support balls with those regions
   to select MPI ghosts, including non-uniform partitions.
 - `CrsMat` rebuilds ownership from the new `aelemmin/aelemmax` bounds.
 
-## 12. Failure Checks (all `MPI_Abort`)
+## Failure Checks (All `MPI_Abort`)
 
 | site                       | condition                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------- |
@@ -213,7 +213,7 @@ re-evaluates boundary-cell fill under the new partition.
 | `CacheGlobalEntries`       | conflicting prescribed values on one global BC node                                   |
 | `FilterSamples`            | sample outside the global mesh                                                        |
 
-## 13. Known Limitations
+## Known Limitations
 
 - **Restart:** `*_re.txt` files hold the DLB-adapted per-rank distribution, but a
   restart always boots into the uniform `griddata` partition. The first

@@ -1,4 +1,4 @@
-# Data Tools
+# `data/` — Data Tools
 
 `data/` contains the standalone input generators (`makinput_*`) and partition
 tools (`makdivide_*`) for the `fluid`, `solid`, and `fsi` cases.
@@ -73,7 +73,7 @@ Each divider reads the matching generator outputs through the per-variant
 and output prefix such as `./myrank_data_column/`), and writes rank-split
 `griddata*.txt` / `pointdata*.txt` files under that prefix.
 
-## Runtime parameters and reconfiguration
+## Runtime Parameters and Reconfiguration
 
 CMake copies generator parameter files such as `input.txt` from the source
 directories into the matching `build/data/generate/` directories only when the

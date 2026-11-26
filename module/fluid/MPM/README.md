@@ -1,4 +1,4 @@
-# `fluid/MPM/` — Stabilized MPM Fluid Solver
+# `module/fluid/MPM/` — Stabilized MPM Fluid Solver
 
 ## Overview
 
@@ -9,7 +9,7 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 | File                       | Responsibility                                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `stabilized_mpm.h`         | `StabilizedMPM` class declaration, inflow buffer `ifp`, NS system owner, stabilization selector             |
-| `var_trans_fluid.cpp`      | `Particle2Node` (P2G) and `Node2Particle` (G2P), including APIC `Dmat`/`InvDmat` and particle-shifting call |
+| `var_trans_fluid.cpp`      | `Particle2Node` (P2G) and `Node2Particle` (G2P), including APIC `inv_Dmat` / `InvDmatG2P` and particle-shifting call |
 | `solve_ns_mpm.cpp`         | Newton–Raphson loop, VMS/PSPG stabilization coefficients, NS assembly/solve                                 |
 | `fluid_point_inflow.cpp`   | Empty-mesh and filled-mesh inflow particle generation                                                       |
 | `fluid_material_point.cpp` | `InitializePointData`, `MoveParticle` (migration + inflow), `MigrateParticleData`, `ApplyDLB`, `RebuildBC`  |
@@ -53,11 +53,11 @@ for ts.istep = ista .. iend
     Particle2Node(ts)
     SolveNS(ts)
     Node2Particle(ts)       (commits nodal kinematics and npres <- npres_k first)
-    if (do_dlb && istep % iout == 0)
+    if (wp.do_dlb && ts.istep % params.iout == 0)
         ApplyDLB(grid)      (if nprocs > 1: MoveParticle + repartition + rebuilds)
     else
         MoveParticle()      (if nprocs > 1)
-    output / restart    (if istep % iout == 0)
+    output / restart    (if ts.istep % params.iout == 0)
 ```
 
 `ApplyDLB()` redistributes the background mesh across ranks from the particle
@@ -66,7 +66,7 @@ See the [DLB guide](../../DLB/README.md) for the pipeline and its invariants.
 
 ## Time Integration
 
-### 1. Newmark-β / Generalized-α predictor
+### Newmark-β / Generalized-α Predictor
 
 Time-integration parameters belong to `implicit_.integrator_`
 (`GeneralizedAlphaIntegrator`). `implicit_` is the `ImplicitMPM` component
@@ -82,7 +82,7 @@ implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k);
 
 Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `implicit_.integrator_.GeneralizedAlphaParaSet()` / `NewmarkBetaParaSet(dt)` in `DataInput`.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
 
-### 2. Newton–Raphson loop (`SolveNS`)
+### Newton–Raphson Loop (`SolveNS`)
 
 `StabilizedMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
 `SolveNS(ts)` calls `SolveNewton(*this, ts, max_NR_it)` (`max_NR_it = 100`), which runs:
@@ -118,14 +118,14 @@ For each particle inside each element:
 
 After overlap communication (`NodeVarComm`), nodal velocity and acceleration are obtained by `CutOffSmallNodalVar`, and velocity/acceleration BCs are applied.
 
-### Stabilization coefficients (`MakeNSStabCoeff`)
+### Stabilization Coefficients (`MakeNSStabCoeff`)
 
 `tau_pspg` (PSPG τ divided by ρ) and `tau_lsic` (ρ times the LSIC grad-div coefficient) are computed at each particle from the local velocity magnitude and element size. Unlike the FEM solver, MPM has no SUPG term, and these coefficients already contain ρ.  The compile-time selector chooses between:
 
 - `StabCoeff::VMS` (default) — VMS-style `τ`.
 - `StabCoeff::PSPG` — PSPG-style `τ`.
 
-### System assembly (`AssembleSystem`)
+### System Assembly (`AssembleSystem`)
 
 For each particle:
 
@@ -139,7 +139,7 @@ the solid's `ImplicitDsfCorr` during NR assembly.
 
 The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `implicit_.AddInertialForce` adds the inertial contribution.
 
-### Linear solve (`SolveSystem`)
+### Linear Solve (`SolveSystem`)
 
 The MPM fluid default is PETSc/FGMRES with a lower velocity/pressure Schur split.
 Both child PCs use PREONLY + HYPRE/BoomerAMG; PETSc SELFP supplies the pressure Pmat.
@@ -152,7 +152,7 @@ pressure `{3}`; `CrsMat` owns compression, compact field indices, KSP/PC
 refresh, and full-vector recovery. Never classify compact fields using
 `compact_index % 4`. See the [shared solver guide](../../solver/README.md).
 
-### G2P and particle motion (`Node2Particle`)
+### G2P and Particle Motion (`Node2Particle`)
 
 1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`implicit_.CommitNodalKinematics`),
    then commit the converged pressure iterate (`CommitNodalPressure`: `npres <- npres_k`).
