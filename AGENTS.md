@@ -10,11 +10,11 @@ Key deps: MPI, PETSc 3.24.5 (auto-bootstrapped from `Ext/petsc-3.24.5.tar.gz` in
 
 ## 2. Build & Run
 
-**Current:** Root CMake workflow. Solver source selection is done by uncommenting the relevant `add_subdirectory(...)` line in `work/CMakeLists.txt` and selecting its method in the nested `CMakeLists.txt`; the selected `work/**/main.cpp` supplies `main()`. Build: `cmake -S . -B build && cmake --build build -j8` → `build/MPM`.
+**Current:** Root CMake workflow. Every driver under `work/` is built as its own executable via `mpm_add_driver()` (`cmake/MPMTools.cmake`): each executable is written to its driver's build directory, e.g. `build/work/src_fsi/MPM_MPM/MPM_MPM_FSI`, next to that driver's `file.dat`. Build: `cmake -S . -B build && cmake --build build -j8`. Parameter files are copied into `build/data/` only when missing (`mpm_copy_input_once`).
 
 **Never delete `build/`:** The `build/` directory contains generated runtime files, partitioned input data, job outputs, and local working state. Deleting it can destroy an ongoing or future simulation setup. If a clean configure is needed, remove only `CMakeCache.txt` and `CMakeFiles/` inside `build/` — never `rm -rf build`, and never use an alternative build directory.
-Run from the project `build/` directory in WSL: `mpirun -np N ./MPM` (or `sh run.sh N`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
-A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh [N]`.
+Run from the driver directory, e.g. `build/work/src_fsi/MPM_MPM`: `mpirun -np N ./MPM_MPM_FSI` (or from `build/`: `sh run.sh N work/src_fsi/MPM_MPM`). Inputs: orchestration file (`file.dat`), parameter file (`input.txt`), grid data (`griddata*.txt`), point data (`pointdata*.txt` / `wpdata*.txt` / `spdata*.txt`).
+A convenience script `build/run.sh` exists but is gitignored. It runs the single `MPM_*` executable found in `RUN_DIR` in the background via `nohup`, supports hyper-threading (`--use-hwthread-cpus --bind-to hwthread`), and accepts a process count via argument or `NP` env var. Run it from `build/`: `sh run.sh N [CPU_LIST] [RUN_DIR]`, e.g. `sh run.sh 61 work/src_fsi/MPM_MPM`; logs go to `RUN_DIR/stdout` and `RUN_DIR/stderr`.
 
 ### CMake target dependency rules
 
@@ -23,18 +23,18 @@ A convenience script `build/run.sh` exists but is gitignored. It runs `MPM` in t
 - Data tools (`makinput_*`, `makdivide_*`) should be created with `mpm_add_data_tool()` / `mpm_add_divide_tool()` from `cmake/MPMTools.cmake` so link rules stay consistent.
 - The configuration stage prints an `MPM Configuration Summary` showing compiler, build type, active solver, MPI, PETSc, HDF5, and ZLIB.
 
-`build/file.dat` is read from the `build/` working directory at runtime.
-Paths inside `file.dat` should point to files under `build/` such as `./data/generate/...`, `./data/divide/...`, and `./res/...`.
-Do not point `file.dat` back at source-tree paths under `../data/...`.
+Each driver reads `file.dat` from its working directory, normally its driver directory such as `build/work/src_fsi/MPM_MPM/file.dat`.
+Paths inside `file.dat` are relative to that directory and point into `build/`, such as `../../../data/generate/...`, `../../../data/divide/...`, and `../../../res/...`.
+Never point `file.dat` at source-tree paths in the repository `data/` directory.
 
-**Checkpoint restarts:** Use the output prefix already set for the selected case in `build/file.dat`. Change the prefix or output directory only when the user explicitly requests a different destination.
+**Checkpoint restarts:** Use the output prefix already set for the selected case in the driver's `file.dat`. Change the prefix or output directory only when the user explicitly requests a different destination.
 
 **User approval:** Obtain explicit user approval before changing any content in `file.dat` or creating any directory.
 
 ## 3. Code Architecture
 
 - **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
-- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm).
+- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm) / `ExplicitSolidMPM`; `MaterialPoint` → `StabilizedMPM`. Shared implicit pieces live in `module/implicit/` (see its README). Implicit time integration (generalized-α integrator, endpoint kinematics, inertia terms, kinematic commits) lives in the `ImplicitMPM` component (`module/implicit/implicit_mpm.h`), owned as `implicit_` by `ImplicitSolidMPM` and `StabilizedMPM`; `StabilizedFEM` owns its own `integrator_`. The implicit MPM Newton loop is `SolveNewton()` over the `NonlinearProblem` interface (`module/implicit/newton_solver.h`), implemented by `ImplicitSolidMPM`, `StabilizedMPM` and `MPMMPMMonolithicFSI`; failure aborts stay in their convergence checks.
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h` / `map_and_interpolate.cpp`, selected by `solswitch` (`MapScheme` enum parsed from the input string).
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Parallel ownership and inactive-row handling are now explicit; see `module/solver/README.md`.
 - **Dynamic load balancing:** `module/DLB/` repartitions background elements across ranks from particle samples (fluid MPM only, `do_dlb` flag in `input.txt`). Regions are broadcast state — read them via `mpm_dlb::CurrentRegions()`; see `module/DLB/README.md`.

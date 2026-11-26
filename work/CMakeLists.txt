@@ -1,9 +1,6 @@
 # ----------------------------------------------------------------------------
-# Solver source selection
+# Solver drivers: every driver is built as its own executable in build/.
 # ----------------------------------------------------------------------------
-
-# Keep all candidate subdirectories visible here.
-# Uncomment exactly one solver; its main.cpp supplies the executable entry.
-# add_subdirectory(src_fluid)
-# add_subdirectory(src_solid)
+add_subdirectory(src_fluid)
+add_subdirectory(src_solid)
 add_subdirectory(src_fsi)

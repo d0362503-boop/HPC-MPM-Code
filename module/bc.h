@@ -1,6 +1,5 @@
 #pragma once
 
-#include "module/generalized_alpha_integrator.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -25,9 +24,9 @@ class BoundaryCondition {
      * @brief Write boundary-condition node IDs and values to an output stream.
      * @param outfile   Output file stream.
      * @param bc_name   Name of the boundary condition (used in the header).
-     * @param ife_fbc   If true, also write prescribed values.
+     * @param if_fbc    If true, also write prescribed values.
      */
-    void BCOutput(std::ofstream &outfile, std::string bc_name, bool ife_fbc = true);
+    void BCOutput(std::ofstream &outfile, std::string bc_name, bool if_fbc = true);
 
     /**
      * @brief Apply prescribed boundary values to `variable` at constrained DOFs.
@@ -44,12 +43,13 @@ class BoundaryCondition {
     void BCSetZero(int nn, std::vector<double> &variable);
 
     /**
-     * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.
+     * @brief Set the displacement increment `facl * dt * fbc` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
-     * @param variable Vector to be modified in-place.
+     * @param variable Displacement increment modified in-place.
+     * @note Matches the Newmark endpoint velocity `facl * fbc` because the step-start
+     * `nvel` and `naccel` already hold `facl * fbc` and zero there (ApplyVelocityBC / ApplyAccelerationBC in P2G).
      */
-    void BCSetDispl(int nn, std::vector<double> &variable, GeneralizedAlphaIntegrator &integrator,
-                    const std::vector<double> &nvel, const std::vector<double> &naccel);
+    void BCSetDispl(int nn, std::vector<double> &variable);
 
     /**
      * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.

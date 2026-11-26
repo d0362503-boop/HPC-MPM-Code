@@ -4,22 +4,11 @@
 > material-point distribution. The calling material owner selects whether and
 > when to enable repartitioning through `do_dlb` and `ApplyDLB()`.
 
----
+## 1. Purpose
 
-## 1. What It Does
-
-MPM particle load follows the physics (e.g. a dam-break front sweeping across the
-domain), so a static uniform partition drifts out of balance over time. DLB periodically
-
-1. samples the local particle coordinates on every rank,
-2. recomputes a per-rank background-element region that equalizes particle counts,
-3. migrates particles (and their scheme-specific state) to the new owners,
-4. rebuilds all partition-dependent data: overlap tables, mesh/connectivity, nodal
-   volumes, boundary conditions, and the PETSc matrix layout.
-
-The **rank topology is fixed**: the Cartesian rank grid `nxyr` never changes; only the
-element cuts between neighboring ranks move. This keeps neighbor discovery local and
-the change incremental.
+DLB adjusts background-element cuts to follow particle load, then migrates
+particles and rebuilds partition-dependent data. The Cartesian rank grid
+`nxyr` stays fixed; only the cuts move.
 
 ## 2. Files and Entry Points
 
@@ -84,17 +73,12 @@ struct Region { std::array<int,3> elem_min, elem_max; };  // inclusive, global e
   whole `xyelemw` mesh exactly. It holds *by construction* (§7) and is re-validated at
   runtime: `UpdateDLBRegions` bounds-checks every region, and the migration builders
   `MPI_Abort` on any particle that is covered by zero or two regions.
-- **Single instance:** `g_current_regions` is defined only in `mpm_dlb.cpp` and is not
-  declared in the header — outside code can only read it through the const-reference
-  accessor `CurrentRegions()` and can only change it through `CollectCurrentRegions()`
-  (contains the `MPI_Allgather`) and `UpdateDLBRegions()` (input comes from the
-  `MPI_Bcast` in `ComputeDLBRegions`). This makes accidental rank-local edits a
-  compile error instead of a silent desync.
-- **Cross-rank consistency** of the content is therefore guaranteed by collectives,
-  not by C++ linkage — every rank holds the same table because it was gathered or
-  broadcast, not because memory is shared.
-- `BuildMesh()` calls `CollectCurrentRegions()`, so the table is valid from start-up
-  (initial uniform partition from `griddata`) through every DLB update.
+- `g_current_regions` is private to `mpm_dlb.cpp`. Other code reads it through
+  `CurrentRegions()`; `CollectCurrentRegions()` and `UpdateDLBRegions()`
+  update it through collective gather/broadcast paths.
+- Each rank holds its own copy; collectives establish consistency.
+  `BuildMesh()` collects the initial regions from `griddata` and refreshes
+  them after DLB.
 
 ## 6. Sampling
 
@@ -125,7 +109,7 @@ for each z-slice:
     y_cuts = CutsFromSamples(samples inside the z-slice, dir=y, ...)
     for each y-slice:
         x_cuts = CutsFromSamples(samples inside the z,y-slice, dir=x, ...)
-        region(ix,iy,iz) = [x_cuts[ix] .. x_cuts[ix+1]-1] × ... 
+        region(ix,iy,iz) = [x_cuts[ix] .. x_cuts[ix+1]-1] × ...
         rank = ix + nx*iy + nx*ny*iz
 ```
 
@@ -182,14 +166,10 @@ it, in this order:
 3. ghost weights `dbc/dbl = 1/share_count`, matching the `dbn` semantics of the
    griddata path, so `NodeVarComm`'s sum-then-weight averaging is unchanged.
 
-The caller then rebuilds derived data: `BuildMesh()` (also re-collects
-`g_current_regions`), `BuildControlPoint()` (`ncc`, `xyc`), `ComputeNodalVol()` (`nvol`,
-with the new overlap tables), `RebuildBC()` (§10), and the physics
-class rebuilds its `CrsMat` — with `use_petsc`, `BuildCrsMat` first calls
-`ResetPetscSolver()` to destroy the old `Mat/Vec/KSP/lgmap/scatter` (all handles are
-`nullptr`-initialized, so the first call is a safe no-op).
-This reset also releases the reduced matrix and retained-equation index set.
-Neither compact numbering nor the old KSP can survive a partition-layout change.
+The caller rebuilds mesh/control points, nodal volumes and BCs, then the
+physics matrix. `BuildCrsMat()` resets the old PETSc objects, including compact
+maps and retained equations; old numbering and KSP state cannot survive a
+partition-layout change. See the [shared solver guide](../solver/README.md).
 
 Nodal *state* is intentionally not preserved: the fluid MPM rebuilds all nodal fields
 from particles at the next `Particle2Node()` anyway (arrays are re-`VectorAssign`ed
@@ -215,19 +195,12 @@ at input time (`InputBCData`, when `do_dlb = 1`):
 (`InitializeInflowBC`, `infbc_isfilled = false`), so the next inflow check
 re-evaluates boundary-cell fill under the new partition.
 
-## 11. Other Integration Points
+## 11. Integration
 
-- `StabilizedMPM::MoveParticle()` and the solid equivalent pass
-  `mpm_dlb::CurrentRegions()` to `DetermineParticleRank`, so per-step migration always
-  uses the *current* partition without touching the update machinery.
-- `PairwiseRepulsivePST` builds its ghost set by intersecting each
-  particle's support ball with the peers' physical region bounds read from
-  `CurrentRegions()` — correct for non-uniform regions, unlike the old Cartesian rank
-  arithmetic. The regions reference is used transiently inside the call (converted to
-  local bounds immediately), so it is safe across DLB updates.
-- `CrsMat` ownership (`BuildOwnershipMetadata`) gathers `aelemmin/aelemmax` at matrix
-  build time, so after `UpdateDLBRegions` + `BuildCrsMat` the PETSc ownership/lgmaps
-  are consistent with the new regions automatically.
+- Ordinary fluid/solid migration reads `CurrentRegions()`.
+- `PairwiseRepulsivePST` intersects particle support balls with those regions
+  to select MPI ghosts, including non-uniform partitions.
+- `CrsMat` rebuilds ownership from the new `aelemmin/aelemmax` bounds.
 
 ## 12. Failure Checks (all `MPI_Abort`)
 
@@ -250,9 +223,7 @@ re-evaluates boundary-cell fill under the new partition.
   `RestartInput()` + `BuildMesh()`, call
   `RebalanceDLBParticles(mpm_dlb::CurrentRegions())` once (its global search handles
   any source distribution).
-- **Cost:** owner search is O(num × nprocs) per DLB; acceptable at `iout` cadence. If
-  it ever shows up in profiles, build an element→owner lookup table once per
-  repartition for O(1) per particle.
+- **Cost:** DLB owner search is O(num × nprocs) per repartition.
 - **Balance quality** is limited by the sampling target (256 per rank on average), particle ordering, and the
   element-granular cuts; expect approximate, not exact, load balance.
 - **Fixed topology:** `nxyr` cannot change at runtime, and `nprocs` must always equal

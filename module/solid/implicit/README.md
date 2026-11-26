@@ -7,21 +7,13 @@ This directory implements the **implicit Material Point Method (MPM) solid mecha
 Each NR iteration assembles a sparse tangent system and solves it with PETSc KSP
 or the native iterative solver. This is not a direct factorization of the full tangent matrix.
 
-| Matrix  | DOF         | Purpose                        |
-| ------- | ----------- | ------------------------------ |
-| `SM_` | 3 (u, v, w) | Momentum / displacement system |
-
----
-
 ## File Inventory
 
 | File                             | Responsibility                                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `implicit_mpm_solid.h`         | Class declaration, constructor wiring (`SM_.owner_ = this`)                                    |
-| `solve_solid_implicit.cpp`     | NR loop, system assembly, tangent-modulus computation, diagonal preconditioner                   |
+| `solve_solid_implicit.cpp`     | Newton steps, system assembly, tangent-modulus computation, diagonal preconditioner                   |
 | `var_trans_solid_implicit.cpp` | P2G (`Particle2Node`), G2P (`Node2Particle`), deformation-gradient update, particle shifting |
-
----
 
 ## Class Architecture
 
@@ -52,37 +44,31 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 - `ConfigurePreconditioner(CrsMat &mat, PC pc)` — selects standalone solid ASM/ILU(1).
 - `ComputeTangentModulus(...)` — computes the 3×3 nodal stiffness block from the material tangent and stress state.
 
----
-
 ## Numerical Method
 
 ### 1. Time Integration — Newmark-β / Generalized-α
 
-The solver inherits `ComputeNodeVelAccelFromDispl` and `CommitNodalKinematics` from `MaterialPoint` (shared with the fluid solver).  At the beginning of each time step:
-
-```cpp
-ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);  // predictor
-...
-CommitNodalKinematics(nvel_k, naccel_k);          // commit converged state
-```
-
-Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`, `nb_para`) are stored once
-in `MaterialPoint::integrator_`, a `GeneralizedAlphaIntegrator` member. The base
-class setup and kinematic methods forward to this member. The integrator accepts
-the time step and arrays explicitly and does not depend on global mesh state,
-MPI, or PETSc. Particle and nodal commits remain in `MaterialPoint`.
+`implicit_.integrator_` owns the generalized-alpha/Newmark coefficients; `implicit_`
+is the `ImplicitMPM` component (`module/implicit/implicit_mpm.h`) owned by `ImplicitSolidMPM`.
+`implicit_.ComputeNodeVelAccelFromDispl()` predicts nodal kinematics from the current
+displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged state.
+`ComputeNRLumpedMassMat()` and `AddInertialForceToRHS()` stay virtual on
+`ImplicitSolidMPM` so FSI solids can add their added-mass terms.
 
 ### 2. Newton–Raphson Loop (`SolveSolid`)
 
+`ImplicitSolidMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
+`SolveSolid()` sets `max_NR_it` from `NR_flag` and calls
+`SolveNewton(*this, max_NR_it)`, which runs the steps in this order:
+
 ```cpp
-for NR_it = 0 .. iter_max
-    BCNRSet();                              // apply Dirichlet values
-    ComputeNodeVelAccelFromDispl(...);     // predictor step
-    AssembleSystem(SM_, naccel_k, nvel_k, stress_k);
-    if NR_flag && CheckNRConvergence() break; // check current physical RHS
-    zero SM_.x_lhs;                         // new correction starts from zero
-    iter = SM_.SolveSystem(NR_it);           // PETSc or native linear solve
+BeginNewtonStep();                          // zero ndispl, snapshot stress_k_
+for NR_it = 0 .. max_NR_it
+    AssembleNewtonSystem();                 // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
+    if CheckNewtonConvergence(NR_it, ksp_its) break; // NR_flag: SM_.CheckNRConvergence; else print only
+    ksp_its = SolveNewtonCorrection(NR_it); // SM_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
+EndNewtonStep();                            // release SM_ storage
 ```
 
 - `NR_flag = true` → nonlinear elasticity (`NR_it = 0..100`, at most 101 passes)
@@ -95,19 +81,12 @@ Local sub-solvers apply PREONLY + ILU(1), nonzero shift `1e-3`, through the
 `-solid_field_sub_*` options.
 Standalone outer defaults are `rtol=1e-10`, `atol=1e-15` and `max_it=1000`.
 
-`SM_.ndof=3` is assigned in the constructor. Assembly and `x_lhs` remain
-`nodec * SM_.ndof`. `CrsMat` removes exact zero-increment identity equations
-after BC elimination, solves the compact system from zero and recovers the full
-owned/ghost vector. Node activation uses the absolute `nmass > mtol` test.
-The solve copy first discards explicit zero entries. Compact values update
-each correction; layout changes or scheduled rebuilding recreate the KSP,
-while other corrections retain it and refresh its numerical PC.
-
-The solid override selects its physical PC without declaring field groups.
-`CrsMat::ConfigureReducedPreconditioner()` supplies the same compact setup
-entry used by the other PETSc MPM systems, followed by solution recovery.
-Full CSR/assembly storage is still allocated. See the
-[shared solver guide](../../solver/README.md) for interfaces and rebuild policy.
+The constructor sets `SM_.ndof=3`. Assembly and native vectors retain the
+full `nodec * 3` layout; `CrsMat` handles compact PETSc equations and solution
+recovery after boundary elimination. Activity uses the absolute `nmass > mtol`
+test. Each correction refreshes compact values and the numerical PC; layout
+changes or scheduled rebuilding recreate the KSP. See the
+[shared solver guide](../../solver/README.md) for compression and lifecycle details.
 
 ### 4. System Assembly (`AssembleSystem`)
 
@@ -164,24 +143,7 @@ If `NR_flag` is true, the geometric stiffness `σ_af[j][l] · δ_ik` is added.
 #### `Node2Particle`
 
 - Predict velocity / acceleration with Newmark-β
-- Commit nodal kinematics (`CommitNodalKinematics`)
+- Commit nodal kinematics (`implicit_.CommitNodalKinematics`)
 - G2P: update particle displacement gradient (`UpdateDefGrad`), stress, velocity, acceleration
 - Update particle position: `coord += disp + disp_corr`
 - Particle shifting (`DeltaCorrectionPST`) for uniform distribution
-
----
-
-## Integration with the Rest of the Codebase
-
-- **`CrsMat`** (`module/solver/`) — generic sparse-matrix wrapper; BC logic injected through `owner_` virtuals. `SM_.ndof = 3` configures the generic solver for 3-DOF solid mechanics.
-- **`MaterialPoint`** (`module/material_point.h`) — base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, and the virtual BC hooks.
-- **`SolidMaterialPointBase`** (`module/solid/solid_material_point.h`) — intermediate base providing constitutive-model interface (`UpdateConstitutiveModel`).
-- **Solvers** — `SM_.SolveSystem()` dispatches to PETSc or native `GPBiCGAR`; residual callbacks use `SM_.owner_->BCResidualSet(rr)`.
-
----
-
-## Coding Style Notes
-
-- Trailing underscore for class members (`owner_`, `SM_`).
-- `using namespace implicitmpm;` appears in `.cpp` files only.
-- The constructor enables PETSc (`use_petsc = true`) and sets `FEM_flag = false` to indicate an MPM (not FEM) matrix structure.

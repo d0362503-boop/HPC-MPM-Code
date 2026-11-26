@@ -80,29 +80,7 @@ void MaterialPoint::ConstrainPSTBoundaryDisplacement(const std::array<double, 3>
     return;
 }
 
-void MaterialPoint::ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord,
-                                                    const std::array<double, 3> &surface_normal,
-                                                    std::array<double, 3> &disp_corr) const {
-
-    std::array<double, 3> tangent_normal = surface_normal;
-    for (int i = 0; i < 3; i++) {
-        const bool near_lower_wall = particle_coord[i] - xyminw[i] < dxy[i];
-        const bool near_upper_wall = xymaxw[i] - particle_coord[i] < dxy[i];
-        if (near_lower_wall || near_upper_wall) { tangent_normal[i] = 0.0e0; }
-    }
-
-    const double normal_norm = NormVec3(tangent_normal);
-    if (normal_norm > mtol) {
-        double normal_shift = 0.0e0;
-        for (int i = 0; i < 3; i++) { normal_shift += disp_corr[i] * tangent_normal[i]; }
-        normal_shift /= normal_norm * normal_norm;
-        for (int i = 0; i < 3; i++) { disp_corr[i] -= normal_shift * tangent_normal[i]; }
-    }
-
-    return;
-}
-
-std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
+std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std::vector<std::array<double, 3>> &displ) {
 
     std::vector<std::array<double, 3>> disp_corr;
     VectorAssign(this->num, disp_corr);
@@ -309,15 +287,12 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST() {
     // -------------------------------------------------------------------------
     for (int n = 0; n < this->num; n++) {
         this->ConstrainPSTBoundaryDisplacement(this->coord[n], disp_corr[n]);
-        const bool surface_particle = surface_weight[n] >= 0.3e0 && surface_weight[n] <= 0.7e0;
-        if (surface_particle) {
-            this->ConstrainPSTSurfaceDisplacement(this->coord[n], particle_normal[n], disp_corr[n]);
-        }
-
         const double shift_norm = NormVec3(disp_corr[n]);
-        const double max_shift = dxy[0] / 10.0e0;
-        if (shift_norm > max_shift) {
-            for (int i = 0; i < 3; i++) { disp_corr[n][i] *= max_shift / shift_norm; }
+        if (shift_norm > 0.0e0) {
+            const double motion_norm = NormVec3(displ[n]);
+            const double max_shift = motion_norm / 10.0e0;
+            const double scale = std::min(max_shift, shift_norm) / shift_norm;
+            for (int i = 0; i < 3; i++) { disp_corr[n][i] *= scale; }
         }
     }
 

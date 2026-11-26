@@ -1,8 +1,5 @@
 # ----------------------------------------------------------------------------
-# Solver source selection
+# FSI drivers: MPM_MPM_FSI and MPM_FEM_FSI
 # ----------------------------------------------------------------------------
-
-# Keep all candidate subdirectories visible here.
-# Uncomment exactly the cases you want to build.
 add_subdirectory(MPM_MPM)
-# add_subdirectory(MPM_FEM)
+add_subdirectory(MPM_FEM)

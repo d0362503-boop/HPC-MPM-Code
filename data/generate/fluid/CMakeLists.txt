@@ -3,4 +3,4 @@ mpm_add_data_tool(
     SOURCES makinput.cpp fluid_generator.cpp
 )
 
-configure_file(input.txt input.txt COPYONLY)
+mpm_copy_input_once(input.txt)

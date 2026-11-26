@@ -76,7 +76,7 @@ void MPMFEMBlockFSI::SolveFSISystem() {
 
         this->solid_.SolveSolid();
 
-        this->solid_.ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
+        this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, nvel_k, naccel_k);
 
         Anderson_relaxation_M1(block_it, u_s_old, nvel_k, r_k_old, this->fsi_intf);
         // Aitken_relaxation(block_it, this->relax_omega, nvel_k, r_k_old, this->fsi_intf);
@@ -361,8 +361,8 @@ void MPMFEMBlockFSI::CalFSIForce() {
 
 double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
 
-    double emd = MaterialPoint::ComputeNRLumpedMassMat(pid, sfi);
-    emd += this->integrator_.nb_para[3] * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
+    double emd = implicitmpm::ImplicitSolidMPM::ComputeNRLumpedMassMat(pid, sfi);
+    emd += this->implicit_.integrator_.da_du * sfi * this->fsi_.fluid_.rhol * this->vol[pid];
 
     return emd;
 }

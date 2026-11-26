@@ -18,33 +18,23 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 Shared helpers live outside this directory:
 
 - `module/particle_shifting.cpp` — `DeltaCorrectionPST()` and `PairwiseRepulsivePST()`.
-- `module/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
-- `module/material_point.cpp` — `CommitNodalKinematics`, closed-boundary position helpers, and `CommitImplicitParticleKinematics`.
+- `module/implicit/generalized_alpha_integrator.cpp` — Newmark/generalized-α coefficients and displacement-to-velocity/acceleration conversion.
+- `module/material_point.cpp` — closed-boundary position helpers.
+- `module/implicit/implicit_mpm.cpp` — `ImplicitMPM` (owned as `implicit_`): endpoint kinematics, inertia terms, `CommitNodalKinematics` and `CommitParticleKinematics`.
 - `module/map_and_interpolate.cpp` — `VelP2G`, `AccelP2G`, `PICFamilyVelG2P`, `PICFamilyAccelG2P`.
 
-## Class Architecture
+## Class and Defaults
 
-```
-MaterialPoint (base)
-    └── StabilizedMPM
-            ├── NS_            : CrsMat (ndof = 4, FEM_flag = false, owner_ = this)
-            ├── ifp            : inflow particle buffer
-            ├── tau1 / tau2    : per-particle stabilization coefficients
-            ├── stab_coeff     : compile-time selector (VMS or PSPG)
-            └── solswitch      : PIC / FLIP / TPIC / APIC (MapScheme enum)
-```
+`StabilizedMPM` inherits from `MaterialPoint` and owns the four-component
+`NS_` system, inflow buffer `ifp`, and per-particle `tau1/tau2`.
+The compile-time `stab_coeff` selects VMS or PSPG; `solswitch` selects
+PIC, FLIP, TPIC, or APIC transfers.
 
-`StabilizedMPM` differs from the FEM fluid path in a few key defaults:
-
-| Setting                    | MPM fluid default                        | FEM fluid default                |
-| -------------------------- | ---------------------------------------- | -------------------------------- |
-| `ode_order`                | `2` (displacement/velocity/acceleration) | `1` (velocity only)              |
-| `NS_.FEM_flag`             | `false`                                  | `true`                           |
-| `NS_.use_petsc`            | `true` (PETSc Schur field-split)         | `true` (PETSc Schur field-split) |
-| NS preconditioner         | `PCFIELDSPLIT`                           | `PCFIELDSPLIT`                   |
-| Pressure Pmat              | PETSc `SELFP`                            | PETSc `SELFP`                    |
-| PETSc equation layout      | Internally compressed; full native vectors | Full system                     |
-| `NS_.rebuild_freq`         | `1`                                      | `20`                             |
+| Setting | MPM fluid | FEM fluid |
+|---------|-----------|-----------|
+| `ode_order` | 2 (displacement, velocity, acceleration) | 1 (velocity) |
+| Equation layout | Compact PETSc system, full native vectors | Full system |
+| `NS_.rebuild_freq` | 1 | 20 |
 
 ## Driver Flow
 
@@ -71,45 +61,39 @@ for istep = ista .. iend
 
 `ApplyDLB()` redistributes the background mesh across ranks from the particle
 distribution and rebuilds the partition-dependent data (mesh, `nvol`, BCs, `NS_`).
-See `module/DLB/README.md` for the full pipeline and its invariants.
+See the [DLB guide](../../DLB/README.md) for the pipeline and its invariants.
 
 ## Time Integration
 
-`CommitImplicitParticleKinematics()` uses each particle object's own normal
-velocity and inflow BCs. A whole box face is closed only when every face control
-point prescribes zero normal velocity and no normal inflow is marked. Shared
-control points are counted with `dbc`; reductions combine face counts and inflow flags.
-After displacement and PST, closed-face overshoots are moved `0.01*dxy[i]` inside.
-Other faces allow outflow. The same rule applies to implicit solid commits;
-velocity, acceleration and constitutive state are unchanged. This is a geometric
-restriction for whole faces, not a wall-reaction model or a local-opening treatment.
-
 ### 1. Newmark-β / Generalized-α predictor
 
-Time-integration parameters belong to `MaterialPoint::integrator_`
-(`GeneralizedAlphaIntegrator`). Existing kinematic helper methods forward the
-particle object's nodal arrays to this independent component; particle commits
-and FLIP updates remain in `MaterialPoint`.
+Time-integration parameters belong to `implicit_.integrator_`
+(`GeneralizedAlphaIntegrator`). `implicit_` is the `ImplicitMPM` component
+(`module/implicit/implicit_mpm.h`) owned by the implicit MPM solvers. It holds only implicit
+state; its kinematics, inertia, particle-commit and FLIP-update functions take the
+particle object (`*this`) whose arrays they read or write. Explicit solvers do not carry it.
 
 At the start of each NR iteration the nodal displacement increment `ndispl` is used to predict velocity and acceleration:
 
 ```cpp
-ComputeNodeVelAccelFromDispl(nvel_k, naccel_k);
+implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k);
 ```
 
-Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `GeneralizedAlphaParaSet` / `NewmarkBetaParaSet` in the base class.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
+Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad` by `implicit_.integrator_.GeneralizedAlphaParaSet()` / `NewmarkBetaParaSet(dt)` in `DataInput`.  Because `ode_order == 2`, the fluid MPM uses the second-order generalized-α formulas.
 
 ### 2. Newton–Raphson loop (`SolveNS`)
 
+`StabilizedMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
+`SolveNS()` calls `SolveNewton(*this, max_NR_it)` (`max_NR_it = 100`), which runs:
+
 ```cpp
-for NR_it = 0 .. iter_max
-    BCNRSet();                              // apply Dirichlet displacement/pressure values
-    ComputeNodeVelAccelFromDispl(...);     // predictor
-    AssembleSystem(nvel_k, naccel_k);     // build NS_.amat / NS_.b_rhs
-    if CheckNRConvergence(...) break;       // check current physical RHS
-    zero NS_.x_lhs;                        // new correction starts from zero
-    iter = NS_.SolveSystem(NR_it);          // PETSc or native linear solve
+BeginNewtonStep();                          // freeze stabilization, zero ndispl/npres
+for NR_it = 0 .. max_NR_it
+    AssembleNewtonSystem();                 // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
+    if CheckNewtonConvergence(NR_it, ksp_its) break; // NS_.CheckNRConvergence on the physical RHS
+    ksp_its = SolveNewtonCorrection(NR_it); // NS_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
+EndNewtonStep();                            // release NS_ storage
 ```
 
 `CrsMat::SolveSystem` dispatches to native `GPBiCGAR` when `use_petsc == false` and to PETSc otherwise. PETSc divergence is reported by the KSP reason; it does not automatically switch solvers.
@@ -152,54 +136,31 @@ For each particle:
 This fluid assembly uses the gradients from `MakeSF` directly; it does not call
 the solid's `ImplicitDsfCorr` during NR assembly.
 
-The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `AddInertialForceToRHS` adds the inertial contribution.
+The RHS has a Galerkin part (`RHS_G`) and a stabilized part (`RHS_S`).  After the element loop, `NodeVarComm` synchronizes the RHS and `implicit_.AddInertialForce` adds the inertial contribution.
 
 ### Linear solve (`SolveSystem`)
-
-```cpp
-if (NS_.use_petsc)  →  PETSc KSP
-else                 →  GPBiCGAR (native iterative solver)
-```
 
 The MPM fluid default is PETSc/FGMRES with a lower velocity/pressure Schur split.
 Both child PCs use PREONLY + HYPRE/BoomerAMG; PETSc SELFP supplies the pressure Pmat.
 PETSc uses its default scalar diagonal approximation for `A_00`, with no
 additional pressure shift. FEM also uses unshifted SELFP and its own PC cadence.
 
-#### Shared reduced equation layout
-
-The constructor sets `NS_.ndof=4`. Native assembly, RHS and `x_lhs` keep their
-full `nodec * NS_.ndof` component-major layout. `CrsMat` internally compresses
-exact zero-increment identity equations after BC elimination, solves from zero
-and restores the full vector, including ghosts. Explicit zeros are removed
-from a solve copy before selecting retained equations.
-
-`ConfigurePreconditioner()` declares velocity `{0,1,2}` and pressure `{3}`
-in `mat.field_splits`. `CrsMat::ConfigureReducedPreconditioner()` converts
-them to explicit compact index sets and performs PETSc setup.
-FieldSplit block size is 1 in the reduced layout.
-Do not infer a field from `compact_index % 4`. Single-phase node activation
-remains the absolute `nmass > mtol` test.
-
-The physics assembly callback is `AssemblePetscMat(CrsMat &mat)`; it reads
-`mat.ndof`. The compact operator is recreated each correction. Retained-layout
-changes or the configured cadence recreate the KSP; otherwise its operator
-and numerical PC are refreshed without recreating the KSP.
-Full CSR storage and full assembly communication are still present. See the
-[shared solver guide](../../solver/README.md) for lifecycle and field mapping.
-Set `NS_.use_petsc=false` to use the native solver.
+The constructor sets `NS_.ndof=4`; native assembly and vectors remain
+`nodec * 4`. `ConfigurePreconditioner()` declares velocity `{0,1,2}` and
+pressure `{3}`; `CrsMat` owns compression, compact field indices, KSP/PC
+refresh, and full-vector recovery. Never classify compact fields using
+`compact_index % 4`. See the [shared solver guide](../../solver/README.md).
 
 ### G2P and particle motion (`Node2Particle`)
 
-1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`CommitNodalKinematics`).
+1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`implicit_.CommitNodalKinematics`).
 2. Reset particle velocity/acceleration and TPIC/APIC state.
 3. Interpolate pressure, displacement, acceleration, and velocity back to particles (scheme-aware).
 4. Recompute APIC `inv_Dmat` if needed.
 5. Compute a particle-shifting correction (`PairwiseRepulsivePST` is currently active; `DeltaCorrectionPST` is available but commented out in `Node2Particle`).
-6. Commit particle kinematics (`CommitImplicitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
+6. Commit particle kinematics (`implicit_.CommitParticleKinematics`), which updates FLIP velocity and adds displacement plus the supplied shifting correction to positions. The correction array must contain one entry per particle; the current commit routine does not reject shifting-induced domain crossings.
 
-The shared commit currently leaves its closed-face coordinate-protection calls
-commented out. Applying nodal velocity/displacement BCs does not by itself
+The shared commit does not apply a closed-face coordinate clamp. Applying nodal velocity/displacement BCs does not by itself
 guarantee that a finite PIC displacement stays inside the domain. Particle
 migration removes globally out-of-domain points; open-face outflow must be
 distinguished from closed-face crossings when reviewing results.
@@ -213,10 +174,10 @@ Two particle-shifting strategies are implemented in `module/particle_shifting.cp
 
 ## Inflow Particles
 
-Inflow generation follows the same three-layer dispatch as before (`InflowMeshisFilled` → `GenerateInflowParticles` → `AssignUniqueInflowIds`).  The MPM-specific differences are:
+Inflow generation follows a three-layer dispatch (`InflowMeshisFilled` → `GenerateInflowParticles` → `AssignUniqueInflowIds`).  The MPM-specific differences are:
 
 - `InflowParticles()` allocates the inflow buffer including scheme-specific TPIC/APIC state.
-- `GenerateInflowParticlesEmptyMesh` fills empty boundary cells with a Gaussian sub-grid.
+- `GenerateInflowParticlesEmptyMesh` fills empty boundary cells with a uniform sub-cell grid (see `SubcellOffsets`).
 - `GenerateInflowParticlesFilledMesh` clones particles that moved one cell inward; it copies the scheme-specific state (velocity/acceleration gradients or APIC B-matrices) by G2P interpolation.
 - `MoveParticle` communicates the scheme-specific state for both regular migration and inflow appending.
 
@@ -228,17 +189,3 @@ Inflow generation follows the same three-layer dispatch as before (`InflowMeshis
 | -------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`)                    | `coord`, `id`, `matid`, `mass`, `vol`, `pres`, `vel`, `accel`, TPIC/APIC matrices |
 | `OutputPointDataVTKHDF`          | VTK HDF5, single shared file per view (`*-w.vtkhdf`) | Particle coordinates, velocity, pressure, ID                                      |
-
-## Integration with the Rest of the Codebase
-
-- `module/solver/crsmat.h`: generic sparse-matrix wrapper; BC hooks injected through virtual overrides declared in `stabilized_mpm.h`.
-- `module/map_and_interpolate.*`: PIC/FLIP/TPIC/APIC transfer logic.
-- `module/material_point.h`: base class providing `ComputeNodeVelAccelFromDispl`, `CommitNodalKinematics`, `CommitImplicitParticleKinematics`, and the virtual BC/inflow hooks. Linear solve dispatch belongs to `CrsMat::SolveSystem`.
-- `module/generalized_alpha_integrator.h` / `.cpp`: shared Newmark-β / generalized-α parameters and kinematics.
-- `module/particle_shifting.cpp`: shared particle-shifting implementations.
-- `module/mpi_data.h`: particle migration and overlap-node communication.
-
-## Coding Style Notes
-
-- Class lives in namespace `stabilizedmpm`; `.cpp` files use `using namespace stabilizedmpm;`.
-- Members use trailing underscore per `AGENTS.md` style (e.g. `NS_`), although the base `MaterialPoint` uses plain names for historical reasons.

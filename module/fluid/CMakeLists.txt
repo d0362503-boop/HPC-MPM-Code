@@ -2,8 +2,8 @@
 # Fluid Module - Fluid dynamics solvers
 # -----------------------------------------------------------------------------
 
-# Include all fluid method implementations. The active driver is selected in
-# work/CMakeLists.txt; its main.cpp supplies the executable entry point.
+# Include all fluid method implementations; every driver executable in work/
+# links them through mpm_modules.
 add_subdirectory(FEM)
 add_subdirectory(MPM)
 message(STATUS "Including FEM and MPM fluid methods in module/fluid")

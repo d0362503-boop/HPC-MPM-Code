@@ -19,7 +19,6 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
     this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
     this->fluid_.rhs_start = 0;
     this->solid_.rhs_start = 4;
-    this->integrator_.ode_order = 2;
     this->fsi_sys.ndof = 10;
     this->fsi_sys.block_row = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3,
                                4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 8, 9, 9};
@@ -35,47 +34,59 @@ MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); 
 
 void MPMMPMMonolithicFSI::SolveFSISystem() {
 
+    SolveNewton(*this, this->max_NR_it);
+
+    return;
+}
+
+void MPMMPMMonolithicFSI::BeginNewtonStep() {
+
     this->LumpedLagrangeMultiplier();
 
     this->BuildActiveDOFs();
 
     this->fluid_.MakeNSStabCoeff(this->fluid_.nvel);
 
-    std::vector<std::array<double, 6>> stress_k = this->solid_.InitializeNRStress();
+    this->stress_k_ = this->solid_.InitializeNRStress();
 
-    std::vector<double> nvel_f(nodec * 3), nvel_s(nodec * 3);
-    std::vector<double> naccel_f(nodec * 3), naccel_s(nodec * 3);
-    std::array<double, 4> initial_norm{};
+    this->nvel_f_.assign(nodec * 3, 0.0e0);
+    this->nvel_s_.assign(nodec * 3, 0.0e0);
+    this->naccel_f_.assign(nodec * 3, 0.0e0);
+    this->naccel_s_.assign(nodec * 3, 0.0e0);
+    this->initial_norm_ = {};
 
     VectorAssign(nodec * 3, this->fluid_.ndispl);
     VectorAssign(nodec * 3, this->solid_.ndispl);
     VectorAssign(nodec * 3, this->nlambda);
     VectorAssign(nodec, this->fluid_.npres);
 
-    int solver_it = 0;
-    for (int NR_it = 0; NR_it <= this->max_NR_it; NR_it++) {
-        VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
-        VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
+    return;
+}
 
-        this->fluid_.BCNRSet();
-        this->fluid_.ComputeNodeVelAccelFromDispl(nvel_f, naccel_f);
+void MPMMPMMonolithicFSI::AssembleNewtonSystem() {
 
-        this->solid_.BCNRSet();
-        this->solid_.ComputeNodeVelAccelFromDispl(nvel_s, naccel_s);
+    VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
+    VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
 
-        this->AssembleFluidSystem(nvel_f, naccel_f);
-        this->AssembleSolidSystem(nvel_s, naccel_s, stress_k);
-        this->AssembleInterfaceSystem(nvel_f, nvel_s);
+    this->fluid_.BCNRSet();
+    this->fluid_.implicit_.ComputeNodeVelAccelFromDispl(this->fluid_, this->nvel_f_, this->naccel_f_);
 
-        if (this->CheckNRConvergence(initial_norm, NR_it, solver_it)) { break; }
+    this->solid_.BCNRSet();
+    this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, this->nvel_s_, this->naccel_s_);
 
-        solver_it = this->SolveSystem(NR_it);
-
-        this->UpdateNRIncrement();
-    }
+    this->AssembleFluidSystem(this->nvel_f_, this->naccel_f_);
+    this->AssembleSolidSystem(this->naccel_s_, this->stress_k_);
+    this->AssembleInterfaceSystem(this->nvel_f_, this->nvel_s_);
 
     return;
 }
+
+bool MPMMPMMonolithicFSI::CheckNewtonConvergence(int NR_it, int ksp_its) {
+
+    return this->CheckNRConvergence(this->initial_norm_, NR_it, ksp_its);
+}
+
+int MPMMPMMonolithicFSI::SolveNewtonCorrection(int NR_it) { return this->SolveSystem(NR_it); }
 
 void MPMMPMMonolithicFSI::UpdateNRIncrement() {
 
@@ -134,7 +145,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
 bool MPMMPMMonolithicFSI::CheckNRConvergence(std::array<double, 4> &initial_norm, int NR_it, int solver_it) {
 
-    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-13, 1.0e-7, 1.0e-8};
+    const std::array<double, 4> absolute_tol = {1.0e-10, 1.0e-10, 1.0e-8, 1.0e-8};
     const std::array<double, 4> stats = this->ComputeNRResidualNorms();
 
     // Fields 0..2: max(absolute_tol, 1e-5 * initial nonlinear residual RMS).

@@ -13,48 +13,17 @@
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 
-void MaterialPoint::CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k) {
-
-    std::copy(nvel_k.begin(), nvel_k.end(), this->nvel.begin());
-    std::copy(naccel_k.begin(), naccel_k.end(), this->naccel.begin());
-
-    return;
-}
-
-void MaterialPoint::CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
-                                                     const std::vector<std::array<double, 3>> &disp,
-                                                     const std::vector<std::array<double, 3>> &disp_corr) {
-
-    const bool has_shift = !disp_corr.empty();
-    for (int n = 0; n < this->num; n++) {
-        for (int i = 0; i < 3; i++) {
-            if (this->solswitch == MapScheme::FLIP) {
-                this->vel[n][i] += dt * ((1.0e0 - this->integrator_.gamma_nb) * accel_old[n][i] //
-                                         + this->integrator_.gamma_nb * this->accel[n][i]);
-            }
-            this->coord[n][i] += disp[n][i];
-            if (has_shift) this->coord[n][i] += disp_corr[n][i];
-        }
-    }
-
-    return;
-}
-
-void MaterialPoint::BuildGaussianPoint() {
+void MaterialPoint::BuildSubcellPoints() {
 
     std::array<std::array<double, 3>, 6> dec2p;
-    GaussianDistribution(dec2p);
+    SubcellOffsets(dec2p);
 
     int npe = npxye[0] * npxye[1] * npxye[2];
     VectorAssign(nelem * npe, this->coord);
 
     for (int m = 0; m < nelem; m++) {
-        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
-
-        std::array<double, 3> xye, xyp;
-        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
+        const std::array<double, 3> xye = ElementCenter(m);
+        std::array<double, 3> xyp;
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
             for (int iy = 0; iy < npxye[1]; iy++) {
@@ -209,24 +178,3 @@ MaterialPoint::ComputeDeltaDefGrad(const std::vector<int> &nc, int nenode, //
     return ddg;
 }
 
-void MaterialPoint::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
-                                    std::vector<std::array<double, 3>> &dsf) const noexcept {
-
-    std::array<std::array<double, 3>, 3> def_grad{};
-    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->integrator_.alpha_f, dsf);
-
-    std::array<std::array<double, 3>, 3> def_grad_inv;
-    def_grad_inv = InvMat3(def_grad);
-
-    std::array<double, 3> dsf_temp{};
-
-    for (int ni = 0; ni < nenode; ni++) {
-        for (int j = 0; j < 3; j++) {
-            dsf_temp[j] = 0.0e0;
-            for (int i = 0; i < 3; i++) { dsf_temp[j] += dsf[ni][i] * def_grad_inv[i][j]; }
-        }
-        dsf[ni] = dsf_temp;
-    }
-
-    return;
-}

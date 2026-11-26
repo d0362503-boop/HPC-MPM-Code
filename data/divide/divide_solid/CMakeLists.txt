@@ -3,4 +3,4 @@ mpm_add_divide_tool(
     SOURCES makdivide.cpp solid_divider.cpp
 )
 
-configure_file(para_input_data.txt para_input_data.txt COPYONLY)
+mpm_copy_input_once(para_input_data.txt)

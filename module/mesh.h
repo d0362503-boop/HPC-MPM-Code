@@ -67,10 +67,32 @@ inline int IJKToIndex(const std::array<int, 3> &ijk, const std::vector<int> &ne)
 }
 
 /**
- * @brief Compute Gaussian quadrature points and weights for hexahedral elements.
- * @param dec2p Output array of quadrature data.
+ * @brief Compute the center coordinate of a rank-local background element.
+ * @param m Local element index on this rank (x varies fastest, then y, then z).
+ * @return Physical coordinates of the element center.
  */
-void GaussianDistribution(std::array<std::array<double, 3>, 6> &dec2p);
+inline std::array<double, 3> ElementCenter(int m) {
+
+    const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
+    std::array<double, 3> xye;
+    for (int i = 0; i < 3; i++) { xye[i] = xymin[i] + dxy[i] * (double(ijk[i]) + 0.5e0); }
+
+    return xye;
+}
+
+/**
+ * @brief Compute sub-cell center offsets used to place points inside one background element.
+ *
+ * Each element is split into `npxye[i]` equal sub-cells along direction i, and
+ * `dec2p[k][i]` is the offset of the k-th sub-cell center from the element center:
+ * ((k + 0.5) / npxye[i] - 0.5) * dxy[i]. For example, 2 points give -dxy/4 and +dxy/4.
+ * These are uniformly spaced points, not Gauss quadrature points, and no weights are computed.
+ * Supports 1 to 6 points per direction; unused entries are zero.
+ * Used for initial particle positions, nodal volumes, and FSI interface area weights.
+ *
+ * @param dec2p Output offsets; add `dec2p[k][i]` to ElementCenter(m)[i] to get the k-th point along direction i.
+ */
+void SubcellOffsets(std::array<std::array<double, 3>, 6> &dec2p);
 
 /**
  * @brief Locate the global background element indices containing point `xq`.

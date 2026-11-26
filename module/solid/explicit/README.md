@@ -21,24 +21,16 @@ The class supports the same interpolation family as the fluid MPM path (PIC, FLI
 | `fbar_projection.cpp` | F-bar volumetric locking correction (`ComputeDefGradBar`). |
 | `CMakeLists.txt` | Module build rules; all `.cpp` files are compiled into `mpm_modules`. |
 
-## Public interface
+## Entry Points
 
-- `DataInput()` — read standalone explicit-solid input parameters and particle data.
-- `Particle2Node()` — reset nodal arrays, loop over particles to deposit mass/volume/momentum/force, then synchronize and apply velocity BCs.
-- `SolveSolid()` — compute `naccel = nforce / nmass` with small-mass cutoff and acceleration BCs.
-- `Node2Particle()` — update particle kinematics from the grid, run MUSL, update the deformation gradient (with optional F-bar correction), and update particle position/volume/stress.
-
-## Private helpers
-
-- `DoMUSL()` — re-project particle momentum to the grid after the G2P velocity update so the subsequent position/deformation-gradient update uses a consistent grid velocity.
-- `ComputeDefGradBar()` — nodal F-bar projection that corrects the volumetric part of the incremental deformation gradient to avoid locking.
+`DataInput()` reads the case; `Particle2Node()`, `SolveSolid()`, and
+`Node2Particle()` perform the cycle above. `DoMUSL()` reprojects particle
+momentum after the velocity update, before updating position and deformation.
 
 ## F-bar projection
 
-When `Fbar_flag` is enabled, the solver applies the nodal F-bar projection described in:
-
-> "Circumventing volumetric locking in explicit material point methods:  
-> A simple, efficient, and general approach"
+When `Fbar_flag` is enabled, `ComputeDefGradBar()` corrects the volumetric
+part of the incremental deformation gradient to reduce locking.
 
 The projection consists of two steps:
 
@@ -47,13 +39,8 @@ The projection consists of two steps:
 
 ## Integration
 
-This directory is always built as part of `mpm_modules` through
-`module/solid/explicit/CMakeLists.txt` and exports `ExplicitSolidMPM`.
-Its force/mass acceleration update does not use `CrsMat` or a PETSc KSP.
-The reduced-equation and preconditioner rebuild policies of the implicit
-solver therefore do not apply to this explicit path.
-
-## Notes
+The explicit force/mass update does not use `CrsMat` or PETSc KSP; implicit
+equation-compression and preconditioner policies do not apply.
 
 - `SolveSolid` intentionally does **not** update `nvel`; velocity is advanced inside `Node2Particle` (or preserved for FLIP) before MUSL is called.
 - `UpdateDefGrad` and `UpdateVolume` live in `SolidMaterialPointBase` and are shared with the implicit solid path.

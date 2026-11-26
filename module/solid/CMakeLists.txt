@@ -2,8 +2,8 @@
 # Solid Module - Solid mechanics solvers
 # -----------------------------------------------------------------------------
 
-# Include all solid method implementations. The active driver is selected in
-# work/CMakeLists.txt; its main.cpp supplies the executable entry point.
+# Include all solid method implementations; every driver executable in work/
+# links them through mpm_modules.
 add_subdirectory(explicit)
 add_subdirectory(implicit)
 message(STATUS "Including EXPLICIT and IMPLICIT solid methods in module/solid")

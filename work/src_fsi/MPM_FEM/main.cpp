@@ -1,21 +1,9 @@
-#include <mpi.h>
-
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/fluid/FEM/stabilized_fem.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/solid/implicit/implicit_mpm_solid.h"
-#include "module/solver/crsmat.h"
 #include "work/src_fsi/MPM_FEM/block_fsi.h"
 
-using namespace implicitmpm;
-using namespace stabilizedfem;
 using namespace mpmfemblockfsi;
 
 int main(int argc, char *argv[]) {
@@ -40,7 +28,7 @@ int main(int argc, char *argv[]) {
 
         BuildControlPoint();
 
-        fsi.fluid_.BuildGaussianPoint();
+        fsi.fluid_.BuildSubcellPoints();
 
         fsi.fluid_.MeshPointLinklist();
 
@@ -60,9 +48,9 @@ int main(int argc, char *argv[]) {
 
         fsi.fluid_.Cp2NodeVTK();
 
-        fsi.solid_.OutputPointDataVTKHDF(iview, istep);
+        fsi.solid_.OutputPointDataVTKHDF(iview);
 
-        fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+        fsi.fluid_.OutputMeshDataVTKHDF(iview);
 
         for (istep = ista; istep <= iend; istep++) {
             // -----------------------------------------------
@@ -93,9 +81,9 @@ int main(int argc, char *argv[]) {
 
             if (istep % iout == 0) {
                 iview++;
-                fsi.solid_.OutputPointDataVTKHDF(iview, istep);
+                fsi.solid_.OutputPointDataVTKHDF(iview);
                 fsi.fluid_.Cp2NodeVTK();
-                fsi.fluid_.OutputMeshDataVTKHDF(iview, istep);
+                fsi.fluid_.OutputMeshDataVTKHDF(iview);
 
                 if (rstflag == 2 || rstflag == 3) {
                     fsi.solid_.RestartOutput();

@@ -11,6 +11,7 @@
 #include "module/bc.h"
 #include "module/cal_mat.h"
 #include "module/dataset.h"
+#include "module/implicit/newton_solver.h"
 #include "module/map_and_interpolate.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
@@ -44,7 +45,7 @@ void ImplicitSolidMPM::UpdateNRIncrement() {
     return;
 }
 
-std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int pid, int ni, int nj,
+std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int ni, int nj,
                                                                              const std::vector<std::array<double, 3>> &dsf,
                                                                              const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
@@ -77,37 +78,55 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
 }
 
 void ImplicitSolidMPM::SolveSolid() {
-    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
 
     // --- NR_flag true for nonlinear elasticity and false for linear elasticity ---
-    int iter_max = (NR_flag) ? 100 : 0;
+    this->max_NR_it = (NR_flag) ? 100 : 0;
 
-    std::vector<std::array<double, 6>> stress_k = this->InitializeNRStress(); // --- Reset stress for NR ---
+    SolveNewton(*this, this->max_NR_it);
+
+    return;
+}
+
+void ImplicitSolidMPM::BeginNewtonStep() {
+
+    this->nvel_k_.assign(nodec * 3, 0.0e0);
+    this->naccel_k_.assign(nodec * 3, 0.0e0);
+
+    this->stress_k_ = this->InitializeNRStress(); // --- Reset stress for NR ---
 
     VectorAssign(nodec * 3, this->ndispl); // ---- Reset displacement ----
-    double r0r = 0.0e0;
-    int iter = 0;
-    for (int NR_it = 0; NR_it <= iter_max; NR_it++) {
+    this->r0r_ = 0.0e0;
 
-        this->BCNRSet();
+    return;
+}
 
-        this->ComputeNodeVelAccelFromDispl(nvel_k, naccel_k); // ---- Newmark beta velocity & acceleration ----
+void ImplicitSolidMPM::AssembleNewtonSystem() {
 
-        VectorAssign(this->SM_.nmata, this->SM_.amat);
-        VectorAssign(nodec * 3, this->SM_.b_rhs);
-        VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
-        this->AssembleSystem(this->SM_, naccel_k, nvel_k, stress_k);
+    this->BCNRSet();
 
-        if (!NR_flag) { // --- Linear not need Newton Raphson ---
-            if (myrank == 0) { std::cout << "Solid converge:" << std::setw(10) << NR_it << std::setw(10) << iter << "\n"; }
-        } else { // --- Nonlinear need Newton Raphson ---
-            if (this->SM_.CheckNRConvergence(NR_it, iter_max, iter, r0r)) { break; }
-        }
+    this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_, this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
 
-        iter = this->SM_.SolveSystem(NR_it);
+    VectorAssign(this->SM_.nmata, this->SM_.amat);
+    VectorAssign(nodec * 3, this->SM_.b_rhs);
+    VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
+    this->AssembleSystem(this->SM_, this->naccel_k_, this->stress_k_);
 
-        this->UpdateNRIncrement();
+    return;
+}
+
+bool ImplicitSolidMPM::CheckNewtonConvergence(int NR_it, int ksp_its) {
+
+    if (!NR_flag) { // --- Linear not need Newton Raphson ---
+        if (myrank == 0) { std::cout << "Solid converge:" << std::setw(10) << NR_it << std::setw(10) << ksp_its << "\n"; }
+        return false;
     }
+    // --- Nonlinear need Newton Raphson ---
+    return this->SM_.CheckNRConvergence(NR_it, this->max_NR_it, ksp_its, this->r0r_);
+}
+
+int ImplicitSolidMPM::SolveNewtonCorrection(int NR_it) { return this->SM_.SolveSystem(NR_it); }
+
+void ImplicitSolidMPM::EndNewtonStep() {
 
     // --- Memory clear ---
     std::vector<double>().swap(this->SM_.adiag);
@@ -119,14 +138,13 @@ void ImplicitSolidMPM::SolveSolid() {
 }
 
 void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                      const std::vector<double> &nvel_k,                //
                                       std::vector<std::array<double, 6>> &stress_k) {
 
     const std::vector<int> offsets = this->RHSOffsets();
 
-    const double af = this->integrator_.alpha_f;
+    const double af = this->implicit_.integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
-    const double am = this->integrator_.alpha_m;
+    const double am = this->implicit_.integrator_.alpha_m;
     const double am0 = 1.0e0 - am;
 
     int nenode;
@@ -176,7 +194,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
                     int ida = mat.FindIndex(nid, njd, ncol);
 
                     std::array<std::array<double, 3>, 3> K_mat;
-                    K_mat = this->ComputeTangentModulus(pid, ni, nj, dsf, sts_af);
+                    K_mat = this->ComputeTangentModulus(ni, nj, dsf, sts_af);
 
                     if (nid == njd) {
                         mat.amat[ida + mat.block_id[this->blocks[0]]] += am * emd_lu;
@@ -215,6 +233,28 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
     // --------------------------------------
 
     this->AddInertialForceToRHS(mat, naccel_am, offsets);
+
+    return;
+}
+
+void ImplicitSolidMPM::ImplicitDsfCorr(const std::vector<int> &nc, int nenode, //
+                                    std::vector<std::array<double, 3>> &dsf) const noexcept {
+
+    std::array<std::array<double, 3>, 3> def_grad{};
+    def_grad = this->ComputeDeltaDefGrad(nc, nenode, this->implicit_.integrator_.alpha_f, dsf);
+
+    std::array<std::array<double, 3>, 3> def_grad_inv;
+    def_grad_inv = InvMat3(def_grad);
+
+    std::array<double, 3> dsf_temp{};
+
+    for (int ni = 0; ni < nenode; ni++) {
+        for (int j = 0; j < 3; j++) {
+            dsf_temp[j] = 0.0e0;
+            for (int i = 0; i < 3; i++) { dsf_temp[j] += dsf[ni][i] * def_grad_inv[i][j]; }
+        }
+        dsf[ni] = dsf_temp;
+    }
 
     return;
 }

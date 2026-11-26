@@ -76,7 +76,7 @@ void StabilizedFEM::RestartOutput() {
     return;
 }
 
-void StabilizedFEM::OutputMeshDataVTKHDF(int iview, int istep) {
+void StabilizedFEM::OutputMeshDataVTKHDF(int iview) {
 #ifdef HAVE_HDF5
     std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 

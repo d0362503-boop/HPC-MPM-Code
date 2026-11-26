@@ -7,7 +7,6 @@
 
 #include "module/bc.h"
 #include "module/dataset.h"
-#include "module/generalized_alpha_integrator.h"
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -102,13 +101,13 @@ class MaterialPoint {
     }
 
     /**
-     * @brief Zero out a vector at constrained Dirichlet DOFs (typical for displacement/residual).
-     * @param ndispl Vector to be zeroed in-place at constrained DOFs.
+     * @brief Apply prescribed Dirichlet values to a nodal displacement increment.
+     * @param ndispl Displacement increment modified in-place at constrained DOFs.
      */
     virtual void ApplyDisplacementBC(std::vector<double> &ndispl) {
-        this->ubc.BCSetDispl(nuc, ndispl, this->integrator_, this->nvel, this->naccel);
-        this->vbc.BCSetDispl(nvc, ndispl, this->integrator_, this->nvel, this->naccel);
-        this->wbc.BCSetDispl(nwc, ndispl, this->integrator_, this->nvel, this->naccel);
+        this->ubc.BCSetDispl(nuc, ndispl);
+        this->vbc.BCSetDispl(nvc, ndispl);
+        this->wbc.BCSetDispl(nwc, ndispl);
 
         return;
     }
@@ -165,66 +164,7 @@ class MaterialPoint {
     virtual void RebuildBC() {}
     // ---------------
 
-    // --- For Implicit MPM ---
-    // --- Nonlinear time integration part ---
-    // --- Generalized-α part ---
-    GeneralizedAlphaIntegrator integrator_; // time integration state
-
-    /**
-     * @brief Delegate generalized-alpha weight setup to the owned integrator.
-     *
-     * Sets the weights in `integrator_` using its spectral radius and equation
-     * order. Call NewmarkBetaParaSet() separately to refresh its displacement coefficients.
-     */
-    void GeneralizedAlphaParaSet() {
-
-        this->integrator_.GeneralizedAlphaParaSet();
-
-        return;
-    }
-
-    /**
-     * @brief Compute nodal acceleration from nodal velocity by inverting the
-     *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
-     * @return Vector of derived accelerations sized to `nodec * 3`.
-     */
-    std::vector<double> ComputeNodeAccelFromVel() const {
-
-        return this->integrator_.ComputeNodeAccelFromVel(this->nvel, this->nvel_old, this->naccel, dt);
-    }
-
-    // --- Newmark-β part ---
-
-    /**
-     * @brief Refresh integrator displacement coefficients using the global time step.
-     */
-    void NewmarkBetaParaSet() {
-
-        this->integrator_.NewmarkBetaParaSet(dt);
-
-        return;
-    }
-
-    /**
-     * @brief Compute nodal velocity and acceleration from the nodal displacement
-     *        increment by inverting the Newmark-β relations (implicit path).
-     * @param nvel_k   Output nodal velocity vector (size `nodec * 3`).
-     * @param naccel_k Output nodal acceleration vector (size `nodec * 3`).
-     */
-    void ComputeNodeVelAccelFromDispl(std::vector<double> &nvel_k, std::vector<double> &naccel_k) const noexcept {
-
-        this->integrator_.ComputeNodeVelAccelFromDispl(this->ndispl, this->nvel, this->naccel, nvel_k, naccel_k);
-
-        return;
-    }
-    // ------------------------------
-
-    // --- Newton-Raphson ---
-    bool NR_flag = true;
-
-    // --- Need to define in each src folder ---
-    virtual void BCNRSet() {};
-
+    // --- Linear-system callbacks used by CrsMat ---
     virtual void BuildPetscBCList(CrsMat &mat) {};
 
     /**
@@ -248,89 +188,6 @@ class MaterialPoint {
     virtual void BCResidualSet(std::vector<double> &rr) {};
     // ------------------------------------------
 
-    virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
-        double emd = this->integrator_.nb_para[3] * sfi * this->mass[pid];
-
-        return emd;
-    }
-
-    /**
-     * @brief Add nodal inertial forces to the implicit system RHS.
-     * @param mat System receiving the inertial force residual.
-     * @param naccel Nodal acceleration at the inertia evaluation time level.
-     * @param offsets RHS offsets for the x, y and z momentum components.
-     */
-    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, //
-                                       const std::vector<int> &offsets) {
-
-        for (int n = 0; n < nodec; n++) {
-            // --- For Generalized-α (if α_m = 1, back to Newmark-β) ---
-            mat.b_rhs[n + offsets[0]] -= this->nmass[n] * naccel[n + nuc];
-            mat.b_rhs[n + offsets[1]] -= this->nmass[n] * naccel[n + nvc];
-            mat.b_rhs[n + offsets[2]] -= this->nmass[n] * naccel[n + nwc];
-        };
-
-        return;
-    }
-
-    virtual void UpdateNRIncrement() {};
-
-    /**
-     * @brief Commit the converged nodal velocity and acceleration for the time step.
-     * @param nvel_k   Converged nodal velocity vector.
-     * @param naccel_k Converged nodal acceleration vector.
-     */
-    void CommitNodalKinematics(const std::vector<double> &nvel_k, const std::vector<double> &naccel_k);
-
-    /**
-     * @brief Identify whole box faces with stationary impermeable normal BCs.
-     * @return Flags indexed by 2*axis+side (side 0: lower, 1: upper). A face is
-     * closed only when all face control points prescribe zero normal velocity
-     * and no normal inflow is marked; pressure and tangential BCs do not close it.
-     * @note Call collectively on all MPI ranks. Uses this object's BCs and overlap
-     * weights without caching state. Local openings within one face are not resolved.
-     */
-    std::array<bool, 6> DetermineClosedBoundaryFaces() const;
-
-    /**
-     * @brief Move one candidate coordinate inside a crossed closed box face.
-     * @param coordinate Particle coordinate after displacement and shifting.
-     * @param direction Spatial axis: 0=x, 1=y, 2=z.
-     * @param closed_face Whole-face impermeability flags for this particle object.
-     * @return Coordinate 0.01 cell widths inside a crossed closed face, or the
-     * unchanged coordinate for an interior point or an open-face crossing.
-     */
-    double ConstrainClosedBoundaryCoordinate(double coordinate, int direction,
-                                               const std::array<bool, 6> &closed_face) const;
-
-    /**
-     * @brief Commit particle kinematics for the implicit (generalized-α) path: update velocity via the
-     *        Newmark-β acceleration blend, update position, and apply optional particle-shifting correction.
-     * @param accel_old Particle acceleration from the previous step.
-     * @param disp Particle displacement increments interpolated from control points.
-     * @param disp_corr Per-particle shifting displacements; empty or zero disables shifting.
-     * @pre `disp` contains at least `num` entries, as does `accel_old` for FLIP.
-     * Nonempty `disp_corr` contains at least `num` entries. All MPI ranks call collectively.
-     * @note Uses this object's BCs: a whole box face is closed only when all its
-     * control points prescribe zero normal velocity and no normal inflow is marked.
-     * Closed-face overshoots are placed 0.01 cell widths inside; other faces allow outflow.
-     * This position-only restriction leaves velocity, acceleration and constitutive
-     * state unchanged. It does not handle local openings within an otherwise closed face.
-     */
-    void CommitImplicitParticleKinematics(const std::vector<std::array<double, 3>> &accel_old,
-                                          const std::vector<std::array<double, 3>> &disp,
-                                          const std::vector<std::array<double, 3>> &disp_corr = {});
-
-    /**
-     * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
-     * @param nc     Node IDs of the element supporting the material point.
-     * @param nenode Number of nodes in the element.
-     * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
-     */
-    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
-    // ------------------------
-    // ------------------------
-
     // --- Particle part ---
     int num = 0;                          // --- Particle number ---
     MapScheme solswitch = MapScheme::PIC; // --- Particle P2G method ---
@@ -345,13 +202,13 @@ class MaterialPoint {
     std::array<std::array<double, 6>, 6> stif_mat;
     std::vector<std::array<std::array<double, 3>, 3>> def_grad, def_grad_bar, delta_def_grad_bar;
 
-    virtual void InputPointData(std::ifstream &inflie) {};
+    virtual void InputPointData(std::ifstream &infile) {};
 
     virtual void InitializePointData() {};
 
     virtual void RestartInput() {};
 
-    virtual void OutputPointDataVTKHDF(int iview, int istep) {};
+    virtual void OutputPointDataVTKHDF(int iview) {};
 
     virtual void RestartOutput() {};
 
@@ -432,9 +289,9 @@ class MaterialPoint {
     void MeshPointLinklist();
 
     /**
-     * @brief Generate material points inside each background element using Gaussian quadrature.
+     * @brief Generate material points at the sub-cell centers of each background element (see SubcellOffsets).
      */
-    void BuildGaussianPoint();
+    void BuildSubcellPoints();
 
     /**
      * @brief Compute mass-weighted nodal unit normals.
@@ -465,18 +322,8 @@ class MaterialPoint {
      * @param particle_coord Current material-point position used to identify Cartesian boundary cells.
      * @param disp_corr Particle-shifting displacement with boundary-normal components removed in place.
      */
-    void ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord,
-                                         std::array<double, 3> &disp_corr) const;
+    void ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord, std::array<double, 3> &disp_corr) const;
 
-    /**
-     * @brief Remove a surface-normal shift while preserving previously applied Cartesian boundary constraints.
-     * @param particle_coord Current material-point position used to restrict the surface projection near domain faces.
-     * @param surface_normal Material-surface unit normal interpolated at the particle.
-     * @param disp_corr Particle shift projected onto the surface tangent; apply Cartesian boundary constraints first.
-     */
-    void ConstrainPSTSurfaceDisplacement(const std::array<double, 3> &particle_coord,
-                                        const std::array<double, 3> &surface_normal,
-                                        std::array<double, 3> &disp_corr) const;
 
     /**
      * @brief Compute a particle-shifting correction to regularize particle distribution.
@@ -499,7 +346,7 @@ class MaterialPoint {
      *
      * @return Correction displacement vector for each particle.
      */
-    std::vector<std::array<double, 3>> PairwiseRepulsivePST();
+    std::vector<std::array<double, 3>> PairwiseRepulsivePST(const std::vector<std::array<double, 3>> &displ);
     // ----------------------------------
 
     // ----- Control point variable -----

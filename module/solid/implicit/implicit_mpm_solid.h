@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "module/dataset.h"
+#include "module/implicit/implicit_mpm.h"
+#include "module/implicit/newton_solver.h"
 #include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -13,10 +15,13 @@
 
 namespace implicitmpm {
 
-class ImplicitSolidMPM : public SolidMaterialPointBase {
+class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem {
   public:
     CrsMat SM_;
-    std::vector<int> blocks; // target scalar block indices
+    ImplicitMPM implicit_;        // implicit time integration and kinematics
+    bool NR_flag;                 // Newton iterations; false for linear elasticity
+    int max_NR_it;                // last Newton iteration index, set per step from NR_flag
+    std::vector<int> blocks;      // target scalar block indices
     int rhs_start;           // first target component index
 
     /** @brief Initialize the three-component implicit solid system and its PETSc owner. */
@@ -25,9 +30,9 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
         this->rhs_start = 0;
         this->NR_flag = true;
         this->do_dlb = false;
-        this->integrator_.gamma_nb = 0.5e0;
-        this->integrator_.beta_nb = 0.25e0;
-        this->integrator_.ode_order = 2;
+        this->implicit_.integrator_.gamma_nb = 0.5e0;
+        this->implicit_.integrator_.beta_nb = 0.25e0;
+        this->implicit_.integrator_.ode_order = 2;
         this->cm_.implicit_flag = true;
         this->SM_.ndof = 3;
         this->SM_.block_row = {0, 0, 0, 1, 1, 1, 2, 2, 2};
@@ -57,6 +62,31 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Driver for one implicit solid time step.
      */
     void SolveSolid() override;
+
+    // Newton steps driven by SolveNewton().
+    /** @brief Reset the displacement increment and Newton scratch state. */
+    void BeginNewtonStep() override;
+
+    /** @brief Apply iterate BCs and kinematics, then assemble the solid tangent and residual. */
+    void AssembleNewtonSystem() override;
+
+    /**
+     * @brief Check the solid residual; linear elasticity only reports and never converges early.
+     * @param NR_it Current Newton iteration.
+     * @param ksp_its Krylov iterations of the previous correction.
+     * @return Whether the Newton iteration has converged.
+     */
+    bool CheckNewtonConvergence(int NR_it, int ksp_its) override;
+
+    /**
+     * @brief Solve the solid system for the displacement correction.
+     * @param NR_it Current Newton iteration.
+     * @return Krylov iterations used.
+     */
+    int SolveNewtonCorrection(int NR_it) override;
+
+    /** @brief Release the solid linear-system storage. */
+    void EndNewtonStep() override;
 
     /**
      * @brief Configure solid BoomerAMG with Euclid smoothing.
@@ -93,11 +123,8 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
     /**
      * @brief Apply Dirichlet displacement increments for current NR iteration.
      */
-    void BCNRSet() override {
+    void BCNRSet() {
         this->ApplyDisplacementBC(this->ndispl);
-        this->rigid_bc.BCSetDispl(nuc, this->ndispl, this->integrator_, this->nvel, this->naccel);
-        this->rigid_bc.BCSetDispl(nvc, this->ndispl, this->integrator_, this->nvel, this->naccel);
-        this->rigid_bc.BCSetDispl(nwc, this->ndispl, this->integrator_, this->nvel, this->naccel);
 
         return;
     };
@@ -136,30 +163,64 @@ class ImplicitSolidMPM : public SolidMaterialPointBase {
      * @brief Assemble tangent matrix and residual vector.
      * @param mat Target system, cleared by the caller before assembly.
      * @param naccel_k Nodal acceleration at the current endpoint iterate.
-     * @param nvel_k Nodal velocity at the current endpoint iterate.
      * @param stress_k  Particle stress state for tangent assembly.
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                const std::vector<double> &nvel_k,                //
                                 std::vector<std::array<double, 6>> &stress_k);
 
     /**
      * @brief Tangent-modulus contribution for one particle-node pair.
-     * @param pid     Particle index.
      * @param ni      First local node index.
      * @param nj      Second local node index.
      * @param dsf     Shape-function gradients.
      * @param sts_af  Particle stress at intermediate time level.
      * @return Three-by-three material and geometric stiffness block before volume and alpha_f weighting.
      */
-    std::array<std::array<double, 3>, 3> ComputeTangentModulus(int pid, int ni, int nj,
-                                                               const std::vector<std::array<double, 3>> &dsf,
+    std::array<std::array<double, 3>, 3> ComputeTangentModulus(int ni, int nj, const std::vector<std::array<double, 3>> &dsf,
                                                                const std::array<double, 6> &sts_af);
 
     /**
      * @brief Add the current linear correction to the endpoint nodal displacement increment.
      */
     void UpdateNRIncrement() override;
+
+    /**
+     * @brief Lumped-mass contribution of one particle to the Newton tangent.
+     * @param pid Particle index.
+     * @param sfi Shape-function value at the control point.
+     * @return Diagonal inertia term; FSI solids add their added-mass contribution.
+     */
+    virtual double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
+
+        return this->implicit_.LumpedMass(*this, pid, sfi);
+    }
+
+    /**
+     * @brief Add nodal inertial forces to the implicit system RHS.
+     * @param mat System receiving the inertial force residual.
+     * @param naccel Nodal acceleration at the inertia evaluation time level.
+     * @param offsets RHS offsets for the x, y and z momentum components.
+     */
+    virtual void AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) {
+
+        this->implicit_.AddInertialForce(*this, mat, naccel, offsets);
+
+        return;
+    }
+
+    /**
+     * @brief Correct shape-function gradients to refer to the current (deformed) configuration.
+     * @param nc     Node IDs of the element supporting the material point.
+     * @param nenode Number of nodes in the element.
+     * @param dsf    Shape-function gradients in the reference configuration; overwritten in-place.
+     */
+    void ImplicitDsfCorr(const std::vector<int> &nc, int nenode, std::vector<std::array<double, 3>> &dsf) const noexcept;
+
+  private:
+    // Newton scratch state of the current step.
+    std::vector<double> nvel_k_, naccel_k_;           // nodal velocity and acceleration at the iterate
+    std::vector<std::array<double, 6>> stress_k_;     // particle stress snapshot for tangent assembly
+    double r0r_;                                      // initial residual reference
 };
 
 } // namespace implicitmpm

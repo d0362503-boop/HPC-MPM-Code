@@ -1,7 +1,7 @@
 #include <cmath>
 #include <vector>
 
-#include "module/generalized_alpha_integrator.h"
+#include "module/implicit/generalized_alpha_integrator.h"
 
 void GeneralizedAlphaIntegrator::GeneralizedAlphaParaSet() {
 
@@ -25,12 +25,12 @@ void GeneralizedAlphaIntegrator::NewmarkBetaParaSet(double dt) {
 
     const double gamma = this->gamma_nb;
     const double beta = this->beta_nb;
-    this->nb_para[0] = gamma / (beta * dt);
-    this->nb_para[1] = gamma / beta - 1.0e0;
-    this->nb_para[2] = dt / 2.0e0 * (gamma / beta - 2.0e0);
-    this->nb_para[3] = 1.0e0 / (beta * dt * dt);
-    this->nb_para[4] = 1.0e0 / (beta * dt);
-    this->nb_para[5] = 1.0e0 / (2.0e0 * beta) - 1.0e0;
+    this->dv_du = gamma / (beta * dt);
+    this->dv_dv0 = gamma / beta - 1.0e0;
+    this->dv_da0 = dt / 2.0e0 * (gamma / beta - 2.0e0);
+    this->da_du = 1.0e0 / (beta * dt * dt);
+    this->da_dv0 = 1.0e0 / (beta * dt);
+    this->da_da0 = 1.0e0 / (2.0e0 * beta) - 1.0e0;
 
     return;
 }
@@ -58,9 +58,9 @@ void GeneralizedAlphaIntegrator::ComputeNodeVelAccelFromDispl(const std::vector<
 
     for (std::size_t n = 0; n < displacement.size(); ++n) {
         velocity[n] =
-            this->nb_para[0] * displacement[n] - this->nb_para[1] * old_velocity[n] - this->nb_para[2] * old_acceleration[n];
+            this->dv_du * displacement[n] - this->dv_dv0 * old_velocity[n] - this->dv_da0 * old_acceleration[n];
         acceleration[n] =
-            this->nb_para[3] * displacement[n] - this->nb_para[4] * old_velocity[n] - this->nb_para[5] * old_acceleration[n];
+            this->da_du * displacement[n] - this->da_dv0 * old_velocity[n] - this->da_da0 * old_acceleration[n];
     }
 
     return;

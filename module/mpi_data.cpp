@@ -46,11 +46,6 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
         int peer = -1;
         for (int i = 0; i < isb; ++i) {
             const int rank = naid[i];
-            if (rank < 0 || rank >= int(regions.size())) {
-                std::cerr << "particle migration error on rank " << myrank << ": invalid peer rank\n";
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-
             bool inside = true;
             for (int dir = 0; dir < 3; ++dir) {
                 if (element[dir] < regions[rank].elem_min[dir] || element[dir] > regions[rank].elem_max[dir]) {
@@ -98,18 +93,8 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
         }
     }
 
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
-    MPI_Status status;
-    for (int i = 0; i < isb; i++) {
-        int ncomid = naid[i];
-        MPI_Isend(&this->par_comm_.nsp[i], 1, MPI_INT, ncomid, 1, MPI_COMM_WORLD, &irqs[i]);
-        MPI_Irecv(&this->par_comm_.nrp[i], 1, MPI_INT, ncomid, 1, MPI_COMM_WORLD, &irqr[i]);
-    }
-    for (int i = 0; i < isb; i++) {
-        MPI_Wait(&irqs[i], &status);
-        MPI_Wait(&irqr[i], &status);
-    }
+    const std::vector<int> one_each(isb, 1); // one count per neighbor
+    internal::PeerSendrecv(naid, one_each, one_each, 1, this->par_comm_.nsp, this->par_comm_.nrp);
 
     this->par_comm_.nrps = 0;
     for (int i = 0; i < isb; i++) { this->par_comm_.nrps += this->par_comm_.nrp[i]; }
@@ -149,14 +134,14 @@ void MaterialPoint::DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> 
             if (!inside) { continue; }
 
             if (owner != -1) {
-                if (myrank == 0) { std::cerr << "DLB error: overlapping process regions\n"; }
+                std::cerr << "DLB error on rank " << myrank << ": overlapping process regions\n";
                 MPI_Abort(MPI_COMM_WORLD, 1);
             }
             owner = rank;
         }
 
         if (owner == -1) {
-            if (myrank == 0) { std::cerr << "DLB error: process regions do not cover the global mesh\n"; }
+            std::cerr << "DLB error on rank " << myrank << ": process regions do not cover the global mesh\n";
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
 

@@ -106,12 +106,7 @@ void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
     for (int m = 0; m < nelem; m++) {
         double rnue = this->rmue[m] / this->rhoe[m];
 
-        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
-
-        std::array<double, 3> xye;
-        xye[0] = xymin[0] + dxy[0] * (double(ijk[0]) + 0.5e0);
-        xye[1] = xymin[1] + dxy[1] * (double(ijk[1]) + 0.5e0);
-        xye[2] = xymin[2] + dxy[2] * (double(ijk[2]) + 0.5e0);
+        const std::array<double, 3> xye = ElementCenter(m);
 
         MakeSF(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
 

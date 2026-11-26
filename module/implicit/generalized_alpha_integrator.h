@@ -12,7 +12,14 @@ class GeneralizedAlphaIntegrator {
     double alpha_m = 1.0e0;          // inertia evaluation weight
     double gamma_nb = 0.5e0;         // Newmark velocity weight
     double beta_nb = 0.25e0;         // Newmark displacement weight
-    std::array<double, 6> nb_para{}; // displacement inversion coefficients
+    // v = dv_du*du - dv_dv0*v_n - dv_da0*a_n
+    // a = da_du*du - da_dv0*v_n - da_da0*a_n
+    double dv_du = 0.0e0;  // gamma/(beta*dt)
+    double dv_dv0 = 0.0e0; // gamma/beta - 1
+    double dv_da0 = 0.0e0; // dt/2*(gamma/beta - 2)
+    double da_du = 0.0e0;  // 1/(beta*dt^2)
+    double da_dv0 = 0.0e0; // 1/(beta*dt)
+    double da_da0 = 0.0e0; // 1/(2*beta) - 1
 
     /**
      * @brief Compute alpha and Newmark weights from the spectral radius and equation order.
@@ -46,8 +53,8 @@ class GeneralizedAlphaIntegrator {
      * @param old_acceleration Previous-step acceleration components.
      * @param velocity Output endpoint velocity components, already sized by the caller.
      * @param acceleration Output endpoint acceleration components, already sized by the caller.
-     * @pre All arrays have equal lengths, outputs do not alias inputs, and nb_para
-     * has been initialized for the current time step.
+     * @pre All arrays have equal lengths, outputs do not alias inputs, and the Newmark
+     * coefficients have been initialized for the current time step.
      */
     void ComputeNodeVelAccelFromDispl(const std::vector<double> &displacement, const std::vector<double> &old_velocity,
                                       const std::vector<double> &old_acceleration, std::vector<double> &velocity,

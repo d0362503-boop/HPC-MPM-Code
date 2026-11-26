@@ -7,184 +7,26 @@ The multipliers enforce continuity of the phase endpoint velocities. After the
 solve, a separate geometric correction moves fluid centres toward the final
 solid volume-fraction interface.
 
-## Current solver strategy
+## Solver Strategy
 
-| Layer | Implementation |
-|-------|----------------|
-| Native matrix interface | One `CrsMat::ndof` member; full `nodec * ndof` vectors and original component numbering |
-| MPM linear solve | `CrsMat` removes exact zero-increment identity equations, solves the compact system and restores the full owned/ghost solution |
-| Newton correction | Zero initial guess; physical RHS preserved before scaling and restored after solving |
-| Root preconditioner | Lower Schur split: fluid / [solid + lambda] |
-| Coupled preconditioning | PCKSP inner FGMRES acts on PETSc's assembled `selfp` Pmat, retaining solid/lambda coupling |
-| Fluid block | FGMRES with CGS refinement always, rtol 0.5, max 200, restart 100; velocity/pressure lower Schur; velocity and pressure PREONLY + ASM/local ILU(1), RCM ordering, nonzero shift 1e-3 |
-| Preconditioner refresh | `rebuild_freq=1` recreates KSP/groups at NR0; layout changes also recreate them; other corrections retain KSP but refresh its numerical PC |
-| Solid block | FGMRES with CGS refinement always, `restart=30`, `rtol=0.1`, `max_it=100`; ASM overlap 1, local PREONLY/ILU(1), RCM ordering, nonzero shift `1e-3` |
-| Mass activation | Each phase uses absolute `nmass > mtol`; interface weights and physical constraints determine active multiplier components |
+The outer FGMRES solves the full coupled equations. Its preconditioner uses
+two lower Schur splits, with a coupled inner iteration on PETSc's assembled
+`selfp` preconditioning matrix:
 
 ```text
-Outer FGMRES: fluid / [solid + lambda], lower Schur split
-  fluid: FGMRES with CGS refinement always, velocity / pressure Schur split
-    velocity: PREONLY + ASM / ILU(1), RCM ordering
-    pressure: PREONLY + ASM overlap 1 / local PREONLY + ILU(1), RCM ordering
+fluid / [solid + lambda]
+  fluid: FGMRES, velocity / pressure Schur
+    velocity, pressure: PREONLY + ASM / local ILU(1)
   [solid + lambda]: PREONLY + PCKSP
-    inner FGMRES acts on the assembled selfp Pmat
-    solid / lambda: lower Schur split
-      solid: FGMRES + ASM overlap 1 / local PREONLY + ILU(1), RCM ordering
-      lambda: PREONLY + ASM overlap 1 / local PREONLY + ILU(1)
+    inner FGMRES on selfp; solid / lambda Schur
+      solid: FGMRES + ASM / local ILU(1)
+      lambda: PREONLY + ASM / local ILU(1)
 ```
 
-The root `selfp` matrix uses the fluid diagonal inverse to approximate
-elimination. The inner split retains the solid operator and its multiplier
-coupling inside that approximation. The outer FGMRES solves the full coupled
-equations. PETSc constructs the Schur preconditioning matrices; no custom
-`BuildInterfaceSchur` implementation or global direct solver is used.
-
-Velocity and pressure use ASM/local ILU(1) with RCM ordering and
-nonzero shift 1e-3. Pressure uses PREONLY, ASM overlap 1 and local PREONLY/ILU(1).
-Solid uses FGMRES with rtol 0.1 and max 100, ASM overlap 1 and local
-PREONLY/ILU(1), retaining RCM ordering and nonzero shift 1e-3. The multiplier Schur PC retains
-ASM/local ILU(1). These choices affect the preconditioner only.
-
-The full native matrix is still assembled. Before solving, `CrsMat` removes
-explicit zeros in a copy, extracts equations other than zero-RHS unit rows,
-and solves the reduced system. Full-system solves are not the current path.
-Keeping fewer Krylov equations can outweigh the extraction/setup cost when
-much of the background grid is unoccupied. Runtime comparisons need matching
-step intervals, tolerances and iteration counts; ordinary NR logs do not
-separate KSP setup and solve time. Optional `PETSC_OPTIONS="-log_view"` reports
-PETSc events at normal finalization; event times can include nested work.
-
-The compiled fluid FGMRES default now includes
--fsi_fieldsplit_fluid_ksp_gmres_cgs_refinement_type refine_always.
-A second classical Gram-Schmidt pass prevents loss of Krylov-basis
-orthogonality on difficult pressure directions. The assembled VMS equations,
-field splits, tolerances and iteration limits are unchanged.
-Velocity RCM alone did not resolve the step 2395 fluid failure; refinement is
-the additional change.
-
-## Historical step 1720 checkpoint comparison (2026-10-20)
-
-Both ten-step tests use the same validated 60-partition TPIC checkpoint,
-pressure and velocity ASM/local ILU(1), unchanged physical parameters and
-tolerances, and sh run.sh 60.
-
-| Solid PC (FGMRES rtol 0.1, max 100) | Steps | Solver time | Outer total (30 corrections) | Max per correction | Negative reasons |
-|---|---|---:|---:|---:|---:|
-| ASM overlap 1 / ILU(1) | 1721-1730 | 253.6049 s | 1895 | 72 | 0 |
-| ASM overlap 1 / ILU(2) | 1721-1730 | 244.5542 s | 1898 | 71 | 0 |
-
-ILU(2) reduced solver time by about 3.6%, with essentially unchanged outer
-iteration counts. Single-step screening also tried ASM overlap 2, HYPRE
-Euclid levels 1/2, and HYPRE ILU with GMRES-ILUk. None improved total time
-over ASM overlap 1 / ILU(2). That comparison selected solid ILU(2) at the time;
-the current source defaults are listed above and use ILU(1).
-No rigid-body near-nullspace code is retained. This restart comparison does
-not establish convergence over the preceding or remaining simulation.
-
-The associated historical run started from initial particle data with ista=1 and
-rstflag=2. Steps 1-120 used solid ILU(1), with no negative KSP reasons.
-A complete step 120 TPIC checkpoint was verified against both phase outputs
-at t=0.12 s, including all 120 restart files. The continuation uses ista=121,
-iend=5000, rstflag=3 and iout=10, launched by sh run.sh 60.
-The 60-partition initial input contains 4140 solid and 626175 fluid particles.
-That run used velocity/pressure ASM/local ILU(1), solid FGMRES +
-ASM/local ILU(2), and the NR0 rebuild / NR>0 reuse policy recorded for that
-experiment. These settings do not describe the current reduced implementation.
-
-## Historical step 1260 checkpoint comparison (2026-10-20)
-
-All rows start from the same validated 60-partition TPIC checkpoint and use
-`sh run.sh 60`. Solver time includes initialization and output. Outer totals
-in the two completed rows cover 20 linear corrections (two per time step).
-
-| Velocity PC | Pressure PC | Solid PC | Refresh policy | Result / solver time | Outer total | Negative reasons |
-|---|---|---|---|---|---:|---:|
-| ASM/ILU(1) | BoomerAMG | ASM/ILU(1) | Every Newton correction | 1261–1270 passed / 249.1756 s | 1489 | 0 |
-| BoomerAMG | BoomerAMG | ASM/ILU(1) | Every Newton correction | 1261–1270 passed / 341.9262 s | 1476 | 0 |
-| BoomerAMG | BoomerAMG | BoomerAMG | NR0 rebuild, NR>0 reuse | Failed at 1261, NR0; stopped | No completed solve | 207 solid inner DIVERGED_ITS |
-| ASM/ILU(1) | BoomerAMG | ASM/ILU(1) | NR0 rebuild, NR>0 reuse | 1261–1270 passed / 234.1054 s | 1490 | 0 |
-
-The solid-AMG row follows the requested within-step reuse policy. Its failure
-occurs at NR0 with a fresh preconditioner, before reuse can occur. Every failing
-solid inner solve reached the unchanged limit of 100 iterations. This ordinary
-scalar BoomerAMG configuration has not passed the ten-step test. The solid-AMG
-trial was stopped; that comparison restored velocity and solid ASM/ILU(1),
-retaining pressure BoomerAMG and within-step reuse. The
-first two timings use per-correction rebuilding. The latest pressure-only AMG
-row confirms that NR0-only rebuilding also passes the same ten steps without
-negative KSP reasons. Physical parameters and convergence tolerances were held
-fixed throughout.
-
-## Historical launch configuration and logging
-
-The 1261–1270 restart test used the first Slosh block in
-build/data/generate/fsi/MPM_MPM/input.txt:
-
-    <sp.solswitch, rstflag, nlstep>
-    TPIC  3  1
-    <ista, iend, iout>
-    1261  1270  10
-    <dt, mtol, wp.spec_rad, sp.spec_rad>
-    1.0e-3  1.0e-11  0.0e0  0.0e0
-
-rstflag=3 reads the complete step 1260 TPIC checkpoint and continues writing
-restart files. A fresh run uses rstflag=2 and ista=1 instead. This checkpoint
-has 60 partitions; the MPI count must match. Verify both phase HDF time,
-particle IDs/coordinates and all 120 restart files before restarting.
-
-Launch with the compiled defaults and failure-only diagnostic viewers:
-
-    cd /home/ps/HPC-MPM-Code/build
-    export PETSC_OPTIONS="-fsi_fieldsplit_fluid_ksp_converged_reason ::failed -fsi_fieldsplit_coupled_ksp_fieldsplit_solid_ksp_converged_reason ::failed -fsi_fieldsplit_coupled_ksp_ksp_converged_reason ::failed"
-    sh run.sh 60
-
-The viewers do not override numerical settings or print successful inner KSP
-solves. Newton records remain Monolithic_NR and Monolithic_converge; negative
-outer KSP and Newton failures remain visible. The driver prints the final
-calculation-time summary and OutputMessage every 100 steps.
-
-That Slosh test used real_time=dt*istep and
-s=real_time^2/(2*0.51) before 0.51 s, then s=real_time-0.255.
-The angle is theta=(pi/45)*sin(2*pi*s/1.211), with
-gx=-9.81*sin(theta) and gz=-9.81*cos(theta).
-The current `main.cpp` retains this gravity recipe as commented code. Its
-active loop uses the input body force and load factor until the recipe is enabled.
-
-## Historical step 2580 restart verification
-
-The current fluid block uses FGMRES, CGS refinement always, restart 100,
-rtol 0.5 and max 200. Velocity and pressure use ASM/local ILU(1) with RCM ordering
-and nonzero shift 1e-3. Pressure uses PREONLY and ASM overlap 1.
-Solid retains FGMRES rtol 0.1 / max 100 with ASM overlap 1, local ILU(1),
-RCM ordering and nonzero shift 1e-3.
-The FSI constructor sets `rebuild_freq=1`. The first Newton correction in
-each step rebuilds the compressed KSP and its nested groups. When the retained
-layout is unchanged, subsequent corrections keep the KSP but refresh the compact
-operator and numerical PC. A changed retained layout still requires rebuilding.
-The shared iteration-growth policy is enabled by default: more than a twofold
-increase in the outer linear count requests reconfiguration on the next solve. Physical
-parameters, VMS equations and nonlinear acceptance criteria are unchanged.
-The tables below describe earlier configurations; current settings are listed above.
-
-The following full-FSI tests start from the same validated step 2580 TPIC
-checkpoint and use sh run.sh 61 with no numerical PETSC_OPTIONS overrides:
-
-| Pressure local ILU ordering | Completed test steps | Negative KSP reasons | Ten-step time |
-|---|---|---:|---|
-| Natural, fluid restart 100 | 2581–2587; stopped on the first failure in 2588 | 1 | Not completed |
-| RCM, fluid restart 100 | 2581–2590, normal finish | 0 | 271.2 s from launch to complete two-phase output |
-
-The accepted RCM test's output-to-output interval is 267.8 s. Both phase
-HDF files are complete at time 2.59 s with 4140 solid and 627210 fluid
-particles. All 122 TPIC restart files match their particle positions and
-velocities exactly; ownership validation reports no misplaced particles.
-This passes the ten-step no-negative-reason and at-most-300-second targets.
-
-The tested solver then restarted from that verified step 2590 state
-with ista 2591, iend 5000 and rstflag 3. The earlier pre-2580 history contains
-fluid-inner failures, so the new branch must not be described as a clean
-5000-step run from the initial state. The ten-step test is not proof that
-all remaining steps will satisfy the same limits.
+Fluid and solid FGMRES use classical Gram-Schmidt with refinement always.
+Their local ILU factors use RCM ordering and nonzero shift `1e-3`.
+The inner tolerances below control preconditioning work; physical acceptance
+is determined separately by the four Newton residuals.
 
 ## Source responsibilities
 
@@ -199,14 +41,9 @@ all remaining steps will satisfy the same limits.
 | `monolithic_fsi.h` | Class declarations and function documentation |
 | `../../../module/interface_sdf.h` / `.cpp` | Local solid phase interpolation and one normal correction toward the 0.5 level set |
 
-The class header exposes driver operations and the physics callbacks used by
-`CrsMat`. Assembly, scaling, convergence and geometry helpers are private.
-`fsi_sys.ndof` is the single coupled dimension (10); `kStoredBlocks` defines its 37 stored blocks;
-the constructor configures it in `monolithic_fsi.cpp`.
-
-CMake collects this directory's `.cpp` files automatically. After adding or
-removing one, run `cmake -S . -B build` from the repository root, then build the
-existing `build/` directory.
+The class header documents the driver operations and physics callbacks.
+CMake collects this directory's `.cpp` files; see the
+[root build guide](../../../README.md#build) for configuration and compilation.
 
 ## Linear-system boundary
 
@@ -229,11 +66,10 @@ coupled {4,5,6,7,8,9}
   lambda {7,8,9}
 ```
 
-These groups are stored in `CrsMat::field_splits`. The ordinary
-`CrsMat::ConfigureReducedPreconditioner()` member owns compact root setup,
-child-group numbering, nested PETSc setup and PCKSP operator selection.
-It also handles pure-fluid flat groups and pure-solid ASM without groups.
-FSI has no separate reduced-setup method or function callback.
+These groups are stored in `CrsMat::field_splits`. The shared
+`ConfigureReducedPreconditioner()` owns compact numbering, nested setup,
+and PCKSP operator selection; FSI supplies the physical grouping and PC choices.
+See the [shared solver guide](../../../module/solver/README.md).
 
 The outer FGMRES splits fluid components (0..3) from solid and multiplier
 components (4..9). PETSc `selfp` eliminates the fluid diagonal when assembling
@@ -283,23 +119,18 @@ Current launch settings use the source defaults:
 The inner tolerances control preconditioning work. Outer linear convergence
 and the four physical Newton criteria below determine correction acceptance.
 
-The shared compression path is already used by pure solid MPM, pure fluid MPM
-and this FSI system. `CrsMat::SolveReducedSystem()` creates the compact solve and
-recovers the full correction. `SetFieldSplitComponents()` supplies field indices
-from the same compact layout. Pure fluid defines its velocity/pressure split
-with that API; pure solid applies ASM/ILU directly to the retained equations.
-Only the physical group declarations differ between these systems;
-`CrsMat` owns the reusable setup and numbering machinery.
-
-The physical matrix, material parameters and nonlinear tolerances are separate
-from this preconditioning layer. The full native CSR graph and full PETSc
-assembly still exist; reducing their inactive storage and assembly communication
-is a later change inside `CrsMat`.
+The native CSR graph, full PETSc assembly, material parameters, and physical
+Newton criteria remain independent of this preconditioning layer.
 
 ## Newton iteration
 
-`SolveFSISystem()` builds the lumped interface weights and active-component mask
-once at the beginning of the time step. Each Newton iteration then performs:
+`MPMMPMMonolithicFSI` is a `NonlinearProblem` (`module/implicit/newton_solver.h`), and
+`SolveFSISystem()` calls `SolveNewton(*this, max_NR_it)`. Its `BeginNewtonStep()`
+builds the lumped interface weights and active-component mask
+once at the beginning of the time step. Fluid stabilization coefficients
+are computed from the step-start nodal velocity and remain frozen during Newton.
+Each Newton iteration (`AssembleNewtonSystem`, `CheckNewtonConvergence`,
+`SolveNewtonCorrection`, `UpdateNRIncrement`) then performs:
 
 1. Clear the coupled matrix and RHS.
 2. Apply phase boundary values and compute trial nodal velocity/acceleration.
@@ -329,7 +160,7 @@ once. A field with no active components has zero RMS.
 |-------|----------|----------------------|
 | Fluid momentum | Nonlinear momentum RHS [N] | `max(1e-10, 1e-5 * initial_norm[0])` |
 | Continuity | Nonlinear continuity RHS [m^3/s] | `max(1e-13, 1e-5 * initial_norm[1])` |
-| Solid momentum | Nonlinear momentum RHS [N] | `max(1e-8, 1e-5 * initial_norm[2])` |
+| Solid momentum | Nonlinear momentum RHS [N] | `max(1e-7, 1e-5 * initial_norm[2])` |
 | Interface | Endpoint-velocity difference [m/s] | `1e-8` |
 
 The first three references are saved inside `CheckNRConvergence()` at
@@ -430,8 +261,7 @@ fluid `MoveParticle()` migrates full particle state using the resulting position
 
 The correction changes fluid coordinates only. Velocity, acceleration,
 TPIC/APIC state, pressure, mass and volume retain their transferred values.
-It is a geometric remap separate from PST and the multiplier solve. Validate
-it by checking centre locations against the final `phi_s = 0.5` level set.
+It is a geometric remap separate from PST and the multiplier solve.
 A particle's finite material domain can still overlap the solid.
 
 Nodal fixed-DOF conditions constrain nodal kinematics. The geometric clamp

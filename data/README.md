@@ -13,65 +13,34 @@ cmake -S . -B build
 cmake --build build --target makinput_fsi_mpm_mpm makdivide_fsi_mpm_mpm -j4
 ```
 
-The `fluid` and `solid` cases are always built. FSI has two variants,
-`MPM_FEM` (MPM solid + FEM fluid) and `MPM_MPM` (MPM solid + MPM fluid);
-both are enabled by default. To build only one, comment out the
-corresponding `add_subdirectory(...)` in `data/generate/fsi/CMakeLists.txt`
-and `data/divide/divide_fsi/CMakeLists.txt`.
+Fluid, solid, and both FSI variants (`MPM_FEM` and `MPM_MPM`) are configured
+by default. Build only the targets needed for a case. FSI variants are selected in
+[generate/fsi/CMakeLists.txt](generate/fsi/CMakeLists.txt) and
+[divide/divide_fsi/CMakeLists.txt](divide/divide_fsi/CMakeLists.txt).
 
-Executables are emitted per case/variant:
+| Case | Generator under `build/data/generate/` | Partitioner under `build/data/divide/` |
+|------|---------------------------------------|----------------------------------------|
+| Fluid | `fluid/makinput_fluid` | `fluid/makdivide_fluid` |
+| Solid | `solid/makinput_solid` | `solid/makdivide_solid` |
+| MPM–FEM FSI | `fsi/MPM_FEM/makinput_fsi_mpm_fem` | `fsi/MPM_FEM/makdivide_fsi_mpm_fem` |
+| MPM–MPM FSI | `fsi/MPM_MPM/makinput_fsi_mpm_mpm` | `fsi/MPM_MPM/makdivide_fsi_mpm_mpm` |
 
-- `build/data/generate/fluid/makinput_fluid`
-- `build/data/generate/solid/makinput_solid`
-- `build/data/generate/fsi/MPM_FEM/makinput_fsi_mpm_fem`
-- `build/data/generate/fsi/MPM_MPM/makinput_fsi_mpm_mpm`
-- `build/data/divide/fluid/makdivide_fluid`
-- `build/data/divide/solid/makdivide_solid`
-- `build/data/divide/fsi/MPM_FEM/makdivide_fsi_mpm_fem`
-- `build/data/divide/fsi/MPM_MPM/makdivide_fsi_mpm_mpm`
+## Structure
 
-## Layout
-
-Generator side:
-
-- `data/generate/data_generator.h`: `DataGenerator` base class. `Run()` drives
-  the fixed workflow; `BuildData()` is a non-virtual common sequence
-  (grid geometry -> mesh -> control points -> `CreateBCs()` ->
-  `CreateParticles()`), and case behavior is customized through the virtual
-  hooks (`CreateBCs`, `CreateParticles`, `WriteBCData`, `WritePointData`,
-  `WriteVisualizationOutputs`).
-- `data/generate/output_util.h`: shared text-header and VTK HDF5 helpers.
-- `data/generate/fluid`, `data/generate/solid`: per-physics base classes
-  `FluidGenerator` / `SolidGenerator` (both `DataGenerator + MaterialPoint`),
-  each also serving as the standalone case generator.
-- `data/generate/fsi/MPM_FEM`, `data/generate/fsi/MPM_MPM`: per-variant
-  per-physics subclasses plus a coordinator (`DataGenerator` subclass) holding
-  `solid_` / `fluid_` members; shared BC/point writers are reused from the
-  per-physics bases via `using` declarations.
-
-Divider side:
-
-- `data/divide/data_partitioner.h`: `DataPartitioner` base class. `Run()`
-  drives the workflow; the partition engine (`MeshPartition`,
-  `PointRenumber`) and the stateless `BCRenumber` (public static) live here.
-- `data/divide/divide_fluid`, `data/divide/divide_solid`: per-physics
-  components `FluidDivider` / `SolidDivider`, each owning its source
-  (`points_`) and partitioned (`partition_points_`) containers. The per-rank
-  work is split into `PartitionPoints()` (before `MeshPartition`) and
-  `PartitionBCs(cp_min, cp_max)` (after `MeshPartition`) so that a coupled
-  coordinator can share one mesh windowing pass between physics.
-- `data/divide/divide_fsi/MPM_MPM`: `MPMMPMFSISolidDivider` /
-  `MPMMPMFSIFluidDivider` inherit the per-physics components and expose their
-  hooks via `using`; coordinator `MPMMPMFSIDivider` holds both and delegates.
-  The MPM fluid additionally carries three inflow BC blocks
-  (`uinfbc/vinfbc/winfbc`), which are **element-indexed** (not control-point
-  indexed) and renumbered with the element window.
-- `data/divide/divide_fsi/MPM_FEM`: same structure; the FEM fluid has no
-  particles, so `MPMFEMFSIFluidDivider` partitions only the four mesh BCs.
-
-Both sides share their base-class implementation through the
-`mpm_generate_common` / `mpm_divide_common` OBJECT libraries, compiled once
-and linked into every tool.
+- `generate/data_generator.h`: `DataGenerator::Run()` drives grid geometry,
+  mesh, control points, BCs, and particle creation. Virtual hooks supply
+  case-specific BC, particle, and visualization output.
+- `generate/output_util.h`: shared text headers and VTK HDF5 helpers.
+- `generate/fluid/` and `generate/solid/`: per-physics bases and standalone
+  generators. FSI coordinators hold one solid and one fluid component.
+- `divide/data_partitioner.h`: shared mesh partitioning and point/BC
+  renumbering. `FluidDivider` and `SolidDivider` own their point containers;
+  `PartitionPoints()` precedes mesh windowing and `PartitionBCs()` follows it.
+- FSI dividers share one mesh-windowing pass. MPM fluid inflow BCs
+  (`uinfbc/vinfbc/winfbc`) are element-indexed; FEM fluid has no particles
+  and partitions only its four mesh BCs.
+- `mpm_generate_common` and `mpm_divide_common` OBJECT libraries compile
+  the common implementations once for all tools.
 
 ## Output
 
@@ -92,8 +61,6 @@ Each solid particle section contains the particle count, all coordinate triplets
 then one `id matid surf_point mass vol0` row per particle. The coordinates and
 attributes occupy separate blocks; readers must preserve this ordering.
 
-No legacy `.vtk`, `.vtu`, `.pvtu`, or `.pvd` output is maintained in `data/`.
-
 For divide runs, execute the tool from its own per-variant build directory:
 
 ```bash
@@ -109,12 +76,13 @@ and output prefix such as `./myrank_data_column/`), and writes rank-split
 ## Runtime parameters and reconfiguration
 
 CMake copies generator parameter files such as `input.txt` from the source
-directories into the matching `build/data/generate/` directories using
-`configure_file(... COPYONLY)`. Reconfiguring can overwrite edits made only to
-those runtime copies. Check the first active parameter block, time step,
+directories into the matching `build/data/generate/` directories only when the
+runtime copy is missing (`mpm_copy_input_once`), so edits to those copies
+survive reconfiguring. Check the first active parameter block, time step,
 restart mode and start step after configuration and before launching a solver.
 
-The solver reads paths from `build/file.dat`; keep them inside `build/`.
+Each driver reads paths from the `file.dat` in its build directory (for example
+`build/work/src_fsi/MPM_MPM/file.dat`); keep them inside `build/`.
 Fresh runs use initial point data, while restart modes read the existing
 per-rank restart files. Restart files are outputs of the solver, not products
 of rerunning a partitioner. Rebuilding executables alone does not regenerate

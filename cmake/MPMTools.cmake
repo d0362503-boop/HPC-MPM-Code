@@ -84,3 +84,34 @@ function(mpm_add_divide_tool)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 endfunction()
+
+# ----------------------------------------------------------------------------
+# Add one solver driver executable built from all .cpp files in the calling
+# directory. The executable is written to the driver's own build directory,
+# for example build/work/src_fsi/MPM_MPM/MPM_MPM_FSI, next to its file.dat.
+#
+# Usage:
+#   mpm_add_driver(<target>)
+# ----------------------------------------------------------------------------
+function(mpm_add_driver target)
+    file(GLOB driver_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+    add_executable(${target} ${driver_sources})
+    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/module)
+    target_link_libraries(${target} PRIVATE mpm_modules)
+    set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    set_property(GLOBAL APPEND PROPERTY MPM_DRIVERS ${target})
+endfunction()
+
+# ----------------------------------------------------------------------------
+# Copy a runtime parameter file into the build tree only if it is not there
+# yet, so edits made under build/ survive later re-configures. Delete the
+# build copy and re-configure to get the source version again.
+#
+# Usage:
+#   mpm_copy_input_once(<file>)
+# ----------------------------------------------------------------------------
+function(mpm_copy_input_once file)
+    if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/${file})
+        configure_file(${file} ${file} COPYONLY)
+    endif()
+endfunction()

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "module/dataset.h"
+#include "module/implicit/generalized_alpha_integrator.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
@@ -23,10 +24,11 @@ class StabilizedFEM : public MaterialPoint {
     std::vector<double> tau1, tau2;
     // Element density and viscosity
     std::vector<double> rhoe, rmue;
-    // Navier-Stokes system matrix
-    CrsMat NS_;
-    // Phase-field system matrix
-    CrsMat PF_;
+
+    GeneralizedAlphaIntegrator integrator_; // time integration state
+    CrsMat NS_;                             // Navier-Stokes system matrix
+    CrsMat PF_;                             // Phase-field system matrix
+
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
     /**
@@ -76,6 +78,16 @@ class StabilizedFEM : public MaterialPoint {
     };
 
     /** @brief Solve the stabilized Navier-Stokes system. */
+    /**
+     * @brief Compute nodal acceleration from nodal velocity by inverting the
+     *        Generalized-α (Newmark) velocity relation with `gamma_nb` and `dt`.
+     * @return Vector of derived accelerations sized to `nodec * 3`.
+     */
+    std::vector<double> ComputeNodeAccelFromVel() const {
+
+        return this->integrator_.ComputeNodeAccelFromVel(this->nvel, this->nvel_old, this->naccel, dt);
+    }
+
     void SolveNS();
 
     /**
@@ -110,9 +122,8 @@ class StabilizedFEM : public MaterialPoint {
     /**
      * @brief Write fluid mesh data to VTK HDF5 files.
      * @param iview Output view index.
-     * @param istep Current time step.
      */
-    void OutputMeshDataVTKHDF(int iview, int istep);
+    void OutputMeshDataVTKHDF(int iview);
 
   protected:
     /** @brief Apply velocity and pressure boundary conditions. */

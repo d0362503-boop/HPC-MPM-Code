@@ -1,6 +1,7 @@
 #pragma once
 
 #include "module/dataset.h"
+#include <array>
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
@@ -13,24 +14,105 @@ inline int isb, isubc, isubl;
 inline std::vector<int> naid, nsbc, nsubc, nsbl, nsubl, nxyr(3);
 inline std::vector<double> dbc, dbl;
 
-template <typename T> struct MPIDatatypeCheck {
-    static MPI_Datatype GetType() {
-        std::cout << "MPI_datatype_check_error" << "\n";
-        exit(1);
-    }
-};
+/// MPI datatype for `T`; unsupported types fail at compile time (incomplete type).
+template <typename T> struct MPIDatatypeCheck;
 
 template <> struct MPIDatatypeCheck<int> {
     static MPI_Datatype GetType() { return MPI_INT; }
+    static constexpr int kCount = 1; // scalars per element
 };
 
 template <> struct MPIDatatypeCheck<unsigned long long> {
     static MPI_Datatype GetType() { return MPI_UNSIGNED_LONG_LONG; }
+    static constexpr int kCount = 1; // scalars per element
 };
 
 template <> struct MPIDatatypeCheck<double> {
     static MPI_Datatype GetType() { return MPI_DOUBLE; }
+    static constexpr int kCount = 1; // scalars per element
 };
+
+/// `std::array<T, N>` is sent as N values of T: array<double, 3> is 3 MPI_DOUBLE, a 3x3 matrix is 9.
+template <typename T, std::size_t N> struct MPIDatatypeCheck<std::array<T, N>> {
+    static MPI_Datatype GetType() { return MPIDatatypeCheck<T>::GetType(); }
+    static constexpr int kCount = static_cast<int>(N) * MPIDatatypeCheck<T>::kCount; // scalars per element
+};
+
+namespace internal {
+
+/**
+ * @brief Exchange contiguous per-neighbor blocks with every neighbor rank.
+ * @param peers Neighbor rank IDs.
+ * @param send_counts Number of entries sent to each neighbor.
+ * @param recv_counts Number of entries received from each neighbor.
+ * @param per_count Number of buffer elements per entry, such as components per node.
+ * @param sbuf Send buffer with the blocks for each neighbor stored in `peers` order.
+ * @param rbuf Receive buffer, already sized by the caller, filled in `peers` order.
+ * @note Neighbors with zero count are skipped; their requests stay MPI_REQUEST_NULL for MPI_Waitall.
+ */
+template <typename E>
+void PeerSendrecv(const std::vector<int> &peers, const std::vector<int> &send_counts, const std::vector<int> &recv_counts,
+                  int per_count, const std::vector<E> &sbuf, std::vector<E> &rbuf) {
+
+    const int npeer = static_cast<int>(peers.size());
+    std::vector<MPI_Request> irq(2 * npeer, MPI_REQUEST_NULL);
+
+    int so = 0;
+    int ro = 0;
+    for (int i = 0; i < npeer; i++) {
+        const int sc = send_counts[i] * per_count; // elements to send
+        const int rc = recv_counts[i] * per_count; // elements to receive
+        if (sc != 0) {
+            MPI_Isend(sbuf.data() + so, sc * MPIDatatypeCheck<E>::kCount, MPIDatatypeCheck<E>::GetType(), peers[i], 1,
+                      MPI_COMM_WORLD, &irq[2 * i]);
+        }
+        if (rc != 0) {
+            MPI_Irecv(rbuf.data() + ro, rc * MPIDatatypeCheck<E>::kCount, MPIDatatypeCheck<E>::GetType(), peers[i], 1,
+                      MPI_COMM_WORLD, &irq[2 * i + 1]);
+        }
+        so += sc;
+        ro += rc;
+    }
+    MPI_Waitall(2 * npeer, irq.data(), MPI_STATUSES_IGNORE);
+
+    return;
+}
+
+/**
+ * @brief Shared implementation of NodeVarComm; call NodeVarComm instead.
+ * @param dat Nodal data array that stores all components in contiguous blocks.
+ * @param offsets Pointer to `ndof` component offsets inside `dat`, such as `0`, `nuc`, `nvc`, or `nwc`.
+ * @param ndof Number of components exchanged in one communication step.
+ * @note Send/receive buffers are static and reused across calls, so this function is not reentrant or thread-safe.
+ */
+template <typename T> void NodeVarCommImpl(std::vector<T> &dat, const int *offsets, int ndof) {
+
+    static std::vector<T> sdn, rvn; // reused send/recv buffers
+    sdn.resize(static_cast<std::size_t>(isubc) * ndof);
+    rvn.resize(static_cast<std::size_t>(isubc) * ndof);
+
+    int io = 0;
+    for (int i = 0; i < isb; i++) {
+        for (int j = io; j < io + nsbc[i]; j++) {
+            for (int d = 0; d < ndof; d++) { sdn[j * ndof + d] = dat[nsubc[j] + offsets[d]]; }
+        }
+        io += nsbc[i];
+    }
+
+    PeerSendrecv(naid, nsbc, nsbc, ndof, sdn, rvn);
+
+    io = 0;
+    for (int i = 0; i < isb; i++) {
+        for (int j = io; j < io + nsbc[i]; j++) {
+            for (int d = 0; d < ndof; d++) { dat[nsubc[j] + offsets[d]] += rvn[j * ndof + d]; }
+        }
+        io += nsbc[i];
+    }
+
+    return;
+}
+
+} // namespace internal
 
 /**
  * @brief Exchange one nodal field component on overlap control points and add received values back into `dat`.
@@ -39,48 +121,7 @@ template <> struct MPIDatatypeCheck<double> {
  */
 template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) {
 
-    std::vector<T> sdn(isubc);
-    std::vector<T> rvn(isubc);
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
-    MPI_Status status;
-
-    int ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            sdn[j] = dat[jj + offset];
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        int npro = naid[i];
-        if (nsbc[i] != 0) {
-            MPI_Isend(&sdn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-            MPI_Irecv(&rvn[io], nsbc[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
-        }
-    }
-    for (int i = 0; i < isb; i++) {
-        if (nsbc[i] != 0) {
-            MPI_Wait(&irqs[i], &status);
-            MPI_Wait(&irqr[i], &status);
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            dat[jj + offset] += rvn[j];
-        }
-    }
+    internal::NodeVarCommImpl(dat, &offset, 1);
 
     return;
 }
@@ -91,109 +132,8 @@ template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) {
  * @param offsets Component offsets inside `dat` for the fields packed into one communication step.
  */
 template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<int> &offsets) {
-    int ndof = static_cast<int>(offsets.size());
-    if (ndof == 1) {
-        NodeVarComm(dat, offsets[0]);
-        return;
-    }
 
-    std::vector<T> sdn(isubc * ndof);
-    std::vector<T> rvn(isubc * ndof);
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
-    MPI_Status status;
-
-    int ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            for (int d = 0; d < ndof; d++) { sdn[j * ndof + d] = dat[jj + offsets[d]]; }
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        int npro = naid[i];
-        if (nsbc[i] != 0) {
-            MPI_Isend(&sdn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-            MPI_Irecv(&rvn[io * ndof], nsbc[i] * ndof, MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
-        }
-    }
-    for (int i = 0; i < isb; i++) {
-        if (nsbc[i] != 0) {
-            MPI_Wait(&irqs[i], &status);
-            MPI_Wait(&irqr[i], &status);
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbc[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubc[j];
-            for (int d = 0; d < ndof; d++) { dat[jj + offsets[d]] += rvn[j * ndof + d]; }
-        }
-    }
-
-    return;
-}
-
-/**
- * @brief Exchange one visualization-node field component on overlap nodes and add received values back into `dat`.
- * @param dat Nodal data array.
- * @param nn  Component offset inside `dat`.
- */
-template <typename T> void NodeVarCommLowerOrder(std::vector<T> &dat, int nn) {
-
-    std::vector<T> sdn(isubl);
-    std::vector<T> rvn(isubl);
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
-    MPI_Status status;
-
-    int ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbl[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubl[j];
-            sdn[j] = dat[jj + nn];
-        }
-    }
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbl[i];
-        int npro = naid[i];
-        if (nsbl[i] != 0) {
-            MPI_Isend(&sdn[io], nsbl[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqs[i]);
-            MPI_Irecv(&rvn[io], nsbl[i], MPIDatatypeCheck<T>::GetType(), npro, 1, MPI_COMM_WORLD, &irqr[i]);
-        }
-    }
-    for (int i = 0; i < isb; i++) {
-        if (nsbl[i] != 0) {
-            MPI_Wait(&irqs[i], &status);
-            MPI_Wait(&irqr[i], &status);
-        }
-    }
-    // MPI_Waitall(isb, irqs.data(), statuses.data());
-    // MPI_Waitall(isb, irqr.data(), statuses.data());
-
-    ii = 0;
-    for (int i = 0; i < isb; i++) {
-        int io = ii;
-        ii = io + nsbl[i];
-        for (int j = io; j < ii; j++) {
-            int jj = nsubl[j];
-            dat[jj + nn] += rvn[j];
-        }
-    }
+    internal::NodeVarCommImpl(dat, offsets.data(), static_cast<int>(offsets.size()));
 
     return;
 }
@@ -206,96 +146,32 @@ class ParticleCommunication {
     int nmps; // Material Points to Send: total particles sent to neighbor ranks (sum of nsp)
     int nrps; // Material Points to Receive: total particles received from neighbor ranks (sum of nrp)
     // -----------------------------------------------------------------------------
+
     std::vector<int> comm_ranks; // current particle peers
     std::vector<int> nsp, nrp, ofp_id;
     std::vector<int> idmp, idnsp;
 
     /**
-     * @brief Send/receive a scalar particle variable to/from neighbor ranks.
+     * @brief Send/receive a scalar or array-valued particle variable to/from neighbor ranks.
      * @param bufs Send buffer packed by neighbor.
      * @param bufr Receive buffer packed by neighbor.
-     * @param idm  Number of scalar values per particle.
+     * @param idm  Number of values per particle.
      */
-    template <typename T> void PointVarSendrecv(std::vector<T> &bufs, std::vector<T> &bufr, const int idm) {
+    template <typename E> void PointVarSendrecv(std::vector<E> &bufs, std::vector<E> &bufr, const int idm) {
 
-        const int npeer = int(this->comm_ranks.size());
-        std::vector<MPI_Request> irqs(npeer);
-        std::vector<MPI_Request> irqr(npeer);
-        MPI_Status status;
-
-        int sicounts = 0;
-        int sicountr = 0;
-        for (int i = 0; i < npeer; i++) {
-            int ncomid = this->comm_ranks[i];
-            int icounts = this->nsp[i] * idm;
-            int icountr = this->nrp[i] * idm;
-            if (icounts != 0) {
-                MPI_Isend(&bufs[sicounts], icounts, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD, &irqs[i]);
-            }
-            if (icountr != 0) {
-                MPI_Irecv(&bufr[sicountr], icountr, MPIDatatypeCheck<T>::GetType(), ncomid, 1, MPI_COMM_WORLD, &irqr[i]);
-            }
-            sicounts += icounts;
-            sicountr += icountr;
-        }
-
-        for (int i = 0; i < npeer; i++) {
-            if (this->nsp[i] != 0) { MPI_Wait(&irqs[i], &status); }
-            if (this->nrp[i] != 0) { MPI_Wait(&irqr[i], &status); }
-        }
+        internal::PeerSendrecv(this->comm_ranks, this->nsp, this->nrp, idm, bufs, bufr);
 
         return;
     }
 
     /**
-     * @brief Send/receive an array-valued particle variable to/from neighbor ranks.
-     * @param bufs Send buffer packed by neighbor.
-     * @param bufr Receive buffer packed by neighbor.
-     * @param idm  Number of array values per particle.
-     */
-    template <typename T, std::size_t N>
-    void PointVarSendrecv(std::vector<std::array<T, N>> &bufs, std::vector<std::array<T, N>> &bufr, const int idm) {
-
-        const int npeer = int(this->comm_ranks.size());
-        std::vector<MPI_Request> irqs(npeer);
-        std::vector<MPI_Request> irqr(npeer);
-        MPI_Status status;
-
-        int sicounts = 0;
-        int sicountr = 0;
-        for (int i = 0; i < npeer; i++) {
-            int ncomid = this->comm_ranks[i];
-            int icounts = this->nsp[i] * idm;
-            int icountr = this->nrp[i] * idm;
-            if (icounts != 0) {
-                MPI_Isend(bufs.data() + sicounts, icounts * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1, MPI_COMM_WORLD,
-                          &irqs[i]);
-            }
-            if (icountr != 0) {
-                MPI_Irecv(bufr.data() + sicountr, icountr * sizeof(std::array<T, N>), MPI_BYTE, ncomid, 1, MPI_COMM_WORLD,
-                          &irqr[i]);
-            }
-            sicounts += icounts;
-            sicountr += icountr;
-        }
-
-        for (int i = 0; i < npeer; i++) {
-            if (this->nsp[i] != 0) { MPI_Wait(&irqs[i], &status); }
-            if (this->nrp[i] != 0) { MPI_Wait(&irqr[i], &status); }
-        }
-
-        return;
-    }
-
-    /**
-     * @brief Migrate a scalar particle variable across rank boundaries and rebuild the local vector.
+     * @brief Migrate a scalar or array-valued particle variable across rank boundaries and rebuild the local vector.
      * @param point_num  New local particle count after communication.
      * @param point_var  Particle variable vector (resized and repopulated in-place).
      */
-    template <typename T> void PointVarComm(int point_num, std::vector<T> &point_var) {
+    template <typename E> void PointVarComm(int point_num, std::vector<E> &point_var) {
 
-        std::vector<T> bufs(this->nmps, T()), bufr(this->nrps, T());
-        std::vector<T> tmp(this->nnmp, T());
+        std::vector<E> bufs(this->nmps), bufr(this->nrps), tmp(this->nnmp);
 
         int sip = 0;
         for (int i = 0; i < int(this->comm_ranks.size()); i++) {
@@ -320,66 +196,14 @@ class ParticleCommunication {
     }
 
     /**
-     * @brief Migrate a scalar particle variable across rank boundaries and append inflow-particle values.
+     * @brief Migrate a scalar or array-valued particle variable and append inflow-particle values.
      * @param point_num  New local particle count after communication.
      * @param ifp_num    Number of inflow particles to append.
      * @param point_var  Particle variable vector (resized and repopulated in-place).
      * @param ifp_var    Inflow-particle values to append.
      */
-    template <typename T>
-    void PointVarComm(int point_num, int ifp_num, std::vector<T> &point_var, const std::vector<T> &ifp_var) {
-
-        this->PointVarComm(point_num, point_var);
-
-        if (ifp_num != 0) {
-            int num = this->nnmp + this->nrps;
-            for (int i = 0; i < ifp_num; i++) { point_var[num + i] = ifp_var[i]; }
-        }
-
-        return;
-    }
-
-    /**
-     * @brief Migrate an array-valued particle variable across rank boundaries and rebuild the local vector.
-     * @param point_num  New local particle count after communication.
-     * @param point_var  Particle variable vector (resized and repopulated in-place).
-     */
-    template <typename T, std::size_t N> void PointVarComm(int point_num, std::vector<std::array<T, N>> &point_var) {
-
-        std::vector<std::array<T, N>> bufs(this->nmps), bufr(this->nrps), tmp(this->nnmp);
-
-        int sip = 0;
-        for (int i = 0; i < int(this->comm_ranks.size()); i++) {
-            for (int ip = 0; ip < this->nsp[i]; ip++) {
-                int ipsip = ip + sip;
-                bufs[ipsip] = point_var[this->idmp[ipsip]];
-            }
-            sip += this->nsp[i];
-        }
-
-        this->PointVarSendrecv(bufs, bufr, 1);
-
-        for (int i = 0; i < this->nnmp; i++) { tmp[i] = point_var[this->idnsp[i]]; }
-
-        VectorAssign(point_num, point_var);
-
-        for (int i = 0; i < this->nnmp; i++) { point_var[i] = tmp[i]; }
-
-        for (int i = 0; i < this->nrps; i++) { point_var[this->nnmp + i] = bufr[i]; }
-
-        return;
-    }
-
-    /**
-     * @brief Migrate an array-valued particle variable across rank boundaries and append inflow-particle values.
-     * @param point_num  New local particle count after communication.
-     * @param ifp_num    Number of inflow particles to append.
-     * @param point_var  Particle variable vector (resized and repopulated in-place).
-     * @param ifp_var    Inflow-particle values to append.
-     */
-    template <typename T, std::size_t N>
-    void PointVarComm(int point_num, int ifp_num, std::vector<std::array<T, N>> &point_var,
-                      const std::vector<std::array<T, N>> &ifp_var) {
+    template <typename E>
+    void PointVarComm(int point_num, int ifp_num, std::vector<E> &point_var, const std::vector<E> &ifp_var) {
 
         this->PointVarComm(point_num, point_var);
 

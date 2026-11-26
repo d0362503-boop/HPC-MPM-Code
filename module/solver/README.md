@@ -1,41 +1,19 @@
 # `module/solver/` - Linear Solver and PETSc Wrapper
 
-> Updated 2026-10-30: reduced MPM solves, preconditioner lifecycle,
-> residual checks and solution recovery.
-
----
-
 ## 1. What Lives Here
 
-`module/solver/` contains two layers:
-
-1. `CrsMat`
-   A custom CSR-style sparse matrix wrapper that stores:
-   - `amat`
-   - `b_rhs`
-   - `x_lhs`
-   - `matrow`
-   - `matcolid`
-
-2. PETSc / HYPRE bridge
-   When `use_petsc = true`, the same `CrsMat` object also owns:
-   - PETSc `Mat`
-   - PETSc `Vec`
-   - PETSc `KSP`
-   - local-to-global mappings
-   - BC index lists
-   - local scatter objects for solution recovery
+`CrsMat` owns native CSR storage (`amat`, `b_rhs`, `x_lhs`, `matrow`,
+`matcolid`) and, when `use_petsc=true`, the PETSc matrices, vectors, KSP,
+numbering maps, boundary index lists, and local solution scatters.
 
 Main files:
 
 | File | Role |
 |------|------|
 | `crsmat.h` | `CrsMat` definition |
-| `crsmat.cpp` | PETSc setup, assembly, solve, BC handling |
-| `crsmat_reduced.cpp` | Internal MPM equation compression, field numbering, and full-vector expansion |
-| `solver.cpp` | native fallback solvers (`GPBiCG`, `GPBiCGSafe`, `GPBiCGAR`) |
-
----
+| `crsmat.cpp` | Setup, run at initialization and DLB rebuild: CSR graph, ownership and PETSc numbering, matrix/vector/KSP creation |
+| `crsmat_solve.cpp` | Every Newton iteration: assembly, BC elimination, MPM equation compression, preconditioner setup, solve, recovery, residual norms |
+| `native_solver.cpp` | Native fallback solvers (`GPBiCG`, `GPBiCGSafe`, `GPBiCGAR`) and their diagonal-scaling helpers |
 
 ## 2. Indexing, Layout, and CRS Structure
 
@@ -125,18 +103,8 @@ and FEM phase field `PF_=1`. Helpers read this member.
 `num_block` remains distinct because a system may store only selected
 component pairs rather than all `ndof * ndof` blocks.
 
-| Operation | Current signature |
-|-----------|-------------------|
-| Diagonal scaling | `ExtractDiagonal()`, `ComputeDiagonalInverseSqrt()`, `BuildDiagonalPreconditioner()` |
-| Numbering | `BuildLGMAP()`, `BuildNaturalGlobalMaps(node_l2g)`, `BuildPetscLocalMaps()` |
-| Construction | `BuildPetscMat()`, `InitPetscSolver()` |
-| Assembly/RHS | `AssemblePetscMat()`, `UpdatePetscRhs()` |
-| Solve | `SolveSystem(NR_it)`, `SolveWithPetsc(NR_it)` |
-
 The physics override is `MaterialPoint::AssemblePetscMat(CrsMat &mat)`;
 its component count comes from `mat.ndof`.
-
----
 
 ## 3. `CrsMat` Workflow
 
@@ -149,7 +117,7 @@ For each assembled correction:
 1. `SolveSystem(NR_it)` calls `AssemblePetscMat()`, delegated to the owner.
 2. `SolveWithPetsc(NR_it)` collects current BC IDs and copies the full native RHS.
 3. Eliminate inactive and physical boundary rows/columns with prescribed values.
-4. For MPM, discard explicit zeros in a solve copy, compress, solve from zero
+4. For MPM, compress directly from the full matrix, drop explicit zeros from the compact copy, solve from zero
    and expand into the full PETSc vector. FEM solves the full matrix.
 5. `RecoverSolution()` fills native `x_lhs` through the owned/ghost scatter.
 
@@ -215,42 +183,27 @@ can override insertion using their own block layout.
 
 #### Dynamic nonzeros from moving particles
 
-`BuildCrsMat()` builds a **static** CSR graph based on the background control-point stencil (`±idimc` in each direction). This graph is fixed for the entire simulation.
-
-Particle motion changes which entries within this stencil receive contributions.
-PETSc preallocation can still require additional storage when assembled entries
-exceed its estimates; this is distinct from enlarging the local CSR stencil.
-
-By default, PETSc treats new nonzeros as a hard error:
-
-```
-PETSC ERROR: New nonzero at (12540,510) caused a malloc.
-```
-
-The fix is:
-
-```cpp
-MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
-```
-
-This permits PETSc to allocate additional storage instead of aborting when an
-insertion exceeds preallocation. It does not create missing entries in `matcolid`
-or make an out-of-stencil `FindIndex()` lookup valid.
-
-The CSR graph is rebuilt when DLB changes the mesh layout. A change to interpolation
-support must likewise be reflected in the graph, independently of PETSc's allocation option.
+The native CSR stencil comes from `idimc` and stays fixed until the mesh layout
+changes. Particle motion changes contributions inside that stencil.
+`MAT_NEW_NONZERO_ALLOCATION_ERR=PETSC_FALSE` permits extra PETSc allocation
+when insertion exceeds preallocation; it does not add missing native CSR entries
+or permit an out-of-stencil `FindIndex()` lookup.
+DLB or interpolation-support changes require a matching graph rebuild.
 
 #### Inactive-node elimination
 
-At the start of each assembly, `BuildActiveRowMask()` computes the mass-based active indicator (Section 2.5) and synchronizes it across overlap nodes via `NodeVarComm` so that a shared node is active if any overlapping rank marks it active. FEM nodes are always active. Nodes that are still inactive after synchronization are skipped in the first assembly pass.
+Assembly skips rows marked inactive by the synchronized mask in Section 2.5.
 
-After the RHS and initial guess are assembled, PETSc applies
+After the RHS and initial guess are assembled, the inactive DOFs and the physical
+Dirichlet DOFs are merged into one sorted list and eliminated in a single call:
 
 ```cpp
-MatZeroRowsColumns(..., inactive_gids, 1.0, petsc_x, petsc_b);
+MatZeroRowsColumns(..., fixed_gids, 1.0, petsc_x, petsc_b);
 ```
 
-to every inactive non-Dirichlet DOF. Their initial guess is zero, so PETSc sets their RHS to zero and removes their row and column from every active equation. Physical Dirichlet DOFs are excluded from this list and are handled by the normal BC pass afterwards. This avoids weak empty-space DOFs feeding back into active MPM equations.
+MPM corrections start from an all-zero `x_lhs`, so every eliminated DOF has a zero
+prescribed value: PETSc sets its RHS to zero and removes its row and column from every
+active equation. This avoids weak empty-space DOFs feeding back into active MPM equations.
 
 #### Residual consistency for inactive MPM nodes
 
@@ -275,8 +228,6 @@ the mass-based indicator across shared nodes. The RHS monitor tests local nodal
 mass directly and does not consume that mask; consistency relies on synchronized
 nodal masses. It does not depend on a previous PETSc assembly or solve.
 
----
-
 ### 3.5 Transparent MPM equation compression
 
 PETSc MPM systems use the same internal
@@ -284,7 +235,9 @@ compression in `SolveWithPetsc()`. External assembly retains the existing CSR
 blocks, `nodec * ndof` RHS/correction vectors, and component-major indexing.
 
 After physical and inactive boundary elimination, `BuildReducedDofMap()` removes
-only rows containing exactly the unit diagonal with an exactly zero RHS.
+only rows whose sole nonzero is a unit diagonal and whose RHS is exactly zero; explicit zeros kept by
+`MAT_KEEP_NONZERO_PATTERN` are ignored in this test. Explicit zeros are then removed from the compact matrix only,
+so the full matrix is never duplicated.
 A zero RHS by itself does not mark an equation inactive. Nonzero prescribed
 boundary values are retained, and their column contributions have already been
 transferred to the RHS.
@@ -311,12 +264,9 @@ remain private state.
 An empty retained system uses `PCNONE` and skips physical field-split setup;
 full-vector recovery still fills removed components with zero.
 
-The compact operator is recreated from current matrix values each solve.
-A changed retained layout, the first solve, or a scheduled/forced rebuild
-recreates the KSP and its physical field setup. Otherwise the KSP is retained
-and receives the new compact operator with `KSPSetReusePreconditioner(false)`:
-the numerical PC is refreshed, not frozen. Mesh/DLB reset releases compact
-maps and matrices together with the full PETSc solver.
+Compact values update every solve. KSP recreation and numerical-PC refresh
+follow the [rebuild policy](#6-preconditioner-rebuild-policy); a mesh/DLB reset
+releases both full and compact PETSc state.
 
 This stage reduces the equations seen by Krylov and the preconditioner.
 Native CSR allocation, full PETSc preallocation, and assembly communication have
@@ -345,17 +295,8 @@ generic traversal, PETSc setup, compression and recovery stay in `CrsMat`.
 
 ## 4. Boundary Conditions
 
-BC rows are handled by:
-
-```cpp
-MatZeroRowsColumns(...)
-```
-
-`CrsMat` does not hardcode BC lists itself. It asks its owner object:
-
-```cpp
-owner_->BuildPetscBCList(*this);
-```
+`CrsMat` asks `owner_->BuildPetscBCList(*this)` for current constraints
+before each solve, then applies `MatZeroRowsColumns()`.
 
 Current owner responsibilities:
 
@@ -365,8 +306,6 @@ Current owner responsibilities:
 | Solid | `ubc`, `vbc`, `wbc`, `rigid_bc` |
 
 BC lists are collected before every solve so owner-specific constraints can change.
-
----
 
 ## 5. Current PETSc Solver Configuration
 
@@ -430,8 +369,10 @@ reconfiguration; the first correction follows the step cadence.
 
 In MPM, changed retained equations on any rank force all ranks to rebuild
 the compact layout and KSP/PC. Compact matrix values are recreated every solve.
-When the KSP survives, `KSPSetReusePreconditioner(false)` still permits PC
-setup for the new operator. A KSP rebuild restores its type, prefix and tolerances,
+When the KSP survives (later Newton iterations of the same step with an
+unchanged layout), `KSPSetReusePreconditioner(true)` keeps the numerical PC
+built at the step start; Krylov iterates with the current operator. A forced
+rebuild after more than 2x iteration growth refreshes it on the next solve. A KSP rebuild restores its type, prefix and tolerances,
 calls `ConfigureReducedPreconditioner()` to configure the physical PC, read
 options and initialize its declared field hierarchy.
 
@@ -440,8 +381,6 @@ FEM retains the full operator. A scheduled rebuild disables PC reuse.
 FieldSplit keeps its group definitions, while other PC types are reset and
 reconfigured through the owner. Between rebuilds the numerical PC is reused.
 Mesh/DLB reset releases both full and compact state.
-
----
 
 ## 7. Solution Recovery and Memory
 
@@ -471,28 +410,6 @@ and are reset when their mesh/numbering is rebuilt.
 - using a loosely set `rtol` (e.g. `1.0e-8`) for unscaled mixed u-p systems, which can accept a trivial initial guess as "converged"
 - treating the current solid matrix as safely CG-compatible without further proof
 - classifying compressed equations with `compact_index % ndof`
-
----
-
-## 9. Build and Validation
-
-1. Reconfigure with `cmake -S . -B build` after adding/removing sources collected by CMake. Rebuild in the existing `build/` directory; normal header edits are handled by build dependencies.
-2. If you change `nxyr`, you must regenerate partitions before solver benchmarking.
-3. Compare time, inner/outer iterations and physical residuals on the same state when changing the PC.
-4. If a run becomes fast but starts printing `PETSc KSP diverged`, that result is invalid even if the wall time looks good.
-
----
-
-## 10. Current Settings by Solver
-
-| Setting | Pure MPM fluid | Implicit solid |
-|---------|----------------|----------------|
-| Components | 4 | 3 |
-| Equation compression | Shared `CrsMat` | Shared `CrsMat` |
-| Native vector length | `nodec * 4` | `nodec * 3` |
-| PC | Velocity/pressure Schur + BoomerAMG | ASM overlap 1 / ILU(1), shift `1e-3` |
-| Node activation | Absolute `nmass > mtol` | Absolute `nmass > mtol` |
-| Reconfiguration cadence | 1 step | 1 step |
 
 ## Current Convergence Limitations
 
