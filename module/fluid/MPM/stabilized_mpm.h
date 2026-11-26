@@ -71,10 +71,16 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     void Particle2Node(const TimeState &ts) override;
 
     /**
-     * @brief Map nodal velocity/pressure back to fluid particles (G2P).
+     * @brief Commit the converged nodal kinematics and pressure, then map them back to
+     *        fluid particles (G2P).
      * @param ts Current time state of this step (load factor and physical time).
      */
     void Node2Particle(const TimeState &ts) override;
+
+    /** @brief Accept the converged pressure iterate as the nodal pressure: `npres <- npres_k`. */
+    void CommitNodalPressure();
+
+    std::vector<double> npres_k; // nodal pressure at the iterate
 
     /**
      * @brief Solve the stabilized Navier-Stokes system.
@@ -203,7 +209,7 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      */
     void BCNRSet(const TimeState &ts) {
         this->ApplyDisplacementBC(this->ndispl, ts);
-        this->pbc.BCSetVal(0, this->npres, ts.facl);
+        this->pbc.BCSetVal(0, this->npres_k, ts.facl);
 
         return;
     };
@@ -241,10 +247,12 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      */
     void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 
-  private:
+  protected:
     // Newton scratch state of the current step.
     std::vector<double> nvel_k_, naccel_k_; // nodal velocity and acceleration at the iterate
-    double r0r_;                            // initial residual reference
+
+  private:
+    double r0r_; // initial residual reference
 };
 
 } // namespace stabilizedmpm

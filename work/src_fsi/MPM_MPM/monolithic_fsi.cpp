@@ -59,7 +59,7 @@ void MPMMPMMonolithicFSI::BeginNewtonStep() {
     VectorAssign(cmesh.nodec * 3, this->fluid_.ndispl);
     VectorAssign(cmesh.nodec * 3, this->solid_.ndispl);
     VectorAssign(cmesh.nodec * 3, this->nlambda);
-    VectorAssign(cmesh.nodec, this->fluid_.npres);
+    VectorAssign(cmesh.nodec, this->fluid_.npres_k);
 
     return;
 }
@@ -99,7 +99,7 @@ void MPMMPMMonolithicFSI::UpdateNRIncrement() {
         this->nlambda[n] += this->fsi_sys.x_lhs[n + cmesh.nodec * 7];
     }
 
-    for (int n = 0; n < cmesh.nodec; n++) { this->fluid_.npres[n] += this->fsi_sys.x_lhs[n + cmesh.npc]; }
+    for (int n = 0; n < cmesh.nodec; n++) { this->fluid_.npres_k[n] += this->fsi_sys.x_lhs[n + cmesh.npc]; }
 
     return;
 }

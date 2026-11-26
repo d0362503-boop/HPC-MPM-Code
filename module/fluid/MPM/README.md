@@ -84,15 +84,15 @@ Parameters (`alpha_f`, `alpha_m`, `gamma_nb`, `beta_nb`) are set from `spec_rad`
 ### 2. Newton–Raphson loop (`SolveNS`)
 
 `StabilizedMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
-`SolveNS()` calls `SolveNewton(*this, max_NR_it)` (`max_NR_it = 100`), which runs:
+`SolveNS(ts)` calls `SolveNewton(*this, ts, max_NR_it)` (`max_NR_it = 100`), which runs:
 
 ```cpp
-BeginNewtonStep();                          // freeze stabilization, zero ndispl/npres
+BeginNewtonStep();                          // freeze stabilization, zero ndispl/npres_k
 for NR_it = 0 .. max_NR_it
-    AssembleNewtonSystem();                 // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
+    AssembleNewtonSystem(ts);               // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
     if CheckNewtonConvergence(NR_it, ksp_its) break; // NS_.CheckNRConvergence on the physical RHS
     ksp_its = SolveNewtonCorrection(NR_it); // NS_.SolveSystem: PETSc or native linear solve
-    UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres += x_lhs[npc:]
+    UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres_k += x_lhs[npc:]
 EndNewtonStep();                            // release NS_ storage
 ```
 
@@ -111,7 +111,7 @@ For each particle inside each element:
 
 - mass → `nmass`
 - volume → `nvof`
-- pressure (mass-weighted) → `npres_old`
+- pressure (mass-weighted) → `npres` (step-start pressure; the Newton iterate is `npres_k`)
 - velocity (scheme-aware: PIC/FLIP standard, TPIC/APIC with gradients/B-matrix) → `nmome`
 - acceleration (scheme-aware) → `nforce`
 
@@ -153,7 +153,8 @@ refresh, and full-vector recovery. Never classify compact fields using
 
 ### G2P and particle motion (`Node2Particle`)
 
-1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`implicit_.CommitNodalKinematics`).
+1. Predict `nvel_k` / `naccel_k` and commit nodal kinematics (`implicit_.CommitNodalKinematics`),
+   then commit the converged pressure iterate (`CommitNodalPressure`: `npres <- npres_k`).
 2. Reset particle velocity/acceleration and TPIC/APIC state.
 3. Interpolate pressure, displacement, acceleration, and velocity back to particles (scheme-aware).
 4. Recompute APIC `inv_Dmat` if needed.

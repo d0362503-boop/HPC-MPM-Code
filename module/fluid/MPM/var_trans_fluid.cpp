@@ -26,7 +26,7 @@ void StabilizedMPM::Particle2Node(const TimeState &ts) {
 
     VectorAssign(cmesh.nodec, this->nmass);
     VectorAssign(cmesh.nodec, this->nvof);
-    VectorAssign(cmesh.nodec, this->npres_old);
+    VectorAssign(cmesh.nodec, this->npres);
     VectorAssign(cmesh.nodec * 3, this->nmome);
     VectorAssign(cmesh.nodec * 3, this->nforce);
     for (int m = 0; m < mesh.nelem; m++) {
@@ -39,7 +39,7 @@ void StabilizedMPM::Particle2Node(const TimeState &ts) {
                 double sfi = sf[ni];
                 this->StandardVarP2G(pid, nid, sfi, this->mass, this->nmass);
                 this->StandardVarP2G(pid, nid, sfi, this->vol, this->nvof);
-                this->StandardVarP2G(pid, nid, sfi, this->mass, this->pres, this->npres_old);
+                this->StandardVarP2G(pid, nid, sfi, this->mass, this->pres, this->npres);
                 this->VelP2G(pid, nid, sfi);
                 this->AccelP2G(pid, nid, sfi);
             }
@@ -49,15 +49,15 @@ void StabilizedMPM::Particle2Node(const TimeState &ts) {
 
     NodeVarComm(this->nmass, 0);
     NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->npres_old, 0);
+    NodeVarComm(this->npres, 0);
     NodeVarComm(this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
     NodeVarComm(this->nforce, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     VectorAssign(cmesh.nodec, this->nphi);
     for (int n = 0; n < cmesh.nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / cmesh.nvol[n], 0.0e0, 1.0e0); }
 
-    this->CutOffSmallNodalVar(this->npres_old, this->nmass, {0});
-    this->pbc.BCSetVal(0, this->npres_old, ts.facl);
+    this->CutOffSmallNodalVar(this->npres, this->nmass, {0});
+    this->pbc.BCSetVal(0, this->npres, ts.facl);
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
     this->ApplyVelocityBC(this->nvel, ts);
@@ -77,6 +77,8 @@ void StabilizedMPM::Node2Particle(const TimeState &ts) {
     this->implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k);
 
     this->implicit_.CommitNodalKinematics(*this, nvel_k, naccel_k);
+
+    this->CommitNodalPressure();
 
     std::vector<std::array<double, 3>> accel_old;
     VectorAssign(this->num, accel_old);

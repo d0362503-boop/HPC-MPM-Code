@@ -44,10 +44,18 @@ void StabilizedMPM::UpdateNRIncrement() {
     const ControlMesh &cmesh = this->grid_.cmesh;
 
     for (int n = 0; n < cmesh.nodec * 3; n++) { this->ndispl[n] += this->NS_.x_lhs[n]; }
-    for (int n = 0; n < cmesh.nodec; n++) { this->npres[n] += this->NS_.x_lhs[n + cmesh.npc]; }
+    for (int n = 0; n < cmesh.nodec; n++) { this->npres_k[n] += this->NS_.x_lhs[n + cmesh.npc]; }
 
     return;
 }
+
+void StabilizedMPM::CommitNodalPressure() {
+
+    this->npres = this->npres_k;
+
+    return;
+}
+
 
 void StabilizedMPM::SolveNS(const TimeState &ts) {
 
@@ -65,7 +73,7 @@ void StabilizedMPM::BeginNewtonStep() {
     this->MakeNSStabCoeff(this->nvel);
 
     VectorAssign(cmesh.nodec * 3, this->ndispl);
-    VectorAssign(cmesh.nodec, this->npres);
+    VectorAssign(cmesh.nodec, this->npres_k);
     this->r0r_ = 0.0e0;
 
     return;
@@ -203,7 +211,7 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
 
     std::vector<double> npres_af(cmesh.nodec);
     for (int n = 0; n < cmesh.nodec; n++) { //
-        npres_af[n] = af0 * this->npres_old[n] + af * this->npres[n];
+        npres_af[n] = af0 * this->npres[n] + af * this->npres_k[n];
     }
 
     int nenode;
