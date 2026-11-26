@@ -6,11 +6,11 @@ C++17 MPM/FEM solver for solid mechanics, fluid mechanics, and fluid-structure i
 - `SOLID`: explicit or implicit MPM solid solver
 - `FSI`: partitioned MPM–FEM or monolithic MPM–MPM fluid–solid interaction
 
-Shared modules provide generalized-alpha/Newmark integration and VTK HDF5 visualization output.
+Shared modules provide generalized-α/Newmark integration and VTK HDF5 visualization output.
 
 ## Build
 
-Requires a C++17-capable GCC, MPI, CMake ≥ 3.20, and Zlib. CMake bootstraps PETSc 3.24.5 and HDF5 1.14.5 from `Ext/` into `external/`, reusing existing installations there. Hypre 3.0.0 is optional during the PETSc build.
+Requires a C++17-capable GCC, MPI, CMake ≥ 3.20, and Zlib. CMake bootstraps PETSc 3.24.5 and HDF5 1.14.5 from `Ext/` into `external/`, reusing existing installations there. Hypre 3.0.0 is built into PETSc when `Ext/hypre-3.0.0.tar.gz` is present; the default fluid preconditioners use BoomerAMG and therefore need it.
 
 ### Solver Executables
 
@@ -19,6 +19,7 @@ Every driver is built as its own executable in its own directory under `build/wo
 | Driver source | Executable |
 |---------------|------------|
 | `work/src_fluid/MPM` | `build/work/src_fluid/MPM/MPM_FLUID` |
+| `work/src_fluid/FEM` | `build/work/src_fluid/FEM/FEM_FLUID` |
 | `work/src_solid/explicit` | `build/work/src_solid/explicit/MPM_SOLID_EXPLICIT` |
 | `work/src_solid/implicit` | `build/work/src_solid/implicit/MPM_SOLID_IMPLICIT` |
 | `work/src_fsi/MPM_FEM` | `build/work/src_fsi/MPM_FEM/MPM_FEM_FSI` |
@@ -61,7 +62,7 @@ cmake --build build --target makinput_fluid makdivide_fluid -j8
 (cd build/data/divide/fluid && ./makdivide_fluid)
 ```
 
-Generators and partitioners for fluid, solid, and both FSI variants are configured by default. Select the targets needed for your case in [data/generate/](data/generate/CMakeLists.txt) and [data/divide/](data/divide/CMakeLists.txt); for example, `makinput_fsi_mpm_fem` and `makdivide_fsi_mpm_fem`. Partitioners write rank-split data to the output prefix configured in `para_input_data.txt`.
+Generators and partitioners for fluid, solid, and both FSI variants are configured by default. Select the targets needed for your case in [data/generate/](data/generate/CMakeLists.txt) and [data/divide/](data/divide/CMakeLists.txt); for example, `makinput_fsi_mpm_fem` and `makdivide_fsi_mpm_fem`. The stand-alone FEM fluid driver (`FEM_FLUID`) has no generator yet; its per-rank `griddata` is prepared separately. Partitioners write rank-split data to the output prefix configured in `para_input_data.txt`.
 
 See the [data tools guide](data/README.md) for parameter files, particle formats, and restart inputs.
 
@@ -103,6 +104,7 @@ The launcher prints the process count, PID, and log paths, and inherits `PETSC_O
 - `<RUN_DIR>/stderr/err_<PID>_<NP>.log`
 
 For event timings, launch with `PETSC_OPTIONS="-log_view" sh run.sh 4`.
+Fluid FieldSplit defaults can be overridden the same way, with `-fieldsplit_velocity_*` and `-fieldsplit_pressure_*`; see the [shared solver guide](module/solver/README.md).
 PETSc prints the summary at normal finalization. Event times can overlap and should not be summed as independent costs; ordinary NR records contain residuals and iteration counts, not separate KSP setup/solve timings. Options and rebuilt code affect new processes only.
 
 ## Output
@@ -120,7 +122,6 @@ PETSc prints the summary at normal finalization. Event times can overlap and sho
 | `data/` | Input generators and partitioners |
 | `cmake/` | Build options and dependency bootstrap |
 | `Ext/`, `external/` | Bundled sources and installed dependencies |
-| `docs/` | Developer notes and plans |
 | `build/` | Required build directory and runtime working state |
 
 Implementation details are maintained in the relevant guides:
