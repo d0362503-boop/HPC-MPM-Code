@@ -318,7 +318,7 @@ The owner supplies the actual PETSc PC type; no separate field-split switch is s
 |--------------|------------|
 | Base `MaterialPoint` callback | HYPRE/BoomerAMG |
 | `StabilizedMPM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
-| `StabilizedFEM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
+| `StabilizedFEM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; velocity PREONLY + ASM/ILU(0), pressure PREONLY + BoomerAMG |
 | `ImplicitSolidMPM::SM_` | ASM overlap 1; local PREONLY + ILU(1), nonzero shift `1e-3` |
 
 ### 5.1 Stabilized fluid
@@ -334,7 +334,8 @@ The full outer operator remains the assembled physical matrix.
 
 Pure-fluid child options use `-fieldsplit_velocity_*` and
 `-fieldsplit_pressure_*`. These owners set child defaults with
-`PetscOptionsSetValue()`.
+`PetscOptionsSetValue()`; FEM sets each one only when it is not already given,
+so command-line values override it.
 
 ### 5.2 Implicit solid
 

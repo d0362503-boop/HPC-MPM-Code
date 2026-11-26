@@ -134,7 +134,7 @@ Rank 0 prints `Block_converge: block_it  rkr/r0r  r0r  rms`. Failure at
 Both systems use the shared `CrsMat` path; see the
 [shared solver guide](../../../module/solver/README.md).
 
-- Fluid `NS_`: velocity/pressure Schur FieldSplit with BoomerAMG.
+- Fluid `NS_`: velocity/pressure Schur FieldSplit; velocity ASM/ILU(0), pressure BoomerAMG.
 - Solid `SM_`: ASM with local ILU(1).
 
 `SolveFSISystem()` forces a PC rebuild of both at the start of each time step.

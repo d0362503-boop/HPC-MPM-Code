@@ -114,9 +114,12 @@ else                 →  GPBiCGAR (custom iterative solver)
 
 `ConfigurePreconditioner()` selects `PCFIELDSPLIT` directly for `NS_`, applying a lower
 Schur field split to the four-component stabilized fluid system: components 0--2 form the
-velocity block and component 3 forms the pressure block. Both child blocks use
-HYPRE/BoomerAMG with PETSc's unshifted SELFP pressure Pmat and default scalar
-diagonal inverse approximation and no additional pressure shift.
+velocity block and component 3 forms the pressure block. The velocity block uses
+ASM (overlap 1) with local ILU(0); the pressure block uses HYPRE/BoomerAMG (two
+V-cycles) on PETSc's unshifted SELFP pressure Pmat, with the default scalar
+diagonal inverse approximation and no additional pressure shift. These child
+options are defaults only: `-fieldsplit_velocity_*` / `-fieldsplit_pressure_*`
+given on the command line take precedence.
 The scalar `PF_` system delegates PC selection to the base BoomerAMG callback;
 the four-component NS system uses the velocity/pressure split. `PF_` remains
 reserved rather than advanced by the current module workflow.

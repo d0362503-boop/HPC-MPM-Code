@@ -33,7 +33,7 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
     /**
-     * @brief Configure Schur field splitting for NS and BoomerAMG for other systems.
+     * @brief Configure Schur field splitting for NS (velocity ASM/ILU, pressure BoomerAMG) and BoomerAMG for other systems.
      * @param mat Fluid or phase-field linear system being configured.
      * @param pc PETSc preconditioner associated with the system solver.
      */

@@ -33,15 +33,21 @@ void StabilizedFEM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
     PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_LOWER);
     PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, nullptr);
 
-    PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_ksp_type", "preonly");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_type", "hypre");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_velocity_pc_hypre_type", "boomeramg");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_ksp_type", "preonly");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_type", "hypre");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_type", "boomeramg");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
-    PetscOptionsSetValue(nullptr, "-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
+    // Defaults only: options given on the command line take precedence.
+    const auto set_default = [](const char *name, const char *value) {
+        PetscBool given;
+        PetscOptionsHasName(nullptr, nullptr, name, &given);
+        if (!given) { PetscOptionsSetValue(nullptr, name, value); }
+    };
+    set_default("-fieldsplit_velocity_ksp_type", "preonly");
+    set_default("-fieldsplit_velocity_pc_type", "asm");
+    set_default("-fieldsplit_velocity_sub_pc_type", "ilu");
+    set_default("-fieldsplit_pressure_ksp_type", "preonly");
+    set_default("-fieldsplit_pressure_pc_type", "hypre");
+    set_default("-fieldsplit_pressure_pc_hypre_type", "boomeramg");
+    set_default("-fieldsplit_pressure_pc_hypre_boomeramg_coarsen_type", "hmis");
+    set_default("-fieldsplit_pressure_pc_hypre_boomeramg_interp_type", "ext+i");
+    set_default("-fieldsplit_pressure_pc_hypre_boomeramg_max_iter", "2");
 
     return;
 }
