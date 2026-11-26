@@ -334,8 +334,8 @@ The full outer operator remains the assembled physical matrix.
 
 Pure-fluid child options use `-fieldsplit_velocity_*` and
 `-fieldsplit_pressure_*`. These owners set child defaults with
-`PetscOptionsSetValue()`; FEM sets each one only when it is not already given,
-so command-line values override it.
+`PetscOptionsSetValue()` only when an option is not already given, so
+command-line values override them.
 
 ### 5.2 Implicit solid
 
