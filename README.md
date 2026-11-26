@@ -89,21 +89,21 @@ Per-rank files append the rank number to the input prefix, for example `griddata
 ### Background Launcher and Logging
 
 The host-local, gitignored `build/run.sh` launches a driver in the background. Pass the driver directory as `RUN_DIR`;
-the script runs the single `MPM_*` executable it finds there with that directory's `file.dat`:
+the script runs the executable it finds there with that directory's `file.dat`. When the directory holds several executables (for example the validation programs next to `MPM_MPM_FSI`), choose one with `EXE=<name>`:
 
 ```bash
 # from build/, with matching four-rank input
-sh run.sh 4 work/src_fsi/MPM_MPM
+EXE=MPM_MPM_FSI sh run.sh 4 work/src_fsi/MPM_MPM
 ```
 
-Use the process-count argument or `NP`. The local script falls back to `nproc` if neither is supplied; this is valid only when it matches the input partition count. Cluster copies may require `NP` and use different CPU-binding policies, so inspect the installed script.
+The process count is required, as the first argument or `NP`, and must match the input partition count. An optional `CPU_LIST` (for example `0-15`, default `auto`) selects the CPUs: `auto` picks idle physical cores, one rank per core, and the script stops if not enough are idle. Cluster copies may use different CPU-binding policies, so inspect the installed script.
 
 The launcher prints the process count, PID, and log paths, and inherits `PETSC_OPTIONS`:
 
 - `<RUN_DIR>/stdout/out_<PID>_<NP>.log`
 - `<RUN_DIR>/stderr/err_<PID>_<NP>.log`
 
-For event timings, launch with `PETSC_OPTIONS="-log_view" sh run.sh 4`.
+For event timings, launch with `PETSC_OPTIONS="-log_view" sh run.sh 4 work/src_fluid/FEM`.
 Fluid FieldSplit defaults can be overridden the same way, with `-fieldsplit_velocity_*` and `-fieldsplit_pressure_*`; see the [shared solver guide](module/solver/README.md).
 PETSc prints the summary at normal finalization. Event times can overlap and should not be summed as independent costs; ordinary NR records contain residuals and iteration counts, not separate KSP setup/solve timings. Options and rebuilt code affect new processes only.
 
