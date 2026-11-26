@@ -45,8 +45,8 @@ int GPBiCGSafe(CrsMat &mat) {
         double r = b - Ax[n];
         rr[n] = r;
         rs[n] = r;
-        btb2 += b * b * dbc[n];
-        rtr2 += r * r * dbc[n];
+        btb2 += b * b * mat.grid_.part.dbc[n];
+        rtr2 += r * r * mat.grid_.part.dbc[n];
     }
 
     double buf2_local[2] = {rtr2, btb2};
@@ -68,7 +68,7 @@ int GPBiCGSafe(CrsMat &mat) {
         for (int n = 0; n < var_size; ++n) {
             pp[n] = rr[n] + beta * (pp[n] - uu[n]);
             Ap[n] = Ar[n] + beta * (Ap[n] - Au[n]);
-            rAp2 += rs[n] * Ap[n] * dbc[n];
+            rAp2 += rs[n] * Ap[n] * mat.grid_.part.dbc[n];
         }
         double rAp;
         MPI_Allreduce(&rAp2, &rAp, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -78,11 +78,11 @@ int GPBiCGSafe(CrsMat &mat) {
 
         double buf5_local[5] = {0.0e0, 0.0e0, 0.0e0, 0.0e0, 0.0e0};
         for (int n = 0; n < var_size; n++) {
-            buf5_local[0] += Az[n] * Az[n] * dbc[n];
-            buf5_local[1] += Ar[n] * rr[n] * dbc[n];
-            buf5_local[2] += Az[n] * rr[n] * dbc[n];
-            buf5_local[3] += Ar[n] * Az[n] * dbc[n];
-            buf5_local[4] += Ar[n] * Ar[n] * dbc[n];
+            buf5_local[0] += Az[n] * Az[n] * mat.grid_.part.dbc[n];
+            buf5_local[1] += Ar[n] * rr[n] * mat.grid_.part.dbc[n];
+            buf5_local[2] += Az[n] * rr[n] * mat.grid_.part.dbc[n];
+            buf5_local[3] += Ar[n] * Az[n] * mat.grid_.part.dbc[n];
+            buf5_local[4] += Ar[n] * Ar[n] * mat.grid_.part.dbc[n];
         }
         double buf5_global[5];
         MPI_Allreduce(buf5_local, buf5_global, 5, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -110,8 +110,8 @@ int GPBiCGSafe(CrsMat &mat) {
             Az[n] = zeta * Ar[n] + eta * Az[n] - alph * Au[n];
             mat.x_lhs[n] += alph * pp[n] + zz[n];
             rr[n] = tt[n] - Az[n];
-            rsr2 += rs[n] * rr[n] * dbc[n];
-            rtr2 += rr[n] * rr[n] * dbc[n];
+            rsr2 += rs[n] * rr[n] * mat.grid_.part.dbc[n];
+            rtr2 += rr[n] * rr[n] * mat.grid_.part.dbc[n];
         }
 
         double buf_r[2] = {rsr2, rtr2};
@@ -169,8 +169,8 @@ int GPBiCGAR(CrsMat &mat) {
         double r = b - Ax[n];
         rr[n] = r;
         rs[n] = r;
-        btb2 += b * b * dbc[n];
-        rtr2 += r * r * dbc[n];
+        btb2 += b * b * mat.grid_.part.dbc[n];
+        rtr2 += r * r * mat.grid_.part.dbc[n];
     }
 
     double buf2_local[2] = {rtr2, btb2};
@@ -192,7 +192,7 @@ int GPBiCGAR(CrsMat &mat) {
         for (int n = 0; n < var_size; ++n) {
             pp[n] = rr[n] + beta * (pp[n] - uu[n]);
             Ap[n] = Ar[n] + beta * (Ap[n] - Au[n]);
-            rAp2 += rs[n] * Ap[n] * dbc[n];
+            rAp2 += rs[n] * Ap[n] * mat.grid_.part.dbc[n];
         }
         double rAp;
         MPI_Allreduce(&rAp2, &rAp, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -202,11 +202,11 @@ int GPBiCGAR(CrsMat &mat) {
 
         double buf5_local[5] = {0.0e0, 0.0e0, 0.0e0, 0.0e0, 0.0e0};
         for (int n = 0; n < var_size; n++) {
-            buf5_local[0] += Az[n] * Az[n] * dbc[n];
-            buf5_local[1] += Ar[n] * rr[n] * dbc[n];
-            buf5_local[2] += Az[n] * rr[n] * dbc[n];
-            buf5_local[3] += Ar[n] * Az[n] * dbc[n];
-            buf5_local[4] += Ar[n] * Ar[n] * dbc[n];
+            buf5_local[0] += Az[n] * Az[n] * mat.grid_.part.dbc[n];
+            buf5_local[1] += Ar[n] * rr[n] * mat.grid_.part.dbc[n];
+            buf5_local[2] += Az[n] * rr[n] * mat.grid_.part.dbc[n];
+            buf5_local[3] += Ar[n] * Az[n] * mat.grid_.part.dbc[n];
+            buf5_local[4] += Ar[n] * Ar[n] * mat.grid_.part.dbc[n];
         }
         double buf5_global[5];
         MPI_Allreduce(buf5_local, buf5_global, 5, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -234,8 +234,8 @@ int GPBiCGAR(CrsMat &mat) {
             Az[n] = zeta * Ar[n] + eta * Az[n] - alph * Au[n];
             mat.x_lhs[n] += alph * pp[n] + zz[n];
             rr[n] = tt[n] - Az[n];
-            rsr2 += rs[n] * rr[n] * dbc[n];
-            rtr2 += rr[n] * rr[n] * dbc[n];
+            rsr2 += rs[n] * rr[n] * mat.grid_.part.dbc[n];
+            rtr2 += rr[n] * rr[n] * mat.grid_.part.dbc[n];
         }
 
         double buf_r[2] = {rsr2, rtr2};
@@ -292,8 +292,8 @@ int GPBiCG(CrsMat &mat) {
         rr[n] = r;
         rs[n] = r;
         pp[n] = r;
-        btb2 += b * b * dbc[n];
-        rtr2 += r * r * dbc[n];
+        btb2 += b * b * mat.grid_.part.dbc[n];
+        rtr2 += r * r * mat.grid_.part.dbc[n];
     }
 
     double buf2_local[2] = {btb2, rtr2};
@@ -315,7 +315,7 @@ int GPBiCG(CrsMat &mat) {
         Ap = mat.MatVecMult(pp);
 
         double rAp2 = 0.0e0;
-        for (int n = 0; n < var_size; n++) { rAp2 += rs[n] * Ap[n] * dbc[n]; }
+        for (int n = 0; n < var_size; n++) { rAp2 += rs[n] * Ap[n] * mat.grid_.part.dbc[n]; }
         double rAp;
         MPI_Allreduce(&rAp2, &rAp, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
@@ -332,11 +332,11 @@ int GPBiCG(CrsMat &mat) {
 
         double buf5_local[5] = {0.0e0, 0.0e0, 0.0e0, 0.0e0, 0.0e0};
         for (int n = 0; n < var_size; n++) {
-            buf5_local[0] += yy[n] * yy[n] * dbc[n];
-            buf5_local[1] += At[n] * tt[n] * dbc[n];
-            buf5_local[2] += At[n] * At[n] * dbc[n];
-            buf5_local[3] += yy[n] * tt[n] * dbc[n];
-            buf5_local[4] += yy[n] * At[n] * dbc[n];
+            buf5_local[0] += yy[n] * yy[n] * mat.grid_.part.dbc[n];
+            buf5_local[1] += At[n] * tt[n] * mat.grid_.part.dbc[n];
+            buf5_local[2] += At[n] * At[n] * mat.grid_.part.dbc[n];
+            buf5_local[3] += yy[n] * tt[n] * mat.grid_.part.dbc[n];
+            buf5_local[4] += yy[n] * At[n] * mat.grid_.part.dbc[n];
         }
         double buf5_global[5];
         MPI_Allreduce(buf5_local, buf5_global, 5, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -353,8 +353,8 @@ int GPBiCG(CrsMat &mat) {
             zz[n] = zeta * rr[n] + eta * zz[n] - alph * uu[n];
             mat.x_lhs[n] += alph * pp[n] + zz[n];
             rr[n] = tt[n] - zeta * At[n] - eta * yy[n];
-            rsr2 += rs[n] * rr[n] * dbc[n];
-            rtr2 += rr[n] * rr[n] * dbc[n];
+            rsr2 += rs[n] * rr[n] * mat.grid_.part.dbc[n];
+            rtr2 += rr[n] * rr[n] * mat.grid_.part.dbc[n];
         }
 
         double buf_r[2] = {rsr2, rtr2};
@@ -383,21 +383,22 @@ int GPBiCG(CrsMat &mat) {
 }
 
 std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    std::vector<double> rr(nodec * this->ndof, 0.0e0);
+    std::vector<double> rr(cmesh.nodec * this->ndof, 0.0e0);
 
-    for (int i = 0; i < nodec; i++) {
+    for (int i = 0; i < cmesh.nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
             for (int b = 0; b < this->num_block; b++) {
-                rr[i + nodec * this->block_row[b]] += this->amat[j + this->block_id[b]] * xx[col + nodec * this->block_col[b]];
+                rr[i + cmesh.nodec * this->block_row[b]] += this->amat[j + this->block_id[b]] * xx[col + cmesh.nodec * this->block_col[b]];
             }
         }
     }
 
     std::vector<int> offsets(this->ndof);
-    for (int n = 0; n < this->ndof; n++) { offsets[n] = nodec * n; }
-    NodeVarComm(rr, offsets);
+    for (int n = 0; n < this->ndof; n++) { offsets[n] = cmesh.nodec * n; }
+    NodeVarComm(this->grid_.part, rr, offsets);
 
     this->owner_->BCResidualSet(rr);
 
@@ -405,13 +406,15 @@ std::vector<double> CrsMat::MatVecMult(const std::vector<double> &xx) {
 }
 
 void CrsMat::ComputeDiagonalInverseSqrt() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
-    int var_size = nodec * this->ndof;
+    int var_size = cmesh.nodec * this->ndof;
     for (int n = 0; n < var_size; n++) {
         if (this->FEM_flag) {
             this->adiag[n] = 1.0e0 / std::sqrt(std::abs(this->adiag[n]));
         } else {
-            this->adiag[n] = (std::abs(this->adiag[n]) < mtol) ? 0.0e0 : (1.0e0 / std::sqrt(std::abs(this->adiag[n])));
+            this->adiag[n] = (std::abs(this->adiag[n]) < params.mtol) ? 0.0e0 : (1.0e0 / std::sqrt(std::abs(this->adiag[n])));
         }
     }
 
@@ -419,14 +422,15 @@ void CrsMat::ComputeDiagonalInverseSqrt() {
 }
 
 void CrsMat::ApplyDiagonalScaling() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int i = 0; i < nodec; i++) {
+    for (int i = 0; i < cmesh.nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             const int col = this->matcolid[j];
 
             for (int b = 0; b < this->num_block; b++) {
-                const int row_offset = nodec * this->block_row[b];
-                const int col_offset = nodec * this->block_col[b];
+                const int row_offset = cmesh.nodec * this->block_row[b];
+                const int col_offset = cmesh.nodec * this->block_col[b];
                 this->amat[j + this->block_id[b]] *= this->adiag[i + row_offset] * this->adiag[col + col_offset];
             }
         }
@@ -436,8 +440,9 @@ void CrsMat::ApplyDiagonalScaling() {
 }
 
 void CrsMat::BuildDiagonalPreconditioner() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    VectorAssign(nodec * this->ndof, this->adiag);
+    VectorAssign(cmesh.nodec * this->ndof, this->adiag);
     this->ExtractDiagonal();
     this->ComputeDiagonalInverseSqrt();
     this->ApplyDiagonalScaling();
@@ -446,6 +451,8 @@ void CrsMat::BuildDiagonalPreconditioner() {
 }
 
 void CrsMat::ScaleSolution(std::vector<double> &rr) {
+    const RunParams &params = this->params_;
+
     const int var_size = this->x_lhs.size();
 
     for (int n = 0; n < var_size; n++) {
@@ -453,7 +460,7 @@ void CrsMat::ScaleSolution(std::vector<double> &rr) {
             this->x_lhs[n] /= this->adiag[n];
             rr[n] = this->b_rhs[n] * this->adiag[n];
         } else {
-            if (this->adiag[n] < mtol) {
+            if (this->adiag[n] < params.mtol) {
                 this->x_lhs[n] = 0.0e0;
                 rr[n] = 0.0e0;
             } else {
@@ -467,13 +474,15 @@ void CrsMat::ScaleSolution(std::vector<double> &rr) {
 }
 
 void CrsMat::RestorSolution() {
+    const RunParams &params = this->params_;
+
     const int var_size = this->x_lhs.size();
 
     for (int n = 0; n < var_size; n++) {
         if (this->FEM_flag) {
             this->x_lhs[n] *= this->adiag[n];
         } else {
-            if (this->adiag[n] > mtol) {
+            if (this->adiag[n] > params.mtol) {
                 this->x_lhs[n] *= this->adiag[n];
             } else {
                 this->x_lhs[n] = 0.0e0;

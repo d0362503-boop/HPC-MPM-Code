@@ -15,12 +15,12 @@
 #include "module/mpi_data.h"
 #include "module/solver/native_solver.h"
 
-int CrsMat::SolveSystem(int NR_it) {
+int CrsMat::SolveSystem(int NR_it, int istep) {
 
     int iter;
     if (this->use_petsc) {
         this->AssemblePetscMat();
-        iter = this->SolveWithPetsc(NR_it);
+        iter = this->SolveWithPetsc(NR_it, istep);
     } else {
         this->BuildDiagonalPreconditioner();
         iter = GPBiCGAR(*this);
@@ -30,16 +30,18 @@ int CrsMat::SolveSystem(int NR_it) {
 }
 
 void CrsMat::BuildActiveRowMask() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
-    this->active_row_mask.assign(nodec, 1);
+    this->active_row_mask.assign(cmesh.nodec, 1);
     if (this->FEM_flag) return;
 
-    std::vector<int> local_row_active(nodec, 0);
-    for (int nid = 0; nid < nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > mtol ? 1 : 0; }
+    std::vector<int> local_row_active(cmesh.nodec, 0);
+    for (int nid = 0; nid < cmesh.nodec; ++nid) { local_row_active[nid] = this->owner_->nmass[nid] > params.mtol ? 1 : 0; }
 
-    NodeVarComm(local_row_active, 0);
+    NodeVarComm(this->grid_.part, local_row_active, 0);
 
-    for (int nid = 0; nid < nodec; ++nid) { this->active_row_mask[nid] = (local_row_active[nid] > 0) ? 1 : 0; }
+    for (int nid = 0; nid < cmesh.nodec; ++nid) { this->active_row_mask[nid] = (local_row_active[nid] > 0) ? 1 : 0; }
 
     return;
 }
@@ -47,10 +49,12 @@ void CrsMat::BuildActiveRowMask() {
 void CrsMat::AssemblePetscMat() { this->owner_->AssemblePetscMat(*this); }
 
 void MaterialPoint::AssemblePetscMat(CrsMat &mat) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     MatZeroEntries(mat.petsc_mat);
     mat.BuildActiveRowMask();
 
-    for (int i = 0; i < nodec; ++i) {
+    for (int i = 0; i < cmesh.nodec; ++i) {
         bool is_inactive = (!mat.FEM_flag && mat.active_row_mask[i] == 0);
         if (is_inactive) continue;
 
@@ -99,6 +103,8 @@ void CrsMat::BuildPetscBCList() {
 }
 
 void CrsMat::SetPetscVector(Vec vec, const std::vector<double> &values) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     VecZeroEntries(vec);
 
     size_t buf_size = static_cast<size_t>(this->local_node) * this->ndof;
@@ -110,7 +116,7 @@ void CrsMat::SetPetscVector(Vec vec, const std::vector<double> &values) {
         const int natural_id = this->owned_natural_ids[i];
         for (int var = 0; var < this->ndof; ++var) {
             this->petsc_indices_buf[idx] = this->NaturalNodeVarToPetscLocalScalar(natural_id, var);
-            this->petsc_values_buf[idx] = values[natural_id + var * nodec];
+            this->petsc_values_buf[idx] = values[natural_id + var * cmesh.nodec];
             ++idx;
         }
     }
@@ -123,7 +129,9 @@ void CrsMat::SetPetscVector(Vec vec, const std::vector<double> &values) {
     return;
 }
 
-int CrsMat::SolveWithPetsc(int NR_it) {
+int CrsMat::SolveWithPetsc(int NR_it, int istep) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     this->BuildPetscBCList();
     this->SetPetscVector(this->petsc_b, this->b_rhs);
     // Prescribed values for elimination: zero for MPM corrections, current solution for FEM.
@@ -134,7 +142,7 @@ int CrsMat::SolveWithPetsc(int NR_it) {
         for (int i = 0; i < this->local_node; ++i) {
             const int natural_id = this->owned_natural_ids[i];
             if (this->active_row_mask[natural_id] != 0) continue;
-            for (int var = 0; var < this->ndof; ++var) { fixed_gids.push_back(this->natural_var_gids[natural_id + var * nodec]); }
+            for (int var = 0; var < this->ndof; ++var) { fixed_gids.push_back(this->natural_var_gids[natural_id + var * cmesh.nodec]); }
         }
         std::sort(fixed_gids.begin(), fixed_gids.end());
         fixed_gids.erase(std::unique(fixed_gids.begin(), fixed_gids.end()), fixed_gids.end());
@@ -145,7 +153,7 @@ int CrsMat::SolveWithPetsc(int NR_it) {
                        1.0e0, this->petsc_x, this->petsc_b);
 
     if (!this->FEM_flag) {
-        PetscCallAbort(MPI_COMM_WORLD, this->SolveReducedSystem(this->petsc_mat, this->petsc_b, this->petsc_x, NR_it));
+        PetscCallAbort(MPI_COMM_WORLD, this->SolveReducedSystem(this->petsc_mat, this->petsc_b, this->petsc_x, NR_it, istep));
     } else {
         // Start each correction from zero.
         KSPSetInitialGuessNonzero(this->ksp, PETSC_FALSE);
@@ -153,7 +161,7 @@ int CrsMat::SolveWithPetsc(int NR_it) {
 
         PC pc;
         KSPGetPC(this->ksp, &pc);
-        const bool need_rebuild = this->NeedsPreconditionerRebuild(NR_it);
+        const bool need_rebuild = this->NeedsPreconditionerRebuild(NR_it, istep);
         if (need_rebuild) {
             PetscBool is_fieldsplit;
             PetscObjectTypeCompare((PetscObject)pc, PCFIELDSPLIT, &is_fieldsplit);
@@ -187,7 +195,7 @@ int CrsMat::SolveWithPetsc(int NR_it) {
     return static_cast<int>(its);
 }
 
-bool CrsMat::NeedsPreconditionerRebuild(int NR_it) {
+bool CrsMat::NeedsPreconditionerRebuild(int NR_it, int istep) {
     const bool force_rebuild = this->force_rebuild_next_;
     this->force_rebuild_next_ = false;
     if (NR_it > 0 && !force_rebuild) return false;
@@ -236,11 +244,12 @@ PetscErrorCode CrsMat::BuildReducedDofMap(Mat a, Vec b, bool &changed) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode CrsMat::SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it) {
+PetscErrorCode CrsMat::SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it, int istep) {
+
     PetscFunctionBeginUser;
     bool layout_changed;
     PetscCall(this->BuildReducedDofMap(a, b, layout_changed));
-    const bool scheduled_rebuild = this->NeedsPreconditionerRebuild(NR_it);
+    const bool scheduled_rebuild = this->NeedsPreconditionerRebuild(NR_it, istep);
     const bool rebuild = layout_changed || !this->reduced_matrix_ || scheduled_rebuild;
     if (this->reduced_matrix_) { PetscCall(MatDestroy(&this->reduced_matrix_)); }
     PetscCall(MatCreateSubMatrix(a, this->reduced_active_is_, this->reduced_active_is_, MAT_INITIAL_MATRIX,
@@ -383,6 +392,8 @@ PetscErrorCode CrsMat::SetFieldSplitComponents(PC pc, const char *name, const st
 }
 
 void CrsMat::RecoverSolution() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     // Gather only the nodec*this->ndof entries needed by this rank (owned + ghost),
     // instead of materialising the full global solution on every rank.
     VecScatterBegin(this->scatter_to_all, this->petsc_x, this->seq_x, INSERT_VALUES, SCATTER_FORWARD);
@@ -390,18 +401,19 @@ void CrsMat::RecoverSolution() {
 
     const PetscScalar *seq_x_arr;
     VecGetArrayRead(this->seq_x, &seq_x_arr);
-    std::copy(seq_x_arr, seq_x_arr + nodec * this->ndof, this->x_lhs.begin());
+    std::copy(seq_x_arr, seq_x_arr + cmesh.nodec * this->ndof, this->x_lhs.begin());
     VecRestoreArrayRead(this->seq_x, &seq_x_arr);
 }
 
 void CrsMat::ExtractDiagonal() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int i = 0; i < nodec; i++) {
+    for (int i = 0; i < cmesh.nodec; i++) {
         for (int j = this->matrow[i]; j < this->matrow[i + 1]; j++) {
             if (i == this->matcolid[j]) {
                 for (int b = 0; b < this->num_block; b++) {
                     if (this->block_row[b] != this->block_col[b]) continue;
-                    const int offset = nodec * this->block_row[b];
+                    const int offset = cmesh.nodec * this->block_row[b];
                     this->adiag[i + offset] = this->amat[j + this->block_id[b]];
                 }
                 break;
@@ -410,13 +422,16 @@ void CrsMat::ExtractDiagonal() {
     }
 
     std::vector<int> offsets(this->ndof);
-    for (int n = 0; n < this->ndof; ++n) { offsets[n] = nodec * n; }
-    NodeVarComm(this->adiag, offsets);
+    for (int n = 0; n < this->ndof; ++n) { offsets[n] = cmesh.nodec * n; }
+    NodeVarComm(this->grid_.part, this->adiag, offsets);
 
     return;
 }
 
 void CrsMat::ComputeResidualNormSq(double &ref_tol, double &abs_tol) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const Partition &part = this->grid_.part;
+    const RunParams &params = this->params_;
 
     const int var_size = int(this->x_lhs.size());
 
@@ -427,17 +442,17 @@ void CrsMat::ComputeResidualNormSq(double &ref_tol, double &abs_tol) {
     double rtr = 0.0e0, active_dof = 0.0e0;
     for (int n = 0; n < var_size; n++) {
         if (free_dof[n] == 0.0) { continue; }
-        int nid = n % nodec;
+        int nid = n % cmesh.nodec;
         if (!this->FEM_flag) {
-            if (this->owner_->nmass[nid] > mtol) {
+            if (this->owner_->nmass[nid] > params.mtol) {
                 double r = this->b_rhs[n];
-                rtr += r * r * dbc[n];
-                active_dof += dbc[n];
+                rtr += r * r * part.dbc[n];
+                active_dof += part.dbc[n];
             }
         } else {
             double r = this->b_rhs[n];
-            rtr += r * r * dbc[n];
-            active_dof += dbc[n];
+            rtr += r * r * part.dbc[n];
+            active_dof += part.dbc[n];
         }
     }
 

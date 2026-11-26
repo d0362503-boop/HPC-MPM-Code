@@ -92,7 +92,7 @@ BeginNewtonStep();                          // freeze stabilization, zero ndispl
 for NR_it = 0 .. max_NR_it
     AssembleNewtonSystem(ts);               // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
     if CheckNewtonConvergence(NR_it, ksp_its) break; // NS_.CheckNRConvergence on the physical RHS
-    ksp_its = SolveNewtonCorrection(NR_it); // NS_.SolveSystem: PETSc or native linear solve
+    ksp_its = SolveNewtonCorrection(NR_it, ts); // NS_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs[0:3*nodec], npres_k += x_lhs[npc:]
 EndNewtonStep();                            // release NS_ storage
 ```

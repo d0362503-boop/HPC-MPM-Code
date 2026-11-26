@@ -37,24 +37,6 @@ struct Grid {
     Partition part;     // rank overlap bookkeeping
 };
 
-inline Grid g_grid; // transitional global instance (still read by CrsMat)
-
-// ----- Transitional aliases still read by CrsMat; remove together with g_grid when CrsMat takes the grid -----
-inline int &nodec = g_grid.cmesh.nodec;
-inline int &nuc = g_grid.cmesh.nuc, &nvc = g_grid.cmesh.nvc, &nwc = g_grid.cmesh.nwc, &npc = g_grid.cmesh.npc;
-inline std::array<int, 3> &xynodec = g_grid.cmesh.xynodec, &xynodecw = g_grid.cmesh.xynodecw;
-inline std::array<int, 3> &idimc = g_grid.cmesh.idimc;
-inline std::array<int, 3> &aelemmin = g_grid.mesh.aelemmin, &aelemmax = g_grid.mesh.aelemmax;
-inline std::vector<double> &dbc = g_grid.part.dbc;
-
-/// Transitional: NodeVarComm on the global partition.
-template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) { NodeVarComm(g_grid.part, dat, offset); }
-/// Transitional: NodeVarComm on the global partition.
-template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<int> &offsets) {
-    NodeVarComm(g_grid.part, dat, offsets);
-}
-// -----------------------------------------------------------------------------------
-
 /**
  * @brief Initialize mesh spacings and time-integration scalars derived from the input parameters.
  *

@@ -66,7 +66,7 @@ BeginNewtonStep();                          // zero ndispl, snapshot stress_k_
 for NR_it = 0 .. max_NR_it
     AssembleNewtonSystem(ts);               // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
     if CheckNewtonConvergence(NR_it, ksp_its) break; // NR_flag: SM_.CheckNRConvergence; else print only
-    ksp_its = SolveNewtonCorrection(NR_it); // SM_.SolveSystem: PETSc or native linear solve
+    ksp_its = SolveNewtonCorrection(NR_it, ts); // SM_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
 EndNewtonStep();                            // release SM_ storage
 ```

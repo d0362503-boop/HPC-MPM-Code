@@ -45,7 +45,8 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @param grid   Grid of this rank (background mesh, control points and partition).
      * @param params Run parameters of this run.
      */
-    StabilizedFEM(const Grid &grid, const RunParams &params) : MaterialPoint(grid, params) {
+    StabilizedFEM(const Grid &grid, const RunParams &params)
+        : MaterialPoint(grid, params), NS_(grid, params), PF_(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->integrator_.ode_order = 1;
@@ -143,9 +144,10 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Solve the Navier-Stokes system for the velocity-pressure correction.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Add the solved velocity/pressure correction to the n+1 iterate `nvel_k`, `npres_k`. */
     void UpdateNRIncrement() override;

@@ -108,7 +108,7 @@ bool StabilizedFEM::CheckNewtonConvergence(int NR_it, int ksp_its) {
     return this->NS_.CheckNRConvergence(NR_it, this->max_NR_it, ksp_its, this->r0r);
 }
 
-int StabilizedFEM::SolveNewtonCorrection(int NR_it) { return this->NS_.SolveSystem(NR_it); }
+int StabilizedFEM::SolveNewtonCorrection(int NR_it, const TimeState &ts) { return this->NS_.SolveSystem(NR_it, ts.istep); }
 
 void StabilizedFEM::EndNewtonStep() {
 

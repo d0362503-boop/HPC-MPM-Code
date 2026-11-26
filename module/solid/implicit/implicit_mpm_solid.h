@@ -29,7 +29,7 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @param grid   Grid of this rank (background mesh, control points and partition).
      * @param params Run parameters of this run.
      */
-    ImplicitSolidMPM(const Grid &grid, const RunParams &params) : SolidMaterialPointBase(grid, params) {
+    ImplicitSolidMPM(const Grid &grid, const RunParams &params) : SolidMaterialPointBase(grid, params), SM_(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8};
         this->rhs_start = 0;
         this->NR_flag = true;
@@ -93,9 +93,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
     /**
      * @brief Solve the solid system for the displacement correction.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Release the solid linear-system storage. */
     void EndNewtonStep() override;

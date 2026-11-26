@@ -85,7 +85,7 @@ rtol 0.1 and max 100, ASM overlap 1, and local PREONLY/ILU(1) with nonzero shift
 preconditioning solves; the outer and physical Newton tolerances control the
 final correction. `BuildInterfaceSchur` remains removed.
 
-`SolveSystem(NR_it)` preserves the unscaled physical RHS, zeros the native
+`SolveSystem(NR_it, istep)` preserves the unscaled physical RHS, zeros the native
 correction, scales the matrix/RHS and solves through `CrsMat`. It then multiplies
 the recovered correction by `column_scale` and restores the physical RHS.
 The outer KSP uses `rtol=1e-8` and `atol=1e-13` when any control point

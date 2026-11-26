@@ -15,7 +15,7 @@
 using namespace mpm_mpm_monolithic_fsi;
 
 MPMMPMMonolithicFSI::MPMMPMMonolithicFSI(const Grid &grid, const RunParams &params)
-    : MaterialPoint(grid, params), fluid_(grid, params), solid_(grid, params) {
+    : MaterialPoint(grid, params), fluid_(grid, params), solid_(grid, params), fsi_sys(grid, params) {
     this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
     this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
     this->fluid_.rhs_start = 0;
@@ -89,7 +89,7 @@ bool MPMMPMMonolithicFSI::CheckNewtonConvergence(int NR_it, int ksp_its) {
     return this->CheckNRConvergence(this->initial_norm_, NR_it, ksp_its);
 }
 
-int MPMMPMMonolithicFSI::SolveNewtonCorrection(int NR_it) { return this->SolveSystem(NR_it); }
+int MPMMPMMonolithicFSI::SolveNewtonCorrection(int NR_it, const TimeState &ts) { return this->SolveSystem(NR_it, ts.istep); }
 
 void MPMMPMMonolithicFSI::UpdateNRIncrement() {
     const ControlMesh &cmesh = this->grid_.cmesh;

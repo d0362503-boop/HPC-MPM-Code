@@ -11,7 +11,7 @@ void SolveNewton(NonlinearProblem &problem, const TimeState &ts, int max_it) {
 
         if (problem.CheckNewtonConvergence(NR_it, ksp_its)) { break; }
 
-        ksp_its = problem.SolveNewtonCorrection(NR_it);
+        ksp_its = problem.SolveNewtonCorrection(NR_it, ts);
 
         problem.UpdateNRIncrement();
     }

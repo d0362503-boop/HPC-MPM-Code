@@ -11,11 +11,9 @@ int main(int argc, char *argv[]) {
     const double start_time = InitializeSimulation(argc, argv);
 
     {
-        // Transitional: CrsMat still reads the global grid, run parameters and step index, so the
-        // driver works on the global instances until CrsMat takes them explicitly.
-        Grid &grid = g_grid;
-        RunParams &params = g_params;
-        TimeState &ts = g_time;
+        Grid grid;          // rank grid
+        RunParams params;   // run parameters
+        TimeState ts;       // time-step state
 
         ExplicitSolidMPM sp(grid, params);
 

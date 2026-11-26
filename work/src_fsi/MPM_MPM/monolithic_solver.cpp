@@ -90,7 +90,7 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
     }
 }
 
-int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
+int MPMMPMMonolithicFSI::SolveSystem(int NR_it, int istep) {
     const ControlMesh &cmesh = this->grid_.cmesh;
     const RunParams &params = this->params_;
 
@@ -116,7 +116,7 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     const double abs_tol = has_contact ? 1.0e-12 : 1.0e-15;
     const double div_tol = NR_it == 0 ? 1.0e6 : PETSC_UNLIMITED;
     KSPSetTolerances(this->fsi_sys.ksp, ref_tol, abs_tol, div_tol, 300);
-    const int iter = this->fsi_sys.SolveSystem(NR_it);
+    const int iter = this->fsi_sys.SolveSystem(NR_it, istep);
 
     KSPConvergedReason reason;
     KSPGetConvergedReason(this->fsi_sys.ksp, &reason);

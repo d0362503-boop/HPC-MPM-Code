@@ -38,7 +38,8 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      * @param grid   Grid of this rank (background mesh, control points and partition).
      * @param params Run parameters of this run.
      */
-    StabilizedMPM(const Grid &grid, const RunParams &params) : MaterialPoint(grid, params), ifp(grid, params) {
+    StabilizedMPM(const Grid &grid, const RunParams &params)
+        : MaterialPoint(grid, params), ifp(grid, params), NS_(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->do_dlb = false;
@@ -118,9 +119,10 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Solve the Navier-Stokes system for the velocity-pressure correction.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Release the Navier-Stokes linear-system storage. */
     void EndNewtonStep() override;

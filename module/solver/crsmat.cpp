@@ -13,6 +13,7 @@
 #include "module/mpi_data.h"
 
 void CrsMat::BuildCrsMat(int num_block) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->num_block = num_block;
 
@@ -20,32 +21,32 @@ void CrsMat::BuildCrsMat(int num_block) {
 
     this->nmat = 0;
 
-    int nxp = xynodec[0];
-    int nyp = xynodec[1];
-    int nzp = xynodec[2];
+    int nxp = cmesh.xynodec[0];
+    int nyp = cmesh.xynodec[1];
+    int nzp = cmesh.xynodec[2];
 
-    int idimp2 = *std::max_element(idimc.begin(), idimc.end());
+    int idimp2 = *std::max_element(cmesh.idimc.begin(), cmesh.idimc.end());
 
-    int nmatptmp = nodec * std::pow((idimp2 + idimp2 + 1), 3);
+    int nmatptmp = cmesh.nodec * std::pow((idimp2 + idimp2 + 1), 3);
     std::vector<int> matcolidp(nmatptmp, -1);
-    VectorAssign(nodec + 1, this->matrow, -1);
+    VectorAssign(cmesh.nodec + 1, this->matrow, -1);
 
     for (int icnzp = 0; icnzp < nzp; ++icnzp) {
-        int isnzp = icnzp - idimc[2];
+        int isnzp = icnzp - cmesh.idimc[2];
         if (isnzp < 0) isnzp = 0;
-        int ienzp = icnzp + idimc[2];
+        int ienzp = icnzp + cmesh.idimc[2];
         if (ienzp >= nzp) ienzp = nzp - 1;
 
         for (int icnyp = 0; icnyp < nyp; ++icnyp) {
-            int isnyp = icnyp - idimc[1];
+            int isnyp = icnyp - cmesh.idimc[1];
             if (isnyp < 0) isnyp = 0;
-            int ienyp = icnyp + idimc[1];
+            int ienyp = icnyp + cmesh.idimc[1];
             if (ienyp >= nyp) ienyp = nyp - 1;
 
             for (int icnxp = 0; icnxp < nxp; ++icnxp) {
-                int isnxp = icnxp - idimc[0];
+                int isnxp = icnxp - cmesh.idimc[0];
                 if (isnxp < 0) isnxp = 0;
-                int ienxp = icnxp + idimc[0];
+                int ienxp = icnxp + cmesh.idimc[0];
                 if (ienxp >= nxp) ienxp = nxp - 1;
 
                 int idn = icnxp + nxp * icnyp + nxp * nyp * icnzp;
@@ -67,7 +68,7 @@ void CrsMat::BuildCrsMat(int num_block) {
     VectorAssign(this->nmat, this->matcolid);
     for (int i = 0; i < this->nmat; i++) { this->matcolid[i] = matcolidp[i]; }
 
-    this->matrow[nodec] = this->nmat;
+    this->matrow[cmesh.nodec] = this->nmat;
 
     this->nmata = this->nmat * num_block;
     VectorAssign(num_block, this->block_id);
@@ -99,33 +100,38 @@ void CrsMat::ResetPetscSolver() {
 }
 
 void CrsMat::BuildNaturalGlobalMaps(const std::vector<int> &node_l2g) {
-    VectorAssign(nodec, this->natural_block_gids);
-    VectorAssign(nodec * this->ndof, this->natural_var_gids);
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec; ++n) {
+    VectorAssign(cmesh.nodec, this->natural_block_gids);
+    VectorAssign(cmesh.nodec * this->ndof, this->natural_var_gids);
+
+    for (int n = 0; n < cmesh.nodec; ++n) {
         const PetscInt global_node = static_cast<PetscInt>(node_l2g[n]);
         this->natural_block_gids[n] = global_node;
-        for (int var = 0; var < this->ndof; ++var) { this->natural_var_gids[n + var * nodec] = global_node * this->ndof + var; }
+        for (int var = 0; var < this->ndof; ++var) { this->natural_var_gids[n + var * cmesh.nodec] = global_node * this->ndof + var; }
     }
 
     return;
 }
 
 void CrsMat::BuildOwnershipMetadata(const std::vector<int> &node_l2g) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     this->owned_natural_ids.clear();
     this->ghost_natural_ids.clear();
 
     std::vector<int> all_aelemmin(nprocs * 3);
     std::vector<int> all_aelemmax(nprocs * 3);
-    MPI_Allgather(aelemmin.data(), 3, MPI_INT, all_aelemmin.data(), 3, MPI_INT, MPI_COMM_WORLD);
-    MPI_Allgather(aelemmax.data(), 3, MPI_INT, all_aelemmax.data(), 3, MPI_INT, MPI_COMM_WORLD);
+    MPI_Allgather(mesh.aelemmin.data(), 3, MPI_INT, all_aelemmin.data(), 3, MPI_INT, MPI_COMM_WORLD);
+    MPI_Allgather(mesh.aelemmax.data(), 3, MPI_INT, all_aelemmax.data(), 3, MPI_INT, MPI_COMM_WORLD);
 
-    for (int n = 0; n < nodec; ++n) {
+    for (int n = 0; n < cmesh.nodec; ++n) {
         const int global_node = node_l2g[n];
-        const int kg = global_node / (xynodecw[0] * xynodecw[1]);
-        const int rem = global_node % (xynodecw[0] * xynodecw[1]);
-        const int jg = rem / xynodecw[0];
-        const int ig = rem % xynodecw[0];
+        const int kg = global_node / (cmesh.xynodecw[0] * cmesh.xynodecw[1]);
+        const int rem = global_node % (cmesh.xynodecw[0] * cmesh.xynodecw[1]);
+        const int jg = rem / cmesh.xynodecw[0];
+        const int ig = rem % cmesh.xynodecw[0];
 
         bool is_owned = true;
         for (int p = 0; p < nprocs; ++p) {
@@ -134,7 +140,7 @@ void CrsMat::BuildOwnershipMetadata(const std::vector<int> &node_l2g) {
             bool in_p = true;
             for (int d = 0; d < 3; ++d) {
                 const int p_min = all_aelemmin[p * 3 + d];
-                const int p_max = all_aelemmax[p * 3 + d] + idimc[d];
+                const int p_max = all_aelemmax[p * 3 + d] + cmesh.idimc[d];
                 const int coord = (d == 0) ? ig : (d == 1) ? jg : kg;
                 if (coord < p_min || coord > p_max) {
                     in_p = false;
@@ -144,7 +150,7 @@ void CrsMat::BuildOwnershipMetadata(const std::vector<int> &node_l2g) {
 
             if (in_p) {
                 for (int d = 0; d < 3; ++d) {
-                    const int my_min = aelemmin[d];
+                    const int my_min = mesh.aelemmin[d];
                     const int p_min = all_aelemmin[p * 3 + d];
                     if (p_min < my_min) {
                         is_owned = false;
@@ -171,23 +177,25 @@ void CrsMat::BuildOwnershipMetadata(const std::vector<int> &node_l2g) {
 }
 
 void CrsMat::BuildPetscLocalMaps() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     this->petsc_local_to_natural.clear();
-    this->petsc_local_to_natural.reserve(nodec);
+    this->petsc_local_to_natural.reserve(cmesh.nodec);
 
     for (int nid : this->owned_natural_ids) this->petsc_local_to_natural.push_back(nid);
     for (int nid : this->ghost_natural_ids) this->petsc_local_to_natural.push_back(nid);
 
-    this->natural_to_petsc_local.assign(nodec, -1);
-    for (int pos = 0; pos < nodec; ++pos) { this->natural_to_petsc_local[this->petsc_local_to_natural[pos]] = pos; }
+    this->natural_to_petsc_local.assign(cmesh.nodec, -1);
+    for (int pos = 0; pos < cmesh.nodec; ++pos) { this->natural_to_petsc_local[this->petsc_local_to_natural[pos]] = pos; }
 
-    VectorAssign(nodec, this->petsc_local_block_gids);
-    VectorAssign(nodec * this->ndof, this->petsc_local_var_gids);
-    for (int pos = 0; pos < nodec; ++pos) {
+    VectorAssign(cmesh.nodec, this->petsc_local_block_gids);
+    VectorAssign(cmesh.nodec * this->ndof, this->petsc_local_var_gids);
+    for (int pos = 0; pos < cmesh.nodec; ++pos) {
         const int natural_id = this->petsc_local_to_natural[pos];
         const PetscInt global_node = this->natural_block_gids[natural_id];
         this->petsc_local_block_gids[pos] = global_node;
         for (int var = 0; var < this->ndof; ++var) {
-            this->petsc_local_var_gids[pos + var * nodec] = global_node * this->ndof + var;
+            this->petsc_local_var_gids[pos + var * cmesh.nodec] = global_node * this->ndof + var;
         }
     }
 
@@ -195,15 +203,17 @@ void CrsMat::BuildPetscLocalMaps() {
 }
 
 void CrsMat::CheckOwnershipMetadata() const {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     if (static_cast<int>(this->owned_natural_ids.size()) != this->local_node) MPI_Abort(MPI_COMM_WORLD, 1);
     if (static_cast<int>(this->ghost_natural_ids.size()) != this->ghost_node) MPI_Abort(MPI_COMM_WORLD, 1);
-    if (static_cast<int>(this->petsc_local_to_natural.size()) != nodec) MPI_Abort(MPI_COMM_WORLD, 1);
+    if (static_cast<int>(this->petsc_local_to_natural.size()) != cmesh.nodec) MPI_Abort(MPI_COMM_WORLD, 1);
 
-    for (int n = 0; n < nodec; ++n) {
+    for (int n = 0; n < cmesh.nodec; ++n) {
         if (this->natural_to_petsc_local[n] < 0) MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    int global_nodec = xynodecw[0] * xynodecw[1] * xynodecw[2];
+    int global_nodec = cmesh.xynodecw[0] * cmesh.xynodecw[1] * cmesh.xynodecw[2];
     int total_local_node = 0;
     MPI_Allreduce(&this->local_node, &total_local_node, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     if (total_local_node != global_nodec) MPI_Abort(MPI_COMM_WORLD, 1);
@@ -212,16 +222,19 @@ void CrsMat::CheckOwnershipMetadata() const {
 }
 
 void CrsMat::BuildLGMAP() {
-    std::vector<int> node_l2g(nodec);
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int kl = 0; kl < xynodec[2]; kl++) {
-        for (int jl = 0; jl < xynodec[1]; jl++) {
-            for (int il = 0; il < xynodec[0]; il++) {
-                int kg = kl + aelemmin[2];
-                int jg = jl + aelemmin[1];
-                int ig = il + aelemmin[0];
-                int nid_l = il + xynodec[0] * jl + xynodec[0] * xynodec[1] * kl;
-                int nid_g = ig + xynodecw[0] * jg + xynodecw[0] * xynodecw[1] * kg;
+    std::vector<int> node_l2g(cmesh.nodec);
+
+    for (int kl = 0; kl < cmesh.xynodec[2]; kl++) {
+        for (int jl = 0; jl < cmesh.xynodec[1]; jl++) {
+            for (int il = 0; il < cmesh.xynodec[0]; il++) {
+                int kg = kl + mesh.aelemmin[2];
+                int jg = jl + mesh.aelemmin[1];
+                int ig = il + mesh.aelemmin[0];
+                int nid_l = il + cmesh.xynodec[0] * jl + cmesh.xynodec[0] * cmesh.xynodec[1] * kl;
+                int nid_g = ig + cmesh.xynodecw[0] * jg + cmesh.xynodecw[0] * cmesh.xynodecw[1] * kg;
                 node_l2g[nid_l] = nid_g;
             }
         }
@@ -236,6 +249,8 @@ void CrsMat::BuildLGMAP() {
 }
 
 void CrsMat::BuildPetscMat() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     PetscInt local_n = static_cast<PetscInt>(this->local_node) * this->ndof;
 
     MatCreate(MPI_COMM_WORLD, &this->petsc_mat);
@@ -247,7 +262,7 @@ void CrsMat::BuildPetscMat() {
     // Ghost rows are used during assembly (remote contributions), so the
     // reusable column/value buffers must be large enough for them too.
     int max_row_nnz = 0;
-    for (int ii = 0; ii < nodec; ++ii) {
+    for (int ii = 0; ii < cmesh.nodec; ++ii) {
         int row_nnz = this->matrow[ii + 1] - this->matrow[ii];
         if (row_nnz > max_row_nnz) max_row_nnz = row_nnz;
     }
@@ -277,9 +292,9 @@ void CrsMat::BuildPetscMat() {
     // Bind the local-to-global mapping so that all local indices used in
     // MatSetValuesBlockedLocal / VecSetValuesLocal are interpreted with the
     // owned-first PETSc-local numbering built in BuildPetscLocalMaps.
-    ISLocalToGlobalMappingCreate(MPI_COMM_WORLD, this->ndof, nodec, this->petsc_local_block_gids.data(), PETSC_COPY_VALUES,
+    ISLocalToGlobalMappingCreate(MPI_COMM_WORLD, this->ndof, cmesh.nodec, this->petsc_local_block_gids.data(), PETSC_COPY_VALUES,
                                  &this->petsc_block_lgmap_);
-    ISLocalToGlobalMappingCreate(MPI_COMM_WORLD, 1, nodec * this->ndof, this->petsc_local_var_gids.data(), PETSC_COPY_VALUES,
+    ISLocalToGlobalMappingCreate(MPI_COMM_WORLD, 1, cmesh.nodec * this->ndof, this->petsc_local_var_gids.data(), PETSC_COPY_VALUES,
                                  &this->petsc_var_lgmap_);
 
     MatSetLocalToGlobalMapping(this->petsc_mat, this->petsc_block_lgmap_, this->petsc_block_lgmap_);
@@ -315,6 +330,7 @@ void CrsMat::BuildKSPSolver() {
 }
 
 void CrsMat::InitPetscSolver() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->BuildLGMAP();
 
@@ -324,9 +340,9 @@ void CrsMat::InitPetscSolver() {
 
     IS from_is = nullptr;
     IS to_is = nullptr;
-    ISCreateGeneral(PETSC_COMM_SELF, nodec * this->ndof, this->natural_var_gids.data(), PETSC_COPY_VALUES, &from_is);
-    VecCreateSeq(PETSC_COMM_SELF, nodec * this->ndof, &this->seq_x);
-    ISCreateStride(PETSC_COMM_SELF, nodec * this->ndof, 0, 1, &to_is);
+    ISCreateGeneral(PETSC_COMM_SELF, cmesh.nodec * this->ndof, this->natural_var_gids.data(), PETSC_COPY_VALUES, &from_is);
+    VecCreateSeq(PETSC_COMM_SELF, cmesh.nodec * this->ndof, &this->seq_x);
+    ISCreateStride(PETSC_COMM_SELF, cmesh.nodec * this->ndof, 0, 1, &to_is);
     VecScatterCreate(this->petsc_x, from_is, this->seq_x, to_is, &this->scatter_to_all);
     ISDestroy(&from_is);
     ISDestroy(&to_is);

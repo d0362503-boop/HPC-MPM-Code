@@ -85,9 +85,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Solve the coupled system for the physical increments.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
     void UpdateNRIncrement() override;
@@ -161,11 +162,12 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Apply residual constraints and solve for physical monolithic increments.
      * @param NR_it Newton iteration controlling preconditioner setup; each correction starts from zero.
+     * @param istep Current time step; sets the preconditioner rebuild cadence.
      * @return Number of Krylov iterations used by the coupled linear solve.
      * @note KSP divergence is currently logged by CrsMat but does not stop this
      * routine from rescaling and returning the computed increment.
      */
-    int SolveSystem(int NR_it);
+    int SolveSystem(int NR_it, int istep);
 
     // Nonlinear residuals.
     /**

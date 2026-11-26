@@ -33,9 +33,10 @@ class NonlinearProblem {
     /**
      * @brief Solve the linear system for the Newton correction.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state (its step index drives preconditioner reuse).
      * @return Number of Krylov iterations used.
      */
-    virtual int SolveNewtonCorrection(int NR_it) = 0;
+    virtual int SolveNewtonCorrection(int NR_it, const TimeState &ts) = 0;
 
     /** @brief Add the linear correction to the nonlinear unknowns. */
     virtual void UpdateNRIncrement() = 0;

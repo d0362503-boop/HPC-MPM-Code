@@ -12,6 +12,16 @@ class MaterialPoint; // forward declaration
 
 class CrsMat {
   public:
+    /**
+     * @brief Bind the linear system to the grid and run parameters of its owner.
+     * @param grid   Grid of this rank (control-point layout, element window, overlap weights).
+     * @param params Run parameters (small-mass tolerance for MPM inactive rows).
+     */
+    CrsMat(const Grid &grid, const RunParams &params) : grid_(grid), params_(params) {}
+
+    const Grid &grid_;        // owner grid (read-only)
+    const RunParams &params_; // run parameters
+
     // Pointer to the owning physics object. Used for BC setup, residual
     // callbacks, and MPM mass-based inactive-node detection.
     MaterialPoint *owner_ = nullptr;
@@ -234,7 +244,7 @@ class CrsMat {
      * @return Component-major index into the scalar local-to-global mapping.
      */
     inline PetscInt NaturalNodeVarToPetscLocalScalar(int natural_id, int var) const {
-        return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id] + var * nodec);
+        return static_cast<PetscInt>(this->natural_to_petsc_local[natural_id] + var * this->grid_.cmesh.nodec);
     }
 
     /**
@@ -288,8 +298,10 @@ class CrsMat {
      * @return Number of KSP iterations, including when KSP reports divergence.
      * @warning A negative KSP convergence reason is logged on rank zero; the
      * solution is still scattered and no failure sentinel is returned.
+     * @param NR_it Current Newton–Raphson iteration index.
+     * @param istep Current time step; sets the preconditioner rebuild cadence.
      */
-    int SolveWithPetsc(int NR_it = -1);
+    int SolveWithPetsc(int NR_it, int istep);
 
     /**
      * @brief Solve this assembled linear system with PETSc or native GPBiCGAR.
@@ -297,8 +309,9 @@ class CrsMat {
      * @return Number of linear solver iterations used.
      *
      * `use_petsc` selects the PETSc or native path for the current solve.
+     * @param istep Current time step; sets the preconditioner rebuild cadence.
      */
-    int SolveSystem(int NR_it = -1);
+    int SolveSystem(int NR_it, int istep);
 
     /**
      * @brief Select a physical field in the reduced equation numbering.
@@ -358,9 +371,10 @@ class CrsMat {
      * @param b Full RHS including prescribed nonzero boundary values.
      * @param x Full solution receiving retained values and zeros at removed equations.
      * @param NR_it Newton iteration controlling preconditioner reuse.
+     * @param istep Current time step; sets the preconditioner rebuild cadence.
      * @return PETSc solve status; the convergence reason remains on ksp.
      */
-    PetscErrorCode SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it);
+    PetscErrorCode SolveReducedSystem(Mat a, Vec b, Vec x, int NR_it, int istep);
 
     /**
      * @brief Configure nested physical groups on already-created PETSc sub-solvers.
@@ -376,9 +390,10 @@ class CrsMat {
     /**
      * @brief Decide whether this solve requests preconditioner reconfiguration.
      * @param NR_it Newton iteration; the regular step cadence is checked at iteration zero.
+     * @param istep Current time step checked against `rebuild_freq`.
      * @return Whether the configured cadence or previous iteration growth requests rebuilding.
      */
-    bool NeedsPreconditionerRebuild(int NR_it);
+    bool NeedsPreconditionerRebuild(int NR_it, int istep);
 
     /** @brief Scatter owned and ghost solution components into the full native x_lhs. */
     void RecoverSolution();

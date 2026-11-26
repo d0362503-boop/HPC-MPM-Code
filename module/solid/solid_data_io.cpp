@@ -1,3 +1,4 @@
+#include "module/cal_mat.h"
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -39,10 +40,10 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
         infile >> this->id[ip] >> this->matid[ip] >> this->surf_point[ip] >> this->mass[ip] >> this->vol0[ip];
         infile.ignore(1000, '\n');
     }
-    VectorAssign(this->num, this->def_grad, eye_mat);
+    VectorAssign(this->num, this->def_grad, kIdentity3);
     if (this->Fbar_flag) {
-        VectorAssign(this->num, this->def_grad_bar, eye_mat);
-        VectorAssign(this->num, this->delta_def_grad_bar, eye_mat);
+        VectorAssign(this->num, this->def_grad_bar, kIdentity3);
+        VectorAssign(this->num, this->delta_def_grad_bar, kIdentity3);
     }
     this->vol = this->vol0;
 

@@ -52,7 +52,7 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
                                                                              const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
     for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[idm[i][j]]; }
+        for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[kVoigtIndex[i][j]]; }
     }
 
     double ce[3][3][3][3] = {};
@@ -60,7 +60,7 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
         for (int j = 0; j < 3; j++) {
             for (int k = 0; k < 3; k++) {
                 for (int l = 0; l < 3; l++) {
-                    ce[i][j][k][l] = this->cm_.stif_mat[idm[i][j]][idm[k][l]];
+                    ce[i][j][k][l] = this->cm_.stif_mat[kVoigtIndex[i][j]][kVoigtIndex[k][l]];
                     if (NR_flag) ce[i][j][k][l] += stsmat[j][l] * (i == k);
                 }
             }
@@ -128,7 +128,7 @@ bool ImplicitSolidMPM::CheckNewtonConvergence(int NR_it, int ksp_its) {
     return this->SM_.CheckNRConvergence(NR_it, this->max_NR_it, ksp_its, this->r0r_);
 }
 
-int ImplicitSolidMPM::SolveNewtonCorrection(int NR_it) { return this->SM_.SolveSystem(NR_it); }
+int ImplicitSolidMPM::SolveNewtonCorrection(int NR_it, const TimeState &ts) { return this->SM_.SolveSystem(NR_it, ts.istep); }
 
 void ImplicitSolidMPM::EndNewtonStep() {
 
