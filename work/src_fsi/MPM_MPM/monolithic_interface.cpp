@@ -16,28 +16,31 @@
 using namespace mpm_mpm_monolithic_fsi;
 
 void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(npxye, dxy, dec2p);
+    SubcellOffsets(params.npxye, mesh.dxy, dec2p);
 
-    double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
+    double volp = mesh.dxy[0] * mesh.dxy[1] * mesh.dxy[2] / (params.npxye[0] * params.npxye[1] * params.npxye[2]);
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(nodec, this->nlm_lump_local);
-    for (int m = 0; m < nelem; m++) {
-        const std::array<double, 3> xye = ElementCenter(g_grid.mesh, m);
+    VectorAssign(cmesh.nodec, this->nlm_lump_local);
+    for (int m = 0; m < mesh.nelem; m++) {
+        const std::array<double, 3> xye = ElementCenter(mesh, m);
         std::array<double, 3> xyp;
-        for (int iz = 0; iz < npxye[2]; iz++) {
+        for (int iz = 0; iz < params.npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
-            for (int iy = 0; iy < npxye[1]; iy++) {
+            for (int iy = 0; iy < params.npxye[1]; iy++) {
                 xyp[1] = xye[1] + dec2p[iy][1];
-                for (int ix = 0; ix < npxye[0]; ix++) {
+                for (int ix = 0; ix < params.npxye[0]; ix++) {
                     xyp[0] = xye[0] + dec2p[ix][0];
-                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
 
                     double phi_f = 0.0e0, phi_s = 0.0e0;
                     std::array<double, 3> grad_phi_f{}, grad_phi_s{};
@@ -70,7 +73,7 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
         }
     }
 
-    VectorAssign(nodec, this->nlm_lump);
+    VectorAssign(cmesh.nodec, this->nlm_lump);
     this->nlm_lump = this->nlm_lump_local;
 
     NodeVarComm(this->nlm_lump, 0);
@@ -79,18 +82,21 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 }
 
 void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const Partition &part = this->grid_.part;
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    std::vector<double> final_phi(nodec, 0.0e0);
+    std::vector<double> final_phi(cmesh.nodec, 0.0e0);
     for (int pid = 0; pid < this->solid_.num; pid++) {
         int cell;
         std::array<double, 3> xyp = this->solid_.coord[pid];
-        if (!LocateLocalElement(g_grid.mesh, xyp, cell)) continue;
-        MakeSF(cell, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+        if (!LocateLocalElement(mesh, xyp, cell)) continue;
+        MakeSF(cell, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
         for (int ni = 0; ni < nenode; ni++) {
             const int nid = ncm[ni];
             const double sfi = sf[ni];
@@ -100,21 +106,21 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
 
     NodeVarComm(final_phi, 0);
 
-    for (int n = 0; n < nodec; ++n) { final_phi[n] = std::clamp(final_phi[n] / nvol[n], 0.0, 1.0); }
+    for (int n = 0; n < cmesh.nodec; ++n) { final_phi[n] = std::clamp(final_phi[n] / cmesh.nvol[n], 0.0, 1.0); }
     const interface_geometry::InterfaceSDF interface(std::move(final_phi));
 
-    const auto &regions = g_grid.part.regions;
+    const auto &regions = part.regions;
     std::vector<std::vector<int>> send_ids(nprocs);
     for (int pid = 0; pid < this->fluid_.num; ++pid) {
         auto &point = this->fluid_.coord[pid];
         int cell;
-        if (LocateLocalElement(g_grid.mesh, point, cell)) {
+        if (LocateLocalElement(mesh, point, cell)) {
             std::array<double, 3> surface_point;
             if (interface.FindSurfacePoint(point, surface_point)) { point = surface_point; }
             continue;
         }
         std::array<int, 3> global_cell;
-        if (!LocateGlobalElement(g_grid.mesh, point, global_cell)) continue;
+        if (!LocateGlobalElement(mesh, point, global_cell)) continue;
         for (int rank = 0; rank < nprocs; ++rank) {
             const auto &region = regions[rank];
             if (global_cell[0] >= region.elem_min[0] && global_cell[0] <= region.elem_max[0] &&

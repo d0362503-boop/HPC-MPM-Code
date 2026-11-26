@@ -8,8 +8,9 @@
 #include "module/material_point.h"
 
 bool MaterialPoint::InflowMeshisFilled(const BoundaryCondition &infbc) {
+    const RunParams &params = this->params_;
 
-    const int target_per_cell = npxye[0] * npxye[1] * npxye[2];
+    const int target_per_cell = params.npxye[0] * params.npxye[1] * params.npxye[2];
 
     bool isfilled = false;
     static double fill_ratio_tol = 0.95e0;

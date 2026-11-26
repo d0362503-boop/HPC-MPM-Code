@@ -57,8 +57,10 @@ void StabilizedMPM::InputPointData(std::ifstream &infile) {
 }
 
 void StabilizedMPM::OutputPointDataVTKHDF(int iview, const TimeState &ts) {
+    const RunParams &params = this->params_;
+
 #ifdef HAVE_HDF5
-    std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
+    std::string filename = params.outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
     vtkhdf::VTKHDFWriter writer(filename);
     auto info = vtkhdf::WriteParticleTopology(writer, this->coord);
@@ -74,8 +76,9 @@ void StabilizedMPM::OutputPointDataVTKHDF(int iview, const TimeState &ts) {
 }
 
 void StabilizedMPM::RestartInput() {
+    const RunParams &params = this->params_;
 
-    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
+    std::string filename = params.pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -113,8 +116,9 @@ void StabilizedMPM::RestartInput() {
 }
 
 void StabilizedMPM::RestartOutput() {
+    const RunParams &params = this->params_;
 
-    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
+    std::string filename = params.pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);

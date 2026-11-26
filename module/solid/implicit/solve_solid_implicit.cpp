@@ -40,7 +40,9 @@ void ImplicitSolidMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 }
 
 void ImplicitSolidMPM::UpdateNRIncrement() {
-    for (int n = 0; n < nodec * 3; n++) { this->ndispl[n] += this->SM_.x_lhs[n]; }
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
+    for (int n = 0; n < cmesh.nodec * 3; n++) { this->ndispl[n] += this->SM_.x_lhs[n]; }
 
     return;
 }
@@ -88,27 +90,29 @@ void ImplicitSolidMPM::SolveSolid(const TimeState &ts) {
 }
 
 void ImplicitSolidMPM::BeginNewtonStep() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    this->nvel_k_.assign(nodec * 3, 0.0e0);
-    this->naccel_k_.assign(nodec * 3, 0.0e0);
+    this->nvel_k_.assign(cmesh.nodec * 3, 0.0e0);
+    this->naccel_k_.assign(cmesh.nodec * 3, 0.0e0);
 
     this->stress_k_ = this->InitializeNRStress(); // --- Reset stress for NR ---
 
-    VectorAssign(nodec * 3, this->ndispl); // ---- Reset displacement ----
+    VectorAssign(cmesh.nodec * 3, this->ndispl); // ---- Reset displacement ----
     this->r0r_ = 0.0e0;
 
     return;
 }
 
 void ImplicitSolidMPM::AssembleNewtonSystem(const TimeState &ts) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->BCNRSet(ts);
 
     this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_, this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
 
     VectorAssign(this->SM_.nmata, this->SM_.amat);
-    VectorAssign(nodec * 3, this->SM_.b_rhs);
-    VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
+    VectorAssign(cmesh.nodec * 3, this->SM_.b_rhs);
+    VectorAssign(cmesh.nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
     this->AssembleSystem(this->SM_, this->naccel_k_, this->stress_k_, ts);
 
     return;
@@ -139,6 +143,8 @@ void ImplicitSolidMPM::EndNewtonStep() {
 
 void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
                                       std::vector<std::array<double, 6>> &stress_k, const TimeState &ts) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     const std::vector<int> offsets = this->RHSOffsets();
 
@@ -155,11 +161,11 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
 
     VectorAssign(this->num, delta_def_grad);
     VectorAssign(this->num, def_grad_NR);
-    for (int m = 0; m < nelem; m++) {
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, af, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 
@@ -227,9 +233,9 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
 
     NodeVarComm(mat.b_rhs, offsets);
 
-    std::vector<double> naccel_am(nodec * 3);
+    std::vector<double> naccel_am(cmesh.nodec * 3);
     // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
-    for (int n = 0; n < nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
+    for (int n = 0; n < cmesh.nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
     // --------------------------------------
 
     this->AddInertialForceToRHS(mat, naccel_am, offsets);

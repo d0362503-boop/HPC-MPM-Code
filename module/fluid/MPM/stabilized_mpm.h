@@ -154,10 +154,13 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /** @brief Move particles across MPI rank boundaries. */
     void MoveParticle() override;
 
-    /** @brief Apply DLB and rebuild the fluid Navier-Stokes matrix structure. */
-    void ApplyDLB() override {
+    /**
+     * @brief Apply DLB and rebuild the fluid Navier-Stokes matrix structure.
+     * @param grid Writable view of the grid this object observes; repartitioned in place.
+     */
+    void ApplyDLB(Grid &grid) override {
 
-        MaterialPoint::ApplyDLB();
+        MaterialPoint::ApplyDLB(grid);
 
         this->NS_.BuildCrsMat(16);
 

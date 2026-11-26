@@ -52,9 +52,10 @@ void StabilizedFEM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 }
 
 void StabilizedFEM::BeginNewtonStep() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    VectorAssign(nodec * 3, this->nvel_k);
-    VectorAssign(nodec, this->npres_k);
+    VectorAssign(cmesh.nodec * 3, this->nvel_k);
+    VectorAssign(cmesh.nodec, this->npres_k);
     this->r0r = 0.0e0;
 
     std::copy(this->nvel.begin(), this->nvel.end(), this->nvel_k.begin());
@@ -64,9 +65,10 @@ void StabilizedFEM::BeginNewtonStep() {
 }
 
 std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    std::vector<double> adv_vel(nodec * 3);
-    for (int n = 0; n < nodec * 3; n++) {
+    std::vector<double> adv_vel(cmesh.nodec * 3);
+    for (int n = 0; n < cmesh.nodec * 3; n++) {
         // --- v^{n+α_f} from level n and the n+1 iterate ---
         adv_vel[n] = (1.0e0 - this->integrator_.alpha_f) * this->nvel[n] //
                      + this->integrator_.alpha_f * this->nvel_k[n];
@@ -76,6 +78,7 @@ std::vector<double> StabilizedFEM::ComputeAdvectionVel() {
 }
 
 void StabilizedFEM::AssembleNewtonSystem(const TimeState &ts) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->BCNRSet(ts);
 
@@ -86,8 +89,8 @@ void StabilizedFEM::AssembleNewtonSystem(const TimeState &ts) {
     this->MakeNSStabCoeff(adv_vel); // ---- Stabilized coefficient ----
 
     VectorAssign(this->NS_.nmata, this->NS_.amat);
-    VectorAssign(nodec * 4, this->NS_.b_rhs);
-    VectorAssign(nodec * 4, this->NS_.x_lhs);
+    VectorAssign(cmesh.nodec * 4, this->NS_.b_rhs);
+    VectorAssign(cmesh.nodec * 4, this->NS_.x_lhs);
     this->AssembleSystem(this->NS_, adv_vel, ts);
 
     return;
@@ -119,27 +122,30 @@ void StabilizedFEM::EndNewtonStep() {
 }
 
 void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    this->tau_supg.resize(nelem);
-    this->tau_lsic.resize(nelem);
-    for (int m = 0; m < nelem; m++) {
+    this->tau_supg.resize(mesh.nelem);
+    this->tau_lsic.resize(mesh.nelem);
+    for (int m = 0; m < mesh.nelem; m++) {
         double rnue = this->rmue[m] / this->rhoe[m];
 
-        const std::array<double, 3> xye = ElementCenter(g_grid.mesh, m);
+        const std::array<double, 3> xye = ElementCenter(mesh, m);
 
-        MakeSF(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
+        MakeSF(m, xye, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
 
         double uu = 0.0e0, vv = 0.0e0, ww = 0.0e0;
         for (int ni = 0; ni < nenode; ni++) {
             int nid = ncm[ni];
-            uu += adv_vel[nid + nuc] / double(nenode);
-            vv += adv_vel[nid + nvc] / double(nenode);
-            ww += adv_vel[nid + nwc] / double(nenode);
+            uu += adv_vel[nid + cmesh.nuc] / double(nenode);
+            vv += adv_vel[nid + cmesh.nvc] / double(nenode);
+            ww += adv_vel[nid + cmesh.nwc] / double(nenode);
         }
         double uvw = uu * uu + vv * vv + ww * ww;
 
@@ -152,20 +158,20 @@ void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
         }
 
         double he;
-        if (udsf < mtol) {
-            he = dxy[0] * std::cbrt((6.0e0 / M_PI));
+        if (udsf < params.mtol) {
+            he = mesh.dxy[0] * std::cbrt((6.0e0 / M_PI));
         } else {
             he = 2.0e0 * std::sqrt(uvw) / udsf;
         }
 
-        double t1 = (2.0e0 * dti) * (2.0e0 * dti);
+        double t1 = (2.0e0 * params.dti) * (2.0e0 * params.dti);
         double t2 = 4.0e0 * uvw / (he * he);
         double t3 = std::pow((4.0e0 * rnue / (he * he)), 2);
         // --- τ_SUPG = τ_PSPG = [(2/Δt)^2 + (2|v|/h)^2 + (4ν/h^2)^2]^{-1/2} ---
         this->tau_supg[m] = 1.0e0 / std::sqrt(t1 + t2 + t3);
 
         // --- τ_LSIC = (h/2)|v| z(Re_h), z = Re_h/3 for Re_h <= 3, else 1 ---
-        if (he < mtol) {
+        if (he < params.mtol) {
             this->tau_lsic[m] = 0.0e0;
         } else {
             double reu = std::sqrt(uvw) * he / (rnue * 2.0e0);
@@ -181,10 +187,13 @@ void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
 }
 
 void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_vel, const TimeState &ts) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
-    double fx = bb[0] * ts.facl;
-    double fy = bb[1] * ts.facl;
-    double fz = bb[2] * ts.facl;
+    double fx = params.bb[0] * ts.facl;
+    double fy = params.bb[1] * ts.facl;
+    double fz = params.bb[2] * ts.facl;
 
     const std::vector<int> offsets = this->RHSOffsets();
 
@@ -193,36 +202,36 @@ void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_v
     const double af0 = 1.0e0 - af;
     const double am0 = 1.0e0 - am;
     const double gamma = this->integrator_.gamma_nb;
-    const double c_m = am / (gamma * dt); // d a^{n+α_m} / d v^{n+1}
+    const double c_m = am / (gamma * params.dt); // d a^{n+α_m} / d v^{n+1}
 
     // --- Convected state at its time levels; adv_vel is the convecting velocity
     //     (equal to nvel_af on a fixed Eulerian grid, v - v_mesh under ALE) ---
-    std::vector<double> nvel_af(nodec * 3), naccel_am(nodec * 3);
-    for (int n = 0; n < nodec * 3; n++) {
+    std::vector<double> nvel_af(cmesh.nodec * 3), naccel_am(cmesh.nodec * 3);
+    for (int n = 0; n < cmesh.nodec * 3; n++) {
         naccel_am[n] = am0 * this->naccel[n] + am * this->naccel_k[n];
         nvel_af[n] = af0 * this->nvel[n] + af * this->nvel_k[n];
     }
 
-    std::vector<double> npres_af(nodec);
-    for (int n = 0; n < nodec; n++) { //
+    std::vector<double> npres_af(cmesh.nodec);
+    for (int n = 0; n < cmesh.nodec; n++) { //
         npres_af[n] = af0 * this->npres[n] + af * this->npres_k[n];
     }
 
-    double weight = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
+    double weight = (mesh.dxy[0] * mesh.dxy[1] * mesh.dxy[2]) / (params.npxye[0] * params.npxye[1] * params.npxye[2]);
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    for (int m = 0; m < nelem; m++) {
+    for (int m = 0; m < mesh.nelem; m++) {
         double t1 = this->tau_supg[m];
         double t2 = this->tau_lsic[m];
 
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
 
             double phi_k = 0.0e0;
             std::array<double, 3> adv_vel_k{};
@@ -232,9 +241,9 @@ void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_v
                 // --- Liquid volume fraction ---
                 phi_k += sfi * this->nphi[nid];
                 // --- Advection velocity ---
-                adv_vel_k[0] += sfi * adv_vel[nid + nuc];
-                adv_vel_k[1] += sfi * adv_vel[nid + nvc];
-                adv_vel_k[2] += sfi * adv_vel[nid + nwc];
+                adv_vel_k[0] += sfi * adv_vel[nid + cmesh.nuc];
+                adv_vel_k[1] += sfi * adv_vel[nid + cmesh.nvc];
+                adv_vel_k[2] += sfi * adv_vel[nid + cmesh.nwc];
             }
 
             double rhof = phi_k * this->rhol + (1.0e0 - phi_k) * this->rhog;
@@ -334,14 +343,14 @@ void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_v
                     // --- Residual RHS = -R: the same unscaled entries applied to
                     //     a^{n+α_m}, v^{n+α_f}, p^{n+α_f}, plus the body force below ---
 
-                    const double u_af = nvel_af[njd + nuc];
-                    const double v_af = nvel_af[njd + nvc];
-                    const double w_af = nvel_af[njd + nwc];
+                    const double u_af = nvel_af[njd + cmesh.nuc];
+                    const double v_af = nvel_af[njd + cmesh.nvc];
+                    const double w_af = nvel_af[njd + cmesh.nwc];
                     const double p_af = npres_af[njd];
 
-                    const double au_am = naccel_am[njd + nuc];
-                    const double av_am = naccel_am[njd + nvc];
-                    const double aw_am = naccel_am[njd + nwc];
+                    const double au_am = naccel_am[njd + cmesh.nuc];
+                    const double av_am = naccel_am[njd + cmesh.nvc];
+                    const double aw_am = naccel_am[njd + cmesh.nwc];
 
                     // x-momentum
                     mat.b_rhs[nid + offsets[0]] += -(akg + su + scu) * u_af //
@@ -382,9 +391,10 @@ void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_v
 }
 
 void StabilizedFEM::UpdateNRIncrement() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec * 3; n++) { this->nvel_k[n] += this->NS_.x_lhs[n]; }
-    for (int n = 0; n < nodec; n++) { this->npres_k[n] += this->NS_.x_lhs[n + npc]; }
+    for (int n = 0; n < cmesh.nodec * 3; n++) { this->nvel_k[n] += this->NS_.x_lhs[n]; }
+    for (int n = 0; n < cmesh.nodec; n++) { this->npres_k[n] += this->NS_.x_lhs[n + cmesh.npc]; }
 
     return;
 }

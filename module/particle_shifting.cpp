@@ -12,12 +12,15 @@
 #include <vector>
 
 std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const Partition &part = this->grid_.part;
 
-    std::vector<double> nei(nodec, 0.0e0);
+    std::vector<double> nei(cmesh.nodec, 0.0e0);
     double eu_norm = 0.0e0;
-    for (int i = 0; i < nodec; i++) {
-        nei[i] = std::max(0.0e0, -nvol[i] + this->nvof[i]);
-        eu_norm += (nei[i] * nei[i]) * dbc[i];
+    for (int i = 0; i < cmesh.nodec; i++) {
+        nei[i] = std::max(0.0e0, -cmesh.nvol[i] + this->nvof[i]);
+        eu_norm += (nei[i] * nei[i]) * part.dbc[i];
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &eu_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -27,11 +30,11 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
     std::vector<std::array<double, 3>> geup(this->num);
-    for (int m = 0; m < nelem; m++) {
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double dsfi1 = dsf[ni][0];
@@ -70,10 +73,11 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
 
 void MaterialPoint::ConstrainPSTBoundaryDisplacement(const std::array<double, 3> &particle_coord,
                                                      std::array<double, 3> &disp_corr) const {
+    const Mesh &mesh = this->grid_.mesh;
 
     for (int i = 0; i < 3; i++) {
-        const bool near_lower_wall = particle_coord[i] - xyminw[i] < dxy[i];
-        const bool near_upper_wall = xymaxw[i] - particle_coord[i] < dxy[i];
+        const bool near_lower_wall = particle_coord[i] - mesh.xyminw[i] < mesh.dxy[i];
+        const bool near_upper_wall = mesh.xymaxw[i] - particle_coord[i] < mesh.dxy[i];
         if (near_lower_wall || near_upper_wall) { disp_corr[i] = 0.0e0; }
     }
 
@@ -81,6 +85,9 @@ void MaterialPoint::ConstrainPSTBoundaryDisplacement(const std::array<double, 3>
 }
 
 std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std::vector<std::array<double, 3>> &displ) {
+    const Mesh &mesh = this->grid_.mesh;
+    const Partition &part = this->grid_.part;
+    const RunParams &params = this->params_;
 
     std::vector<std::array<double, 3>> disp_corr;
     VectorAssign(this->num, disp_corr);
@@ -97,22 +104,22 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     // -------------------------------------------------------------------------
     // 2. Ghost particle communication
     // -------------------------------------------------------------------------
-    const std::vector<mpm_dlb::Region> &regions = g_grid.part.regions;
-    std::vector<std::array<double, 3>> peer_min(isb);
-    std::vector<std::array<double, 3>> peer_max(isb);
-    for (int i = 0; i < isb; ++i) {
-        const mpm_dlb::Region &peer = regions[naid[i]];
+    const std::vector<mpm_dlb::Region> &regions = part.regions;
+    std::vector<std::array<double, 3>> peer_min(part.isb);
+    std::vector<std::array<double, 3>> peer_max(part.isb);
+    for (int i = 0; i < part.isb; ++i) {
+        const mpm_dlb::Region &peer = regions[part.naid[i]];
         for (int d = 0; d < 3; ++d) {
-            peer_min[i][d] = xyminw[d] + dxy[d] * double(peer.elem_min[d]);
-            peer_max[i][d] = xyminw[d] + dxy[d] * double(peer.elem_max[d] + 1);
+            peer_min[i][d] = mesh.xyminw[d] + mesh.dxy[d] * double(peer.elem_min[d]);
+            peer_max[i][d] = mesh.xyminw[d] + mesh.dxy[d] * double(peer.elem_max[d] + 1);
         }
     }
 
-    std::vector<std::vector<int>> send_ids(isb);
+    std::vector<std::vector<int>> send_ids(part.isb);
     for (int ip = 0; ip < this->num; ip++) {
-        const double support = 0.5e0 * dxy[0];
+        const double support = 0.5e0 * mesh.dxy[0];
 
-        for (int i = 0; i < isb; ++i) {
+        for (int i = 0; i < part.isb; ++i) {
             bool intersects_peer = true;
             for (int d = 0; d < 3; ++d) {
                 if (this->coord[ip][d] + support <= peer_min[i][d] || //
@@ -125,11 +132,11 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
         }
     }
 
-    this->par_comm_.comm_ranks = naid;
-    this->par_comm_.nsp.assign(isb, 0);
-    this->par_comm_.nrp.assign(isb, 0);
+    this->par_comm_.comm_ranks = part.naid;
+    this->par_comm_.nsp.assign(part.isb, 0);
+    this->par_comm_.nrp.assign(part.isb, 0);
     this->par_comm_.nmps = 0;
-    for (int i = 0; i < isb; i++) {
+    for (int i = 0; i < part.isb; i++) {
         this->par_comm_.nsp[i] = static_cast<int>(send_ids[i].size());
         this->par_comm_.nmps += this->par_comm_.nsp[i];
     }
@@ -137,29 +144,29 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     VectorAssign(this->par_comm_.nmps, this->par_comm_.idmp);
 
     int idmp_pos = 0;
-    for (int i = 0; i < isb; i++) {
+    for (int i = 0; i < part.isb; i++) {
         for (int ip : send_ids[i]) { this->par_comm_.idmp[idmp_pos++] = ip; }
     }
 
-    std::vector<MPI_Request> irqs(isb);
-    std::vector<MPI_Request> irqr(isb);
+    std::vector<MPI_Request> irqs(part.isb);
+    std::vector<MPI_Request> irqr(part.isb);
     MPI_Status status;
-    for (int i = 0; i < isb; i++) {
-        int ncomid = naid[i];
+    for (int i = 0; i < part.isb; i++) {
+        int ncomid = part.naid[i];
         MPI_Isend(&this->par_comm_.nsp[i], 1, MPI_INT, ncomid, 1, MPI_COMM_WORLD, &irqs[i]);
         MPI_Irecv(&this->par_comm_.nrp[i], 1, MPI_INT, ncomid, 1, MPI_COMM_WORLD, &irqr[i]);
     }
-    for (int i = 0; i < isb; i++) {
+    for (int i = 0; i < part.isb; i++) {
         MPI_Wait(&irqs[i], &status);
         MPI_Wait(&irqr[i], &status);
     }
 
     this->par_comm_.nrps = 0;
-    for (int i = 0; i < isb; i++) { this->par_comm_.nrps += this->par_comm_.nrp[i]; }
+    for (int i = 0; i < part.isb; i++) { this->par_comm_.nrps += this->par_comm_.nrp[i]; }
 
     std::vector<std::array<double, 3>> bufs(this->par_comm_.nmps);
     int sip = 0;
-    for (int i = 0; i < isb; i++) {
+    for (int i = 0; i < part.isb; i++) {
         for (int ip = 0; ip < this->par_comm_.nsp[i]; ip++) {
             int ipsip = ip + sip;
             bufs[ipsip] = this->coord[this->par_comm_.idmp[ipsip]];
@@ -180,13 +187,13 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     std::array<double, 3> box_max{};
     std::array<int, 3> ncells{};
     for (int d = 0; d < 3; d++) {
-        bool has_lower_ghost = (xymin[d] > xyminw[d]);
-        bool has_upper_ghost = (xymax[d] < xymaxw[d]);
+        bool has_lower_ghost = (mesh.xymin[d] > mesh.xyminw[d]);
+        bool has_upper_ghost = (mesh.xymax[d] < mesh.xymaxw[d]);
 
-        box_min[d] = xymin[d] - (has_lower_ghost ? dxy[d] : 0.0e0);
-        box_max[d] = xymax[d] + (has_upper_ghost ? dxy[d] : 0.0e0);
+        box_min[d] = mesh.xymin[d] - (has_lower_ghost ? mesh.dxy[d] : 0.0e0);
+        box_max[d] = mesh.xymax[d] + (has_upper_ghost ? mesh.dxy[d] : 0.0e0);
 
-        ncells[d] = xyelem[d];
+        ncells[d] = mesh.xyelem[d];
         if (has_lower_ghost) { ncells[d]++; }
         if (has_upper_ghost) { ncells[d]++; }
         if (ncells[d] < 1) { ncells[d] = 1; }
@@ -197,9 +204,9 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     std::vector<int> next_particle(np_total, -1);
 
     auto Particle2Cell = [&](const std::array<double, 3> &x) {
-        int cx = static_cast<int>((x[0] - box_min[0]) / dxy[0]);
-        int cy = static_cast<int>((x[1] - box_min[1]) / dxy[1]);
-        int cz = static_cast<int>((x[2] - box_min[2]) / dxy[2]);
+        int cx = static_cast<int>((x[0] - box_min[0]) / mesh.dxy[0]);
+        int cy = static_cast<int>((x[1] - box_min[1]) / mesh.dxy[1]);
+        int cz = static_cast<int>((x[2] - box_min[2]) / mesh.dxy[2]);
 
         cx = std::max(0, std::min(cx, ncells[0] - 1));
         cy = std::max(0, std::min(cy, ncells[1] - 1));
@@ -223,7 +230,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     const double gamma_s = 50.0e0;
 
     for (int ip = 0; ip < this->num; ip++) {
-        const double support = 0.5e0 * dxy[0];
+        const double support = 0.5e0 * mesh.dxy[0];
         const double support_sq = support * support;
         const std::array<double, 3> &pi = this->coord[ip];
 
@@ -261,7 +268,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
                         const double ddz = pj[2] - pi[2];
                         const double norm_sq = ddx * ddx + ddy * ddy + ddz * ddz;
 
-                        if (norm_sq > mtol * mtol && norm_sq < support_sq) {
+                        if (norm_sq > params.mtol * params.mtol && norm_sq < support_sq) {
                             const double norm = std::sqrt(norm_sq);
                             const double smooth_weight = 1.0e0 - norm_sq / support_sq;
                             const double inv_norm = 1.0e0 / norm;
@@ -276,7 +283,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
             }
         }
 
-        const double scale = -dt * gamma_s * support;
+        const double scale = -params.dt * gamma_s * support;
         disp_corr[ip][0] = scale * sum[0];
         disp_corr[ip][1] = scale * sum[1];
         disp_corr[ip][2] = scale * sum[2];

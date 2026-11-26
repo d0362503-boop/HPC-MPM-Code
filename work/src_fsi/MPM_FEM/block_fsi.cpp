@@ -375,10 +375,11 @@ double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
 }
 
 std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept {
+    const RunParams &params = this->params_;
 
-    double fx = bb[0] * ts.facl;
-    double fy = bb[1] * ts.facl;
-    double fz = bb[2] * ts.facl;
+    double fx = params.bb[0] * ts.facl;
+    double fy = params.bb[1] * ts.facl;
+    double fz = params.bb[2] * ts.facl;
 
     std::array<double, 3> nfext;
     nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);
@@ -389,18 +390,19 @@ std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi, const 
 }
 
 void FSISolid::AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec; n++) {
-        mat.b_rhs[n + offsets[0]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nuc];
-        mat.b_rhs[n + offsets[1]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nvc];
-        mat.b_rhs[n + offsets[2]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nwc];
+    for (int n = 0; n < cmesh.nodec; n++) {
+        mat.b_rhs[n + offsets[0]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + cmesh.nuc];
+        mat.b_rhs[n + offsets[1]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + cmesh.nvc];
+        mat.b_rhs[n + offsets[2]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + cmesh.nwc];
     }
 
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         // --- FSI force ---
-        mat.b_rhs[n + offsets[0]] -= this->fsi_.nfsi_force[n + nuc];
-        mat.b_rhs[n + offsets[1]] -= this->fsi_.nfsi_force[n + nvc];
-        mat.b_rhs[n + offsets[2]] -= this->fsi_.nfsi_force[n + nwc];
+        mat.b_rhs[n + offsets[0]] -= this->fsi_.nfsi_force[n + cmesh.nuc];
+        mat.b_rhs[n + offsets[1]] -= this->fsi_.nfsi_force[n + cmesh.nvc];
+        mat.b_rhs[n + offsets[2]] -= this->fsi_.nfsi_force[n + cmesh.nwc];
     }
 
     return;

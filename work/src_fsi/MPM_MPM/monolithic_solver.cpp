@@ -91,18 +91,20 @@ void MPMMPMMonolithicFSI::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 }
 
 int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
     this->BCResidualSet(this->fsi_sys.b_rhs);
     std::vector<double> residual = this->fsi_sys.b_rhs;
 
     // Solve a new correction.
-    VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
+    VectorAssign(cmesh.nodec * this->fsi_sys.ndof, this->fsi_sys.x_lhs);
     this->ScaleSystem();
 
     bool has_contact = false;
-    for (int n = 0; n < nodec; n++) {
-        if (this->fluid_.nmass[n] > mtol && //
-            this->solid_.nmass[n] > mtol && //
+    for (int n = 0; n < cmesh.nodec; n++) {
+        if (this->fluid_.nmass[n] > params.mtol && //
+            this->solid_.nmass[n] > params.mtol && //
             this->nlm_lump[n] > 0.0e0) {
             has_contact = true;
             break;
@@ -120,72 +122,76 @@ int MPMMPMMonolithicFSI::SolveSystem(int NR_it) {
     KSPGetConvergedReason(this->fsi_sys.ksp, &reason);
     // if (reason < 0) { MPI_Abort(MPI_COMM_WORLD, 1); }
 
-    for (int n = 0; n < nodec * this->fsi_sys.ndof; n++) { this->fsi_sys.x_lhs[n] *= this->column_scale[n]; }
+    for (int n = 0; n < cmesh.nodec * this->fsi_sys.ndof; n++) { this->fsi_sys.x_lhs[n] *= this->column_scale[n]; }
     this->fsi_sys.b_rhs.swap(residual);
 
     return iter;
 }
 
 void MPMMPMMonolithicFSI::BuildActiveDOFs() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
-    this->fixed_dof.assign(nodec * this->fsi_sys.ndof, 0);
-    for (int n = 0; n < nodec; n++) {
-        const bool fluid_active = this->fluid_.nmass[n] > mtol;
-        const bool solid_active = this->solid_.nmass[n] > mtol;
-        for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * nodec] = !fluid_active; }
-        for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = !solid_active; }
+    this->fixed_dof.assign(cmesh.nodec * this->fsi_sys.ndof, 0);
+    for (int n = 0; n < cmesh.nodec; n++) {
+        const bool fluid_active = this->fluid_.nmass[n] > params.mtol;
+        const bool solid_active = this->solid_.nmass[n] > params.mtol;
+        for (int d = 0; d < 4; d++) { this->fixed_dof[n + d * cmesh.nodec] = !fluid_active; }
+        for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * cmesh.nodec] = !solid_active; }
         for (int d = 7; d < this->fsi_sys.ndof; d++) {
-            this->fixed_dof[n + d * nodec] = !fluid_active || !solid_active || this->nlm_lump[n] <= 0.0e0;
+            this->fixed_dof[n + d * cmesh.nodec] = !fluid_active || !solid_active || this->nlm_lump[n] <= 0.0e0;
         }
     }
 
     const BoundaryCondition *bc[] = {&this->fluid_.ubc, &this->fluid_.vbc, &this->fluid_.wbc, &this->fluid_.pbc,
                                      &this->solid_.ubc, &this->solid_.vbc, &this->solid_.wbc};
     for (int d = 0; d < 7; d++) {
-        for (int i = 0; i < bc[d]->ibc; i++) { this->fixed_dof[bc[d]->nbc[i] + d * nodec] = 1; }
+        for (int i = 0; i < bc[d]->ibc; i++) { this->fixed_dof[bc[d]->nbc[i] + d * cmesh.nodec] = 1; }
     }
 
     for (int i = 0; i < this->solid_.rigid_bc.ibc; i++) {
         const int n = this->solid_.rigid_bc.nbc[i];
-        for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * nodec] = 1; }
+        for (int d = 4; d < 7; d++) { this->fixed_dof[n + d * cmesh.nodec] = 1; }
     }
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         for (int d = 0; d < 3; d++) {
-            if (this->fixed_dof[n + d * nodec] && this->fixed_dof[n + (d + 4) * nodec]) {
-                this->fixed_dof[n + (d + 7) * nodec] = 1;
+            if (this->fixed_dof[n + d * cmesh.nodec] && this->fixed_dof[n + (d + 4) * cmesh.nodec]) {
+                this->fixed_dof[n + (d + 7) * cmesh.nodec] = 1;
             }
         }
     }
 }
 
 void MPMMPMMonolithicFSI::BuildPetscBCList(CrsMat &mat) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     for (int n : mat.owned_natural_ids) {
         for (int d = 0; d < this->fsi_sys.ndof; d++) {
-            if (this->fixed_dof[n + d * nodec]) { mat.petsc_bc_gids.push_back(mat.natural_var_gids[n + d * nodec]); }
+            if (this->fixed_dof[n + d * cmesh.nodec]) { mat.petsc_bc_gids.push_back(mat.natural_var_gids[n + d * cmesh.nodec]); }
         }
     }
 }
 
 void MPMMPMMonolithicFSI::ScaleSystem() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    this->fsi_sys.adiag.assign(nodec * this->fsi_sys.ndof, 0.0);
+    this->fsi_sys.adiag.assign(cmesh.nodec * this->fsi_sys.ndof, 0.0);
     this->fsi_sys.ExtractDiagonal();
 
     // Reuse nodal-mass activity mask.
-    this->column_scale.assign(nodec * this->fsi_sys.ndof, 0.0);
-    std::vector<double> row_scale(nodec * this->fsi_sys.ndof, 0.0);
+    this->column_scale.assign(cmesh.nodec * this->fsi_sys.ndof, 0.0);
+    std::vector<double> row_scale(cmesh.nodec * this->fsi_sys.ndof, 0.0);
 
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         for (int d = 0; d < 7; d++) {
-            const int i = n + d * nodec;
+            const int i = n + d * cmesh.nodec;
             if (!this->fixed_dof[i]) { row_scale[i] = this->column_scale[i] = 1.0 / std::sqrt(std::abs(this->fsi_sys.adiag[i])); }
         }
         for (int d = 0; d < 3; d++) {
-            const int i = n + (d + 7) * nodec;
+            const int i = n + (d + 7) * cmesh.nodec;
             if (this->fixed_dof[i]) continue;
-            const double df = this->column_scale[n + d * nodec] * this->column_scale[n + d * nodec];
-            const double ds = this->column_scale[n + (d + 4) * nodec] * this->column_scale[n + (d + 4) * nodec];
+            const double df = this->column_scale[n + d * cmesh.nodec] * this->column_scale[n + d * cmesh.nodec];
+            const double ds = this->column_scale[n + (d + 4) * cmesh.nodec] * this->column_scale[n + (d + 4) * cmesh.nodec];
             const double af = this->fluid_.implicit_.integrator_.alpha_f;
             const double as = this->solid_.implicit_.integrator_.alpha_f;
             const double cf = this->fluid_.implicit_.integrator_.dv_du;
@@ -196,16 +202,16 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
     }
 
     for (int b = 0; b < this->fsi_sys.num_block; b++) {
-        for (int n = 0; n < nodec; n++) {
+        for (int n = 0; n < cmesh.nodec; n++) {
             for (int j = this->fsi_sys.matrow[n]; j < this->fsi_sys.matrow[n + 1]; j++) {
                 this->fsi_sys.amat[j + this->fsi_sys.block_id[b]] *=
-                    row_scale[n + this->fsi_sys.block_row[b] * nodec] *
-                    this->column_scale[this->fsi_sys.matcolid[j] + this->fsi_sys.block_col[b] * nodec];
+                    row_scale[n + this->fsi_sys.block_row[b] * cmesh.nodec] *
+                    this->column_scale[this->fsi_sys.matcolid[j] + this->fsi_sys.block_col[b] * cmesh.nodec];
             }
         }
     }
 
-    for (int n = 0; n < nodec * this->fsi_sys.ndof; n++) {
+    for (int n = 0; n < cmesh.nodec * this->fsi_sys.ndof; n++) {
         this->fsi_sys.b_rhs[n] *= row_scale[n];
         // Keep zero correction initial guess.
         this->fsi_sys.x_lhs[n] = this->fixed_dof[n] ? 0.0 : this->fsi_sys.x_lhs[n] / this->column_scale[n];
@@ -213,8 +219,9 @@ void MPMMPMMonolithicFSI::ScaleSystem() {
 }
 
 void MPMMPMMonolithicFSI::BCResidualSet(std::vector<double> &rr) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec * this->fsi_sys.ndof; n++) {
+    for (int n = 0; n < cmesh.nodec * this->fsi_sys.ndof; n++) {
         if (this->fixed_dof[n]) { rr[n] = 0.0; }
     }
 }

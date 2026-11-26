@@ -18,6 +18,19 @@ struct Region;
 
 class MaterialPoint {
   public:
+    const Grid &grid_;        // rank grid (read-only)
+    const RunParams &params_; // run parameters
+
+    /** @brief Transitional: bind to the global grid and run parameters until all owners pass them. */
+    MaterialPoint() : grid_(g_grid), params_(g_params) {}
+
+    /**
+     * @brief Bind the material-point set to this rank's grid and the run parameters.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run (time step, tolerances, body force).
+     */
+    MaterialPoint(const Grid &grid, const RunParams &params) : grid_(grid), params_(params) {}
+
     // --- MPI part ---
     ParticleCommunication par_comm_;
     bool do_dlb = false; // enable dynamic load balance
@@ -53,8 +66,10 @@ class MaterialPoint {
      * Samples particles, repartitions MPI regions, redistributes particle data,
      * and rebuilds mesh, control-point, nodal-volume, and BC data.  Time-step
      * scheduling and solver-system rebuilds remain the responsibility of the caller.
+     * @param grid Writable view of the same grid this object observes through `grid_`;
+     *             it is repartitioned in place (aborts if it is a different object).
      */
-    virtual void ApplyDLB();
+    virtual void ApplyDLB(Grid &grid);
 
     /**
      * @brief Migrate all physics-specific particle state using the current particle communication plan.

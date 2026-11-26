@@ -109,10 +109,13 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
         return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2)};
     }
 
-    /** @brief Apply DLB and rebuild the implicit-solid matrix structure. */
-    void ApplyDLB() override {
+    /**
+     * @brief Apply DLB and rebuild the implicit-solid matrix structure.
+     * @param grid Writable view of the grid this object observes; repartitioned in place.
+     */
+    void ApplyDLB(Grid &grid) override {
 
-        MaterialPoint::ApplyDLB();
+        MaterialPoint::ApplyDLB(grid);
 
         this->SM_.BuildCrsMat(9);
 

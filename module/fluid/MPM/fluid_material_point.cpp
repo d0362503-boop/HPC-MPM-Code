@@ -53,8 +53,9 @@ void StabilizedMPM::RebuildBC() {
 }
 
 void StabilizedMPM::MoveParticle() {
+    const Partition &part = this->grid_.part;
 
-    this->DetermineParticleRank(g_grid.part.regions);
+    this->DetermineParticleRank(part.regions);
 
     this->InflowParticles();
 
