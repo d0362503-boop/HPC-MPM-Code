@@ -17,7 +17,7 @@
 #include <numeric>
 #include <vector>
 
-void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
+void Anderson_relaxation_M2(const Grid &grid, int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
                             std::vector<double> &var_older, std::vector<double> &res_old, std::vector<double> &res_older,
                             BoundaryCondition &intf_bc) {
 
@@ -25,9 +25,9 @@ void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var,
     std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
         int nid = intf_bc.nbc[i];
-        var_new[i + 0 * num] = nodal_var[nid + nuc];
-        var_new[i + 1 * num] = nodal_var[nid + nvc];
-        var_new[i + 2 * num] = nodal_var[nid + nwc];
+        var_new[i + 0 * num] = nodal_var[nid + grid.cmesh.nuc];
+        var_new[i + 1 * num] = nodal_var[nid + grid.cmesh.nvc];
+        var_new[i + 2 * num] = nodal_var[nid + grid.cmesh.nwc];
 
         res_new[i + 0 * num] = var_new[i + 0 * num] - intf_bc.fbc[i + 0 * num];
         res_new[i + 1 * num] = var_new[i + 1 * num] - intf_bc.fbc[i + 1 * num];
@@ -49,9 +49,9 @@ void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var,
         for (int d = 0; d < 3; ++d) {
             int idx = i + d * num;
             double w = 0.0e0;
-            if (d == 0) w = dbc[nid + nuc];
-            if (d == 1) w = dbc[nid + nvc];
-            if (d == 2) w = dbc[nid + nwc];
+            if (d == 0) w = grid.part.dbc[nid + grid.cmesh.nuc];
+            if (d == 1) w = grid.part.dbc[nid + grid.cmesh.nvc];
+            if (d == 2) w = grid.part.dbc[nid + grid.cmesh.nwc];
 
             M[0] += F0[idx] * F0[idx] * w; // M[0][0]
             M[1] += F0[idx] * F1[idx] * w; // M[0][1]
@@ -88,16 +88,16 @@ void Anderson_relaxation_M2(int iteration, const std::vector<double> &nodal_var,
     return;
 }
 
-void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const std::vector<double> &nodal_var,
+void Anderson_relaxation_M1(const Grid &grid, int iteration, std::vector<double> &var_old, const std::vector<double> &nodal_var,
                             std::vector<double> &res_old, BoundaryCondition &intf_bc) {
 
     int num = intf_bc.ibc;
     std::vector<double> var_new(num * 3, 0.0e0), res_new(num * 3, 0.0e0);
     for (int i = 0; i < num; i++) {
         int nid = intf_bc.nbc[i];
-        var_new[i + 0 * num] = nodal_var[nid + nuc];
-        var_new[i + 1 * num] = nodal_var[nid + nvc];
-        var_new[i + 2 * num] = nodal_var[nid + nwc];
+        var_new[i + 0 * num] = nodal_var[nid + grid.cmesh.nuc];
+        var_new[i + 1 * num] = nodal_var[nid + grid.cmesh.nvc];
+        var_new[i + 2 * num] = nodal_var[nid + grid.cmesh.nwc];
 
         res_new[i + 0 * num] = var_new[i + 0 * num] - intf_bc.fbc[i + 0 * num];
         res_new[i + 1 * num] = var_new[i + 1 * num] - intf_bc.fbc[i + 1 * num];
@@ -114,9 +114,9 @@ void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const s
         for (int d = 0; d < 3; ++d) {
             int idx = i + d * num;
             double w = 0.0e0;
-            if (d == 0) w = dbc[nid + nuc];
-            if (d == 1) w = dbc[nid + nvc];
-            if (d == 2) w = dbc[nid + nwc];
+            if (d == 0) w = grid.part.dbc[nid + grid.cmesh.nuc];
+            if (d == 1) w = grid.part.dbc[nid + grid.cmesh.nvc];
+            if (d == 2) w = grid.part.dbc[nid + grid.cmesh.nwc];
 
             M += F0[idx] * F0[idx] * w;
             rhs += F0[idx] * res_new[idx] * w;
@@ -138,7 +138,7 @@ void Anderson_relaxation_M1(int iteration, std::vector<double> &var_old, const s
     return;
 }
 
-void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<double> &nodal_var, std::vector<double> &res_old,
+void Aitken_relaxation(const Grid &grid, int iteration, double &relax_coef, const std::vector<double> &nodal_var, std::vector<double> &res_old,
                        BoundaryCondition &intf_bc) {
 
     const double relax_coef_min = 0.05e0;
@@ -149,9 +149,9 @@ void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<doub
 
     for (int i = 0; i < num; i++) {
         int nid = intf_bc.nbc[i];
-        res_new[i + 0 * num] = nodal_var[nid + nuc] - intf_bc.fbc[i + 0 * num];
-        res_new[i + 1 * num] = nodal_var[nid + nvc] - intf_bc.fbc[i + 1 * num];
-        res_new[i + 2 * num] = nodal_var[nid + nwc] - intf_bc.fbc[i + 2 * num];
+        res_new[i + 0 * num] = nodal_var[nid + grid.cmesh.nuc] - intf_bc.fbc[i + 0 * num];
+        res_new[i + 1 * num] = nodal_var[nid + grid.cmesh.nvc] - intf_bc.fbc[i + 1 * num];
+        res_new[i + 2 * num] = nodal_var[nid + grid.cmesh.nwc] - intf_bc.fbc[i + 2 * num];
     }
 
     double nume = 0.0e0, deno = 0.0e0;
@@ -162,13 +162,13 @@ void Aitken_relaxation(int iteration, double &relax_coef, const std::vector<doub
         double dr2 = res_new[i + 1 * num] - res_old[i + 1 * num];
         double dr3 = res_new[i + 2 * num] - res_old[i + 2 * num];
         // --- ∑ r^k_i · Δr_i ---
-        nume += (res_old[i + 0 * num] * dr1) * dbc[nid + nuc]   //
-                + (res_old[i + 1 * num] * dr2) * dbc[nid + nvc] //
-                + (res_old[i + 2 * num] * dr3) * dbc[nid + nwc];
+        nume += (res_old[i + 0 * num] * dr1) * grid.part.dbc[nid + grid.cmesh.nuc]   //
+                + (res_old[i + 1 * num] * dr2) * grid.part.dbc[nid + grid.cmesh.nvc] //
+                + (res_old[i + 2 * num] * dr3) * grid.part.dbc[nid + grid.cmesh.nwc];
         // --- ∑ |Δr_i|^2 ---
-        deno += pow(dr1, 2) * dbc[nid + nuc]   //
-                + pow(dr2, 2) * dbc[nid + nvc] //
-                + pow(dr3, 2) * dbc[nid + nwc];
+        deno += pow(dr1, 2) * grid.part.dbc[nid + grid.cmesh.nuc]   //
+                + pow(dr2, 2) * grid.part.dbc[nid + grid.cmesh.nvc] //
+                + pow(dr3, 2) * grid.part.dbc[nid + grid.cmesh.nwc];
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &nume, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);

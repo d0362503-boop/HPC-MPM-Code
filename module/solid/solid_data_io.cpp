@@ -18,9 +18,9 @@ void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
     this->wbc.BCInput(infile);
 
     if (this->do_dlb) {
-        this->ubc.CaptureGlobalControlPointBC();
-        this->vbc.CaptureGlobalControlPointBC();
-        this->wbc.CaptureGlobalControlPointBC();
+        this->ubc.CaptureGlobalControlPointBC(this->grid_);
+        this->vbc.CaptureGlobalControlPointBC(this->grid_);
+        this->wbc.CaptureGlobalControlPointBC(this->grid_);
     }
 
     return;

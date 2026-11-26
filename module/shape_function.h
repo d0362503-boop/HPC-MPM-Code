@@ -9,15 +9,13 @@
 
 /**
  * @brief Evaluate shape functions and gradients at point `xyg` for element `m`.
- * @param m        Element index.
+ * @param grid     Grid of this rank (mesh window/spacing and B-spline orders are used).
+ * @param m        Rank-local element index.
  * @param xyg      Physical coordinates of the query point.
- * @param idimc    Shape-function order in each direction.
- * @param xynodec  Control-point count in each direction.
- * @param nc       Output node IDs of the supporting element nodes.
- * @param nenode   Output number of supporting nodes.
+ * @param nc       Output control-point IDs supporting the element.
+ * @param nenode   Output number of supporting control points.
  * @param sf       Output shape-function values.
  * @param dsf      Output shape-function gradients.
  */
-void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int, 3> &idimc,
-            const std::array<int, 3> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
-            std::vector<std::array<double, 3>> &dsf);
+void MakeSF(const Grid &grid, const int m, const std::array<double, 3> &xyg, std::vector<int> &nc, int &nenode,
+            std::vector<double> &sf, std::vector<std::array<double, 3>> &dsf);

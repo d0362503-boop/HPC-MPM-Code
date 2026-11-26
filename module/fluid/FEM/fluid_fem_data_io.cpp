@@ -125,7 +125,7 @@ void StabilizedFEM::Cp2NodeVTK() {
             this->nvel_vtk[id + mesh.nu] = 0.0e0;
             this->nvel_vtk[id + mesh.nv] = 0.0e0;
             this->nvel_vtk[id + mesh.nw] = 0.0e0;
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];

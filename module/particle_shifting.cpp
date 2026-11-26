@@ -34,7 +34,7 @@ std::vector<std::array<double, 3>> MaterialPoint::DeltaCorrectionPST() const {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double dsfi1 = dsf[ni][0];

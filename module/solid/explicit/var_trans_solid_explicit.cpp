@@ -36,7 +36,7 @@ void ExplicitSolidMPM::Particle2Node(const TimeState &ts) {
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
             std::array<double, 6> sts = this->stress[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -87,7 +87,7 @@ void ExplicitSolidMPM::DoMUSL(const TimeState &ts) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -142,7 +142,7 @@ void ExplicitSolidMPM::G2PVelocity() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -183,7 +183,7 @@ void ExplicitSolidMPM::UpdateDeformationGradient() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, 1.0e0, ncm, sf, dsf, this->delta_def_grad, this->def_grad);
             det_delta_def_grad[pid] = DetMat3(this->delta_def_grad[pid]);
@@ -199,7 +199,6 @@ void ExplicitSolidMPM::UpdateDeformationGradient() {
 
 void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
     const Mesh &mesh = this->grid_.mesh;
-    const ControlMesh &cmesh = this->grid_.cmesh;
 
     int nenode;
     std::vector<int> ncm;
@@ -216,7 +215,7 @@ void ExplicitSolidMPM::UpdateParticlePositionAndStress() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             // 1. Position update
             for (int ni = 0; ni < nenode; ni++) {

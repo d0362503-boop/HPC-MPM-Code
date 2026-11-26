@@ -165,7 +165,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, af, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 

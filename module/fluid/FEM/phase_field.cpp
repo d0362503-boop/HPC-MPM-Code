@@ -36,7 +36,7 @@ void StabilizedFEM::Particle2NodePhi() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];

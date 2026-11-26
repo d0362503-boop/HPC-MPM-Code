@@ -25,13 +25,13 @@ void StabilizedMPM::InputBCData(std::ifstream &infile) {
     this->winfbc.BCInput(infile, false);
 
     if (this->do_dlb) {
-        this->ubc.CaptureGlobalControlPointBC();
-        this->vbc.CaptureGlobalControlPointBC();
-        this->wbc.CaptureGlobalControlPointBC();
-        this->pbc.CaptureGlobalControlPointBC();
-        this->uinfbc.CaptureGlobalElementBC();
-        this->vinfbc.CaptureGlobalElementBC();
-        this->winfbc.CaptureGlobalElementBC();
+        this->ubc.CaptureGlobalControlPointBC(this->grid_);
+        this->vbc.CaptureGlobalControlPointBC(this->grid_);
+        this->wbc.CaptureGlobalControlPointBC(this->grid_);
+        this->pbc.CaptureGlobalControlPointBC(this->grid_);
+        this->uinfbc.CaptureGlobalElementBC(this->grid_.mesh);
+        this->vinfbc.CaptureGlobalElementBC(this->grid_.mesh);
+        this->winfbc.CaptureGlobalElementBC(this->grid_.mesh);
     }
 
     this->InitializeInflowBC();

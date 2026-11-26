@@ -33,7 +33,7 @@ void StabilizedMPM::Particle2Node(const TimeState &ts) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -102,7 +102,7 @@ void StabilizedMPM::Node2Particle(const TimeState &ts) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {

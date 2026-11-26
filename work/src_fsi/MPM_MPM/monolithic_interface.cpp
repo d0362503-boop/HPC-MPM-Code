@@ -40,7 +40,7 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
                 xyp[1] = xye[1] + dec2p[iy][1];
                 for (int ix = 0; ix < params.npxye[0]; ix++) {
                     xyp[0] = xye[0] + dec2p[ix][0];
-                    MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
                     double phi_f = 0.0e0, phi_s = 0.0e0;
                     std::array<double, 3> grad_phi_f{}, grad_phi_s{};
@@ -96,7 +96,7 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
         int cell;
         std::array<double, 3> xyp = this->solid_.coord[pid];
         if (!LocateLocalElement(mesh, xyp, cell)) continue;
-        MakeSF(cell, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+        MakeSF(this->grid_, cell, xyp, ncm, nenode, sf, dsf);
         for (int ni = 0; ni < nenode; ni++) {
             const int nid = ncm[ni];
             const double sfi = sf[ni];
@@ -107,7 +107,7 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
     NodeVarComm(final_phi, 0);
 
     for (int n = 0; n < cmesh.nodec; ++n) { final_phi[n] = std::clamp(final_phi[n] / cmesh.nvol[n], 0.0, 1.0); }
-    const interface_geometry::InterfaceSDF interface(std::move(final_phi));
+    const interface_geometry::InterfaceSDF interface(this->grid_, std::move(final_phi));
 
     const auto &regions = part.regions;
     std::vector<std::vector<int>> send_ids(nprocs);

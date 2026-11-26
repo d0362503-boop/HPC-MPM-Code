@@ -22,14 +22,18 @@ class MaterialPoint {
     const RunParams &params_; // run parameters
 
     /** @brief Transitional: bind to the global grid and run parameters until all owners pass them. */
-    MaterialPoint() : grid_(g_grid), params_(g_params) {}
+    MaterialPoint()
+        : grid_(g_grid), params_(g_params), flip(g_grid.cmesh, g_params), pic(g_grid.cmesh), apic(g_grid.cmesh),
+          tpic(g_grid.cmesh) {}
 
     /**
      * @brief Bind the material-point set to this rank's grid and the run parameters.
      * @param grid   Grid of this rank (background mesh, control points and partition).
      * @param params Run parameters of this run (time step, tolerances, body force).
      */
-    MaterialPoint(const Grid &grid, const RunParams &params) : grid_(grid), params_(params) {}
+    MaterialPoint(const Grid &grid, const RunParams &params)
+        : grid_(grid), params_(params), flip(grid.cmesh, params), pic(grid.cmesh), apic(grid.cmesh),
+          tpic(grid.cmesh) {}
 
     // --- MPI part ---
     ParticleCommunication par_comm_;

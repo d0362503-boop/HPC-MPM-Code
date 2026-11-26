@@ -133,7 +133,6 @@ void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp
 
 void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {
     const Mesh &mesh = this->grid_.mesh;
-    const ControlMesh &cmesh = this->grid_.cmesh;
 
     constexpr int offset_layer = 1;
 
@@ -179,7 +178,7 @@ void StabilizedMPM::GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &if
                     ifp.coord[ifp.num][dir] -= double(sign) * mesh.dxy[dir] * offset_coeff[p];
 
                     std::array<double, 3> xyp = ifp.coord[ifp.num];
-                    MakeSF(ie, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(this->grid_, ie, xyp, ncm, nenode, sf, dsf);
 
                     std::array<std::array<double, 3>, 3> ADp{};
                     for (int ni = 0; ni < nenode; ni++) {

@@ -5,16 +5,18 @@
 #include <array>
 #include <vector>
 
-void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int, 3> &idimc,
-            const std::array<int, 3> &xynodec, std::vector<int> &nc, int &nenode, std::vector<double> &sf,
-            std::vector<std::array<double, 3>> &dsf) {
+void MakeSF(const Grid &grid, const int m, const std::array<double, 3> &xyg, std::vector<int> &nc, int &nenode,
+            std::vector<double> &sf, std::vector<std::array<double, 3>> &dsf) {
+    const Mesh &mesh = grid.mesh;
+    const std::array<int, 3> &idimc = grid.cmesh.idimc;
+    const std::array<int, 3> &xynodec = grid.cmesh.xynodec;
 
     const int max_nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);
     int nxc = xynodec[0];
     int nyc = xynodec[1];
     int nzc = xynodec[2];
 
-    const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
+    const std::array<int, 3> ijk = IndexToIJK(m, mesh.xyelem);
 
     nc.resize(max_nenode);
     sf.resize(max_nenode);
@@ -32,10 +34,10 @@ void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int,
 
                 std::array<double, 3> sfxy, dsfxy;
                 for (int ii = 0; ii < 3; ++ii) {
-                    double dxi = dxy[ii];
+                    double dxi = mesh.dxy[ii];
                     // ----- Linear shape function -----
                     if (idimc[ii] == 1) {
-                        double xy = xymin[ii] + dxi * double(ixyn[ii]);
+                        double xy = mesh.xymin[ii] + dxi * double(ixyn[ii]);
                         double dxnpi = xyg[ii] - xy;
                         double xi = abs(dxnpi) / dxi;
                         sfxy[ii] = 1.0e0 - xi;
@@ -47,8 +49,8 @@ void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int,
                     }
                     // ----- Second order B-spline shape function -----
                     else if (idimc[ii] == 2) {
-                        int ncxy = aelemmin[ii] + ixyn[ii];
-                        double xy = xymin[ii] + dxi * double(ixyn[ii] - 2);
+                        int ncxy = mesh.aelemmin[ii] + ixyn[ii];
+                        double xy = mesh.xymin[ii] + dxi * double(ixyn[ii] - 2);
                         double dxnpi = xyg[ii] - xy;
                         double dxh = dxnpi / dxi;
                         double s1, s2, s3, d1, d2;
@@ -74,13 +76,13 @@ void MakeSF(const int m, const std::array<double, 3> &xyg, const std::array<int,
                                 d1 = 1.0e0;
                                 d2 = -2.0e0;
                             }
-                        } else if (ncxy == xynodecw[ii] - 1) {
+                        } else if (ncxy == grid.cmesh.xynodecw[ii] - 1) {
                             s1 = 1.0e0;
                             s2 = 0.0e0;
                             s3 = 0.0e0;
                             d1 = 2.0e0;
                             d2 = 0.0e0;
-                        } else if (ncxy == xynodecw[ii] - 2) {
+                        } else if (ncxy == grid.cmesh.xynodecw[ii] - 2) {
                             if (dxh <= 1.0e0) {
                                 s1 = 0.5e0;
                                 s2 = 0.0e0;

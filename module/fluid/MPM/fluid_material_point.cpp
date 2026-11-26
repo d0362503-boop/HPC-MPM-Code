@@ -38,13 +38,13 @@ void StabilizedMPM::InitializePointData() {
 
 void StabilizedMPM::RebuildBC() {
 
-    this->ubc.RebuildLocalControlPointBC();
-    this->vbc.RebuildLocalControlPointBC();
-    this->wbc.RebuildLocalControlPointBC();
-    this->pbc.RebuildLocalControlPointBC();
-    this->uinfbc.RebuildLocalElementBC();
-    this->vinfbc.RebuildLocalElementBC();
-    this->winfbc.RebuildLocalElementBC();
+    this->ubc.RebuildLocalControlPointBC(this->grid_);
+    this->vbc.RebuildLocalControlPointBC(this->grid_);
+    this->wbc.RebuildLocalControlPointBC(this->grid_);
+    this->pbc.RebuildLocalControlPointBC(this->grid_);
+    this->uinfbc.RebuildLocalElementBC(this->grid_.mesh);
+    this->vinfbc.RebuildLocalElementBC(this->grid_.mesh);
+    this->winfbc.RebuildLocalElementBC(this->grid_.mesh);
 
     this->InitializeInflowBC();
     this->infbc_isfilled = false;

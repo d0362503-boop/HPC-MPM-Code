@@ -61,6 +61,9 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
 
 class MPMFEMBlockFSI {
   public:
+    const Grid &grid_;        // rank grid shared by both sub-solvers
+    const RunParams &params_; // run parameters
+
     BoundaryCondition fsi_intf;
 
     // --- Sub-solvers (constructed with reference to this coordinator) ---
@@ -77,7 +80,7 @@ class MPMFEMBlockFSI {
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
     // -----------------------------------------------------------------
-    MPMFEMBlockFSI() : fluid_(*this), solid_(*this) {}
+    MPMFEMBlockFSI() : grid_(g_grid), params_(g_params), fluid_(*this), solid_(*this) {}
 
     std::vector<double> added_mass;
     std::vector<double> nfsi_force;

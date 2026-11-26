@@ -138,7 +138,7 @@ void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
 
         const std::array<double, 3> xye = ElementCenter(mesh, m);
 
-        MakeSF(m, xye, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+        MakeSF(this->grid_, m, xye, ncm, nenode, sf, dsf);
 
         double uu = 0.0e0, vv = 0.0e0, ww = 0.0e0;
         for (int ni = 0; ni < nenode; ni++) {
@@ -231,7 +231,7 @@ void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_v
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             double phi_k = 0.0e0;
             std::array<double, 3> adv_vel_k{};

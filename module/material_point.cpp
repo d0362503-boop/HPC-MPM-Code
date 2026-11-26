@@ -89,7 +89,7 @@ void MaterialPoint::CalNodalUnitNormal() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double dsfi1 = dsf[ni][0];
@@ -137,7 +137,7 @@ void MaterialPoint::CalPointUnitNormal(std::vector<std::array<double, 3>> &parti
     for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
-            MakeSF(m, this->coord[pid], cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, this->coord[pid], ncm, nenode, sf, dsf);
 
             for (int ni = 0; ni < nenode; ni++) {
                 const int nid = ncm[ni];

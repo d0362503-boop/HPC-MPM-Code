@@ -3,6 +3,8 @@
 #include <array>
 #include <vector>
 
+struct Grid;
+
 namespace interface_geometry {
 
 /**
@@ -13,9 +15,10 @@ class InterfaceSDF {
   public:
     /**
      * @brief Store the solid phase coefficients in rank-local control-point order.
+     * @param grid Grid of this rank the coefficients live on; must outlive this object.
      * @param solid_phi Final solid volume fractions, indexed with x varying fastest.
      */
-    explicit InterfaceSDF(std::vector<double> solid_phi);
+    InterfaceSDF(const Grid &grid, std::vector<double> solid_phi);
 
     /**
      * @brief Evaluate the original phase field and its physical spatial gradient.
@@ -35,7 +38,8 @@ class InterfaceSDF {
     bool FindSurfacePoint(const std::array<double, 3> &point, std::array<double, 3> &surface_point) const;
 
   private:
-    std::vector<double> solid_phi_;
+    const Grid &grid_;              // rank grid of the coefficients
+    std::vector<double> solid_phi_; // solid phase coefficients
 };
 
 } // namespace interface_geometry

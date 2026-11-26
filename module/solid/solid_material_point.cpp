@@ -49,9 +49,9 @@ void SolidMaterialPointBase::InitializePointData() {
 
 void SolidMaterialPointBase::RebuildBC() {
 
-    this->ubc.RebuildLocalControlPointBC();
-    this->vbc.RebuildLocalControlPointBC();
-    this->wbc.RebuildLocalControlPointBC();
+    this->ubc.RebuildLocalControlPointBC(this->grid_);
+    this->vbc.RebuildLocalControlPointBC(this->grid_);
+    this->wbc.RebuildLocalControlPointBC(this->grid_);
 
     return;
 }
@@ -134,7 +134,7 @@ void SolidMaterialPointBase::DetermineRigidBC() {
         while (pid != -1) {
             if (iprop[this->matid[pid]] == -1) {
                 std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-                MakeSF(m, xyp, cmesh.idimc, cmesh.xynodec, ncm, nenode, sf, dsf);
+                MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
                 for (int ni = 0; ni < nenode; ni++) {
                     int nid = ncm[ni];
                     double sfi = sf[ni];
