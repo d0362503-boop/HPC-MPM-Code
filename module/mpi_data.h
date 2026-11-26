@@ -1,5 +1,6 @@
 #pragma once
 
+#include "module/DLB/mpm_dlb.h"
 #include "module/dataset.h"
 #include <array>
 #include <iomanip>
@@ -10,10 +11,18 @@
 #include <vector>
 
 inline int nprocs, myrank;
-inline int isb, isubc, isubl;
-inline std::vector<int> naid, nsbc, nsubc, nsbl, nsubl;
-inline std::array<int, 3> nxyr{};
-inline std::vector<double> dbc, dbl;
+
+/// Rank topology and overlap (ghost) bookkeeping of this rank.
+struct Partition {
+    std::array<int, 3> nxyr{};            // ranks per direction
+    int isb = 0;                          // overlapping neighbour ranks
+    int isubc = 0, isubl = 0;             // shared control points / nodes in total
+    std::vector<int> naid;                // neighbour rank ids
+    std::vector<int> nsbc, nsubc;         // shared control points per rank / ids
+    std::vector<int> nsbl, nsubl;         // shared nodes per rank / ids
+    std::vector<double> dbc, dbl;         // control-point / node overlap weights
+    std::vector<mpm_dlb::Region> regions; // element regions of all ranks
+};
 
 /// MPI datatype for `T`; unsupported types fail at compile time (incomplete type).
 template <typename T> struct MPIDatatypeCheck;
@@ -81,33 +90,35 @@ void PeerSendrecv(const std::vector<int> &peers, const std::vector<int> &send_co
 
 /**
  * @brief Shared implementation of NodeVarComm; call NodeVarComm instead.
+ * @param part Rank overlap bookkeeping (neighbour ranks and shared control points).
  * @param dat Nodal data array that stores all components in contiguous blocks.
  * @param offsets Pointer to `ndof` component offsets inside `dat`, such as `0`, `nuc`, `nvc`, or `nwc`.
  * @param ndof Number of components exchanged in one communication step.
  * @note Send/receive buffers are static and reused across calls, so this function is not reentrant or thread-safe.
  */
-template <typename T> void NodeVarCommImpl(std::vector<T> &dat, const int *offsets, int ndof) {
+template <typename T>
+void NodeVarCommImpl(const Partition &part, std::vector<T> &dat, const int *offsets, int ndof) {
 
     static std::vector<T> sdn, rvn; // reused send/recv buffers
-    sdn.resize(static_cast<std::size_t>(isubc) * ndof);
-    rvn.resize(static_cast<std::size_t>(isubc) * ndof);
+    sdn.resize(static_cast<std::size_t>(part.isubc) * ndof);
+    rvn.resize(static_cast<std::size_t>(part.isubc) * ndof);
 
     int io = 0;
-    for (int i = 0; i < isb; i++) {
-        for (int j = io; j < io + nsbc[i]; j++) {
-            for (int d = 0; d < ndof; d++) { sdn[j * ndof + d] = dat[nsubc[j] + offsets[d]]; }
+    for (int i = 0; i < part.isb; i++) {
+        for (int j = io; j < io + part.nsbc[i]; j++) {
+            for (int d = 0; d < ndof; d++) { sdn[j * ndof + d] = dat[part.nsubc[j] + offsets[d]]; }
         }
-        io += nsbc[i];
+        io += part.nsbc[i];
     }
 
-    PeerSendrecv(naid, nsbc, nsbc, ndof, sdn, rvn);
+    PeerSendrecv(part.naid, part.nsbc, part.nsbc, ndof, sdn, rvn);
 
     io = 0;
-    for (int i = 0; i < isb; i++) {
-        for (int j = io; j < io + nsbc[i]; j++) {
-            for (int d = 0; d < ndof; d++) { dat[nsubc[j] + offsets[d]] += rvn[j * ndof + d]; }
+    for (int i = 0; i < part.isb; i++) {
+        for (int j = io; j < io + part.nsbc[i]; j++) {
+            for (int d = 0; d < ndof; d++) { dat[part.nsubc[j] + offsets[d]] += rvn[j * ndof + d]; }
         }
-        io += nsbc[i];
+        io += part.nsbc[i];
     }
 
     return;
@@ -117,24 +128,26 @@ template <typename T> void NodeVarCommImpl(std::vector<T> &dat, const int *offse
 
 /**
  * @brief Exchange one nodal field component on overlap control points and add received values back into `dat`.
+ * @param part Rank overlap bookkeeping (neighbour ranks and shared control points).
  * @param dat Nodal data array that stores all components in contiguous blocks.
  * @param offset Component offset inside `dat`, such as `0`, `nuc`, `nvc`, or `nwc`.
  */
-template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) {
+template <typename T> void NodeVarComm(const Partition &part, std::vector<T> &dat, int offset) {
 
-    internal::NodeVarCommImpl(dat, &offset, 1);
+    internal::NodeVarCommImpl(part, dat, &offset, 1);
 
     return;
 }
 
 /**
  * @brief Exchange multiple nodal field components on overlap control points and add received values back into `dat`.
+ * @param part Rank overlap bookkeeping (neighbour ranks and shared control points).
  * @param dat Nodal data array that stores all components in contiguous blocks.
  * @param offsets Component offsets inside `dat` for the fields packed into one communication step.
  */
-template <typename T> void NodeVarComm(std::vector<T> &dat, const std::vector<int> &offsets) {
+template <typename T> void NodeVarComm(const Partition &part, std::vector<T> &dat, const std::vector<int> &offsets) {
 
-    internal::NodeVarCommImpl(dat, offsets.data(), static_cast<int>(offsets.size()));
+    internal::NodeVarCommImpl(part, dat, offsets.data(), static_cast<int>(offsets.size()));
 
     return;
 }

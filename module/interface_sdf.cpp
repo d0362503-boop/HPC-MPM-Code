@@ -20,7 +20,7 @@ double InterfaceSDF::Evaluate(const std::array<double, 3> &point, std::array<dou
     }
 
     int cell;
-    if (!LocateLocalElement(point, cell)) return 0.0;
+    if (!LocateLocalElement(g_grid.mesh, point, cell)) return 0.0;
 
     int count;
     std::vector<int> nodes;

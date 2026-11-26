@@ -59,7 +59,7 @@ void StabilizedMPM::InflowParticles() {
 void StabilizedMPM::GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(dec2p);
+    SubcellOffsets(npxye, dxy, dec2p);
 
     int target_per_cell = npxye[0] * npxye[1] * npxye[2];
     double cell_vol = dxy[0] * dxy[1] * dxy[2];

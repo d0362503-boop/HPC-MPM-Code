@@ -25,7 +25,7 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
 
     for (int ip = 0; ip < this->num; ++ip) {
         std::array<int, 3> element{};
-        if (!LocateGlobalElement(this->coord[ip], element)) {
+        if (!LocateGlobalElement(g_grid.mesh, this->coord[ip], element)) {
             this->par_comm_.ofp_id[this->par_comm_.nrmp++] = ip;
             continue;
         }
@@ -117,7 +117,7 @@ void MaterialPoint::DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> 
 
     for (int ip = 0; ip < this->num; ++ip) {
         std::array<int, 3> element{};
-        if (!LocateGlobalElement(this->coord[ip], element)) {
+        if (!LocateGlobalElement(g_grid.mesh, this->coord[ip], element)) {
             this->par_comm_.ofp_id[this->par_comm_.nrmp++] = ip;
             continue;
         }
@@ -224,17 +224,17 @@ void MaterialPoint::ApplyDLB() {
 
     const auto local_samples = mpm_dlb::SelectSamples(this->coord);
 
-    const auto regions = mpm_dlb::ComputeDLBRegions(local_samples);
+    const auto regions = mpm_dlb::ComputeDLBRegions(g_grid, local_samples);
 
     this->RebalanceDLBParticles(regions);
 
-    mpm_dlb::UpdateDLBRegions(regions);
+    mpm_dlb::UpdateDLBRegions(regions, g_grid);
 
-    BuildMesh();
+    BuildMesh(g_grid.mesh);
 
-    BuildControlPoint();
+    BuildControlPoint(g_grid.mesh, g_grid.cmesh);
 
-    ComputeNodalVol();
+    ComputeNodalVol(g_params, g_grid);
 
     this->RebuildBC();
 

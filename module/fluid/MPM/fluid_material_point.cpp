@@ -54,7 +54,7 @@ void StabilizedMPM::RebuildBC() {
 
 void StabilizedMPM::MoveParticle() {
 
-    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
+    this->DetermineParticleRank(g_grid.part.regions);
 
     this->InflowParticles();
 

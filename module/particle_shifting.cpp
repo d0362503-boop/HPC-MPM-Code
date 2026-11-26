@@ -97,7 +97,7 @@ std::vector<std::array<double, 3>> MaterialPoint::PairwiseRepulsivePST(const std
     // -------------------------------------------------------------------------
     // 2. Ghost particle communication
     // -------------------------------------------------------------------------
-    const std::vector<mpm_dlb::Region> &regions = mpm_dlb::CurrentRegions();
+    const std::vector<mpm_dlb::Region> &regions = g_grid.part.regions;
     std::vector<std::array<double, 3>> peer_min(isb);
     std::vector<std::array<double, 3>> peer_max(isb);
     for (int i = 0; i < isb; ++i) {

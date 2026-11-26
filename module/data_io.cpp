@@ -27,100 +27,100 @@ std::ofstream OpenOutputFile(const std::string &filename) {
     return outfile;
 }
 
-void InputParaGriddata(std::ifstream &infile) {
+void InputParaGriddata(std::ifstream &infile, Grid &grid) {
 
     infile >> myrank;
     infile.ignore(1000, '\n');
 
-    infile >> nelem;
-    for (int i = 0; i < 3; i++) infile >> xyelem[i];
+    infile >> grid.mesh.nelem;
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xyelem[i];
     infile.ignore(1000, '\n');
 
-    infile >> node;
-    for (int i = 0; i < 3; i++) infile >> xynode[i];
+    infile >> grid.mesh.node;
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xynode[i];
     infile.ignore(1000, '\n');
 
-    infile >> nodec;
-    for (int i = 0; i < 3; i++) infile >> xynodec[i];
+    infile >> grid.cmesh.nodec;
+    for (int i = 0; i < 3; i++) infile >> grid.cmesh.xynodec[i];
     infile.ignore(1000, '\n');
 
-    nu = 0;
-    nv = nu + node;
-    nw = nv + node;
-    np = nw + node;
+    grid.mesh.nu = 0;
+    grid.mesh.nv = grid.mesh.nu + grid.mesh.node;
+    grid.mesh.nw = grid.mesh.nv + grid.mesh.node;
+    grid.mesh.np = grid.mesh.nw + grid.mesh.node;
 
-    nuc = 0;
-    nvc = nuc + nodec;
-    nwc = nvc + nodec;
-    npc = nwc + nodec;
+    grid.cmesh.nuc = 0;
+    grid.cmesh.nvc = grid.cmesh.nuc + grid.cmesh.nodec;
+    grid.cmesh.nwc = grid.cmesh.nvc + grid.cmesh.nodec;
+    grid.cmesh.npc = grid.cmesh.nwc + grid.cmesh.nodec;
 
-    for (int i = 0; i < 3; i++) infile >> nxyr[i];
+    for (int i = 0; i < 3; i++) infile >> grid.part.nxyr[i];
     infile.ignore(1000, '\n');
 
-    for (int i = 0; i < 3; i++) infile >> xymin[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xymin[i];
     infile.ignore(1000, '\n');
 
-    for (int i = 0; i < 3; i++) infile >> xymax[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xymax[i];
     infile.ignore(1000, '\n');
 
-    for (int i = 0; i < 3; i++) infile >> aelemmin[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.aelemmin[i];
     infile.ignore(1000, '\n');
 
-    for (int i = 0; i < 3; i++) infile >> aelemmax[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.aelemmax[i];
     infile.ignore(1000, '\n');
 
-    infile >> isb; // --- Overlapped rank number ---
+    infile >> grid.part.isb; // --- Overlapped rank number ---
     infile.ignore(1000, '\n');
-    if (isb != 0) {
-        naid.resize(isb);
-        InputVector(infile, isb, naid); // --- Overlapped rank ID ---
+    if (grid.part.isb != 0) {
+        grid.part.naid.resize(grid.part.isb);
+        InputVector(infile, grid.part.isb, grid.part.naid); // --- Overlapped rank ID ---
 
-        infile >> isubc; // --- Overlapped control point total number ---
+        infile >> grid.part.isubc; // --- Overlapped control point total number ---
         infile.ignore(1000, '\n');
-        nsbc.resize(isb);
-        InputVector(infile, isb, nsbc); // --- Overlapped control point number with each rank ---
+        grid.part.nsbc.resize(grid.part.isb);
+        InputVector(infile, grid.part.isb, grid.part.nsbc); // --- Overlapped control point number with each rank ---
 
-        nsubc.resize(isubc);
-        InputVector(infile, isubc, nsubc); // --- Overlapped control point ID ---
+        grid.part.nsubc.resize(grid.part.isubc);
+        InputVector(infile, grid.part.isubc, grid.part.nsubc); // --- Overlapped control point ID ---
 
-        std::vector<int> dbn(nodec);
-        InputVector(infile, nodec, dbn); // --- Number of control point shares ---
+        std::vector<int> dbn(grid.cmesh.nodec);
+        InputVector(infile, grid.cmesh.nodec, dbn); // --- Number of control point shares ---
 
-        dbc.resize(nodec * 4);
-        for (int i = 0; i < nodec; ++i) {
+        grid.part.dbc.resize(grid.cmesh.nodec * 4);
+        for (int i = 0; i < grid.cmesh.nodec; ++i) {
             const double val = 1.0e0 / double(dbn[i]);
-            for (int d = 0; d < 4; ++d) { dbc[i + d * nodec] = val; }
+            for (int d = 0; d < 4; ++d) { grid.part.dbc[i + d * grid.cmesh.nodec] = val; }
         }
 
-        infile >> isubl; // --- Overlapped node total number ---
+        infile >> grid.part.isubl; // --- Overlapped node total number ---
         infile.ignore(1000, '\n');
-        nsbl.resize(isb);
-        InputVector(infile, isb, nsbl); // --- Overlapped node number with each rank ---
+        grid.part.nsbl.resize(grid.part.isb);
+        InputVector(infile, grid.part.isb, grid.part.nsbl); // --- Overlapped node number with each rank ---
 
-        nsubl.resize(isubl);
-        InputVector(infile, isubl, nsubl); // --- Overlapped node ID ---
+        grid.part.nsubl.resize(grid.part.isubl);
+        InputVector(infile, grid.part.isubl, grid.part.nsubl); // --- Overlapped node ID ---
 
-        dbn.assign(node, 0.0e0);
-        InputVector(infile, node, dbn); // --- Number of node shares ---
+        dbn.assign(grid.mesh.node, 0.0e0);
+        InputVector(infile, grid.mesh.node, dbn); // --- Number of node shares ---
 
-        dbl.resize(node * 4);
-        for (int i = 0; i < node; i++) {
-            dbl[i + nu] = 1.0e0 / double(dbn[i]);
-            dbl[i + nv] = 1.0e0 / double(dbn[i]);
-            dbl[i + nw] = 1.0e0 / double(dbn[i]);
-            dbl[i + np] = 1.0e0 / double(dbn[i]);
+        grid.part.dbl.resize(grid.mesh.node * 4);
+        for (int i = 0; i < grid.mesh.node; i++) {
+            grid.part.dbl[i + grid.mesh.nu] = 1.0e0 / double(dbn[i]);
+            grid.part.dbl[i + grid.mesh.nv] = 1.0e0 / double(dbn[i]);
+            grid.part.dbl[i + grid.mesh.nw] = 1.0e0 / double(dbn[i]);
+            grid.part.dbl[i + grid.mesh.np] = 1.0e0 / double(dbn[i]);
         }
     } else {
-        naid.resize(0);
-        nsbc.resize(0);
-        nsubc.resize(0);
-        dbc.assign(nodec * 4, 1.0e0);
-        nsbl.resize(0);
-        nsubl.resize(0);
-        dbl.assign(node * 4, 1.0e0);
+        grid.part.naid.resize(0);
+        grid.part.nsbc.resize(0);
+        grid.part.nsubc.resize(0);
+        grid.part.dbc.assign(grid.cmesh.nodec * 4, 1.0e0);
+        grid.part.nsbl.resize(0);
+        grid.part.nsubl.resize(0);
+        grid.part.dbl.assign(grid.mesh.node * 4, 1.0e0);
     }
 
-    mpm_dlb::CollectCurrentRegions();
+    mpm_dlb::CollectCurrentRegions(grid.mesh, grid.part);
 
     return;
 }

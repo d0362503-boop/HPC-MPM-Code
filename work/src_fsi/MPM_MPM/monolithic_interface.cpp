@@ -18,7 +18,7 @@ using namespace mpm_mpm_monolithic_fsi;
 void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(dec2p);
+    SubcellOffsets(npxye, dxy, dec2p);
 
     double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
 
@@ -29,7 +29,7 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
 
     VectorAssign(nodec, this->nlm_lump_local);
     for (int m = 0; m < nelem; m++) {
-        const std::array<double, 3> xye = ElementCenter(m);
+        const std::array<double, 3> xye = ElementCenter(g_grid.mesh, m);
         std::array<double, 3> xyp;
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
@@ -89,7 +89,7 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
     for (int pid = 0; pid < this->solid_.num; pid++) {
         int cell;
         std::array<double, 3> xyp = this->solid_.coord[pid];
-        if (!LocateLocalElement(xyp, cell)) continue;
+        if (!LocateLocalElement(g_grid.mesh, xyp, cell)) continue;
         MakeSF(cell, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
         for (int ni = 0; ni < nenode; ni++) {
             const int nid = ncm[ni];
@@ -103,18 +103,18 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
     for (int n = 0; n < nodec; ++n) { final_phi[n] = std::clamp(final_phi[n] / nvol[n], 0.0, 1.0); }
     const interface_geometry::InterfaceSDF interface(std::move(final_phi));
 
-    const auto &regions = mpm_dlb::CurrentRegions();
+    const auto &regions = g_grid.part.regions;
     std::vector<std::vector<int>> send_ids(nprocs);
     for (int pid = 0; pid < this->fluid_.num; ++pid) {
         auto &point = this->fluid_.coord[pid];
         int cell;
-        if (LocateLocalElement(point, cell)) {
+        if (LocateLocalElement(g_grid.mesh, point, cell)) {
             std::array<double, 3> surface_point;
             if (interface.FindSurfacePoint(point, surface_point)) { point = surface_point; }
             continue;
         }
         std::array<int, 3> global_cell;
-        if (!LocateGlobalElement(point, global_cell)) continue;
+        if (!LocateGlobalElement(g_grid.mesh, point, global_cell)) continue;
         for (int rank = 0; rank < nprocs; ++rank) {
             const auto &region = regions[rank];
             if (global_cell[0] >= region.elem_min[0] && global_cell[0] <= region.elem_max[0] &&

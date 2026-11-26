@@ -68,7 +68,7 @@ void StabilizedMPM::DataInput() {
 
     infile.close();
 
-    InitializeMeshAndTimeParameters();
+    InitializeMeshAndTimeParameters(g_params, g_grid);
 
     // --- Generalized α & Newmark β parameter Init ---
     this->implicit_.integrator_.GeneralizedAlphaParaSet();
@@ -78,7 +78,7 @@ void StabilizedMPM::DataInput() {
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);
 
-    InputParaGriddata(infile);
+    InputParaGriddata(infile, g_grid);
     // --- Input Fluid BC ---
     this->InputBCData(infile);
 

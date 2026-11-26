@@ -138,7 +138,7 @@ void FluidGenerator::CreateParticles() {
     this->fluid_point_mass_ = this->rho * this->fluid_point_volume_;
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(dec2p);
+    SubcellOffsets(npxye, dxy, dec2p);
 
     this->coord.resize(nelem * nspe);
     this->matid.resize(nelem * nspe);

@@ -65,7 +65,7 @@ void StabilizedFEM::DataInput() {
 
     infile.close();
 
-    InitializeMeshAndTimeParameters();
+    InitializeMeshAndTimeParameters(g_params, g_grid);
 
     // --- Generalized α parameter Init ---
     this->integrator_.GeneralizedAlphaParaSet();
@@ -74,7 +74,7 @@ void StabilizedFEM::DataInput() {
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);
 
-    InputParaGriddata(infile);
+    InputParaGriddata(infile, g_grid);
     // --- Input Fluid BC ---
     this->InputBCData(infile);
 

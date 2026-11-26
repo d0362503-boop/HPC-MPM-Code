@@ -26,13 +26,13 @@ int main(int argc, char *argv[]) {
             fsi.solid_.RestartInput();
         }
 
-        BuildMesh();
+        BuildMesh(g_grid.mesh);
 
-        BuildControlPoint();
+        BuildControlPoint(g_grid.mesh, g_grid.cmesh);
 
         fsi.fsi_sys.BuildCrsMat(MPMMPMMonolithicFSI::kStoredBlocks);
 
-        ComputeNodalVol();
+        ComputeNodalVol(g_params, g_grid);
 
         fsi.solid_.MeshPointLinklist();
 

@@ -17,11 +17,11 @@ int main(int argc, char *argv[]) {
 
         if (rstflag == 1 || rstflag == 3) sp.RestartInput();
 
-        BuildMesh();
+        BuildMesh(g_grid.mesh);
 
-        BuildControlPoint();
+        BuildControlPoint(g_grid.mesh, g_grid.cmesh);
 
-        ComputeNodalVol();
+        ComputeNodalVol(g_params, g_grid);
 
         istep = ista - 1;
         int iview = istep / iout;

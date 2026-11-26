@@ -8,7 +8,8 @@
 #include <iostream>
 #include <vector>
 
-void SubcellOffsets(std::array<std::array<double, 3>, 6> &dec2p) {
+void SubcellOffsets(const std::array<int, 3> &npxye, const std::array<double, 3> &dxy,
+                    std::array<std::array<double, 3>, 6> &dec2p) {
 
     dec2p = {};
 
@@ -52,59 +53,61 @@ void SubcellOffsets(std::array<std::array<double, 3>, 6> &dec2p) {
     return;
 }
 
-bool LocateGlobalElement(const std::array<double, 3> &xq, std::array<int, 3> &ie_g) {
+bool LocateGlobalElement(const Mesh &mesh, const std::array<double, 3> &xq, std::array<int, 3> &ie_g) {
 
     for (int d = 0; d < 3; d++) {
-        if (xq[d] < xyminw[d] || xq[d] > xymaxw[d]) { return false; }
+        if (xq[d] < mesh.xyminw[d] || xq[d] > mesh.xymaxw[d]) { return false; }
 
-        double xi = (xq[d] - xyminw[d]) / dxy[d];
+        double xi = (xq[d] - mesh.xyminw[d]) / mesh.dxy[d];
         int ie = static_cast<int>(std::floor(xi));
-        ie_g[d] = std::clamp(ie, 0, xyelemw[d] - 1);
+        ie_g[d] = std::clamp(ie, 0, mesh.xyelemw[d] - 1);
     }
 
     return true;
 }
 
-bool GlobalElementToLocal(const std::array<int, 3> &ie_g, int &m_local) {
+bool GlobalElementToLocal(const Mesh &mesh, const std::array<int, 3> &ie_g, int &m_local) {
 
     for (int d = 0; d < 3; d++) {
-        if (ie_g[d] < aelemmin[d] || ie_g[d] > aelemmax[d]) { return false; }
+        if (ie_g[d] < mesh.aelemmin[d] || ie_g[d] > mesh.aelemmax[d]) { return false; }
     }
 
-    int iex_l = ie_g[0] - aelemmin[0];
-    int iey_l = ie_g[1] - aelemmin[1];
-    int iez_l = ie_g[2] - aelemmin[2];
+    int iex_l = ie_g[0] - mesh.aelemmin[0];
+    int iey_l = ie_g[1] - mesh.aelemmin[1];
+    int iez_l = ie_g[2] - mesh.aelemmin[2];
 
-    m_local = iex_l + xyelem[0] * iey_l + xyelem[0] * xyelem[1] * iez_l;
+    m_local = iex_l + mesh.xyelem[0] * iey_l + mesh.xyelem[0] * mesh.xyelem[1] * iez_l;
 
     return true;
 }
 
-bool LocateLocalElement(const std::array<double, 3> &xq, int &m_local) {
+bool LocateLocalElement(const Mesh &mesh, const std::array<double, 3> &xq, int &m_local) {
 
     std::array<int, 3> ie_g{};
-    if (!LocateGlobalElement(xq, ie_g)) { return false; }
+    if (!LocateGlobalElement(mesh, xq, ie_g)) { return false; }
 
-    return GlobalElementToLocal(ie_g, m_local);
+    return GlobalElementToLocal(mesh, ie_g, m_local);
 }
 
-void BuildMesh() {
+void BuildMesh(Mesh &mesh) {
 
-    double xmin = xymin[0];
-    double ymin = xymin[1];
-    double zmin = xymin[2];
-    int xelem = xyelem[0];
-    int yelem = xyelem[1];
-    int zelem = xyelem[2];
-    double dx = dxy[0];
-    double dy = dxy[1];
-    double dz = dxy[2];
+    double xmin = mesh.xymin[0];
+    double ymin = mesh.xymin[1];
+    double zmin = mesh.xymin[2];
+    int xelem = mesh.xyelem[0];
+    int yelem = mesh.xyelem[1];
+    int zelem = mesh.xyelem[2];
+    double dx = mesh.dxy[0];
+    double dy = mesh.dxy[1];
+    double dz = mesh.dxy[2];
 
-    int xnode = xynode[0];
-    int ynode = xynode[1];
-    int znode = xynode[2];
+    int xnode = mesh.xynode[0];
+    int ynode = mesh.xynode[1];
+    int znode = mesh.xynode[2];
 
-    VectorAssign(node, xyn);
+    std::vector<std::array<double, 3>> &xyn = mesh.xyn;
+    std::vector<std::array<int, 8>> &nc = mesh.nc;
+    VectorAssign(mesh.node, xyn);
     for (int k = 0; k < znode; k++) {
         for (int j = 0; j < ynode; j++) {
             for (int i = 0; i < xnode; i++) {
@@ -116,7 +119,7 @@ void BuildMesh() {
         }
     }
 
-    VectorAssign(nelem, nc);
+    VectorAssign(mesh.nelem, nc);
     for (int k = 0; k < zelem; k++) {
         for (int j = 0; j < yelem; j++) {
             for (int i = 0; i < xelem; i++) {
@@ -137,17 +140,21 @@ void BuildMesh() {
 }
 
 // ---- Build control point coordinate ----
-void BuildControlPoint() {
+void BuildControlPoint(const Mesh &mesh, ControlMesh &cm) {
 
-    int nxc = xynodec[0];
-    int nyc = xynodec[1];
-    int nzc = xynodec[2];
+    const std::array<int, 3> &idimc = cm.idimc;
+    const std::array<int, 3> &aelemmin = mesh.aelemmin;
+    const std::array<int, 3> &aelemmax = mesh.aelemmax;
+    std::vector<std::vector<int>> &ncc = cm.ncc;
+    int nxc = cm.xynodec[0];
+    int nyc = cm.xynodec[1];
+    int nzc = cm.xynodec[2];
 
     int nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);
-    ncc.assign(nelem, std::vector<int>(nenode));
-    for (int m = 0; m < nelem; m++) {
+    ncc.assign(mesh.nelem, std::vector<int>(nenode));
+    for (int m = 0; m < mesh.nelem; m++) {
 
-        const std::array<int, 3> ijk = IndexToIJK(m, xyelem);
+        const std::array<int, 3> ijk = IndexToIJK(m, mesh.xyelem);
 
         int ixyn[3];
         int id = 0;
@@ -164,22 +171,22 @@ void BuildControlPoint() {
         }
     }
 
-    xyc.assign(nodec, std::array<double, 3>{});
+    cm.xyc.assign(cm.nodec, std::array<double, 3>{});
     for (int k = aelemmin[2]; k <= aelemmax[2] + idimc[2]; k++) {
         for (int j = aelemmin[1]; j <= aelemmax[1] + idimc[1]; j++) {
             for (int i = aelemmin[0]; i <= aelemmax[0] + idimc[0]; i++) {
                 int kl = k - aelemmin[2];
                 int jl = j - aelemmin[1];
                 int il = i - aelemmin[0];
-                int nid = il + xynodec[0] * jl + xynodec[0] * xynodec[1] * kl;
-                std::vector<int> ijk_l = {il, jl, kl};
-                std::vector<int> ijk_g = {i, j, k};
+                int nid = il + cm.xynodec[0] * jl + cm.xynodec[0] * cm.xynodec[1] * kl;
+                std::array<int, 3> ijk_l = {il, jl, kl};
+                std::array<int, 3> ijk_g = {i, j, k};
                 // ---- X direction ----
-                DefineCpPos<0>(nid, ijk_l, ijk_g);
+                DefineCpPos<0>(mesh, cm, nid, ijk_l, ijk_g);
                 // ---- Y direction ----
-                DefineCpPos<1>(nid, ijk_l, ijk_g);
+                DefineCpPos<1>(mesh, cm, nid, ijk_l, ijk_g);
                 // ---- Z direction ----
-                DefineCpPos<2>(nid, ijk_l, ijk_g);
+                DefineCpPos<2>(mesh, cm, nid, ijk_l, ijk_g);
             }
         }
     }
@@ -187,10 +194,15 @@ void BuildControlPoint() {
     return;
 }
 
-void ComputeNodalVol() {
+void ComputeNodalVol(const RunParams &params, Grid &grid) {
+
+    const Mesh &mesh = grid.mesh;
+    ControlMesh &cm = grid.cmesh;
+    const std::array<int, 3> &npxye = params.npxye;
+    const std::array<double, 3> &dxy = mesh.dxy;
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(dec2p);
+    SubcellOffsets(npxye, dxy, dec2p);
 
     double volp = dxy[0] * dxy[1] * dxy[2] / (npxye[0] * npxye[1] * npxye[2]);
 
@@ -199,9 +211,9 @@ void ComputeNodalVol() {
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(nodec, nvol);
-    for (int m = 0; m < nelem; m++) {
-        const std::array<double, 3> xye = ElementCenter(m);
+    VectorAssign(cm.nodec, cm.nvol);
+    for (int m = 0; m < mesh.nelem; m++) {
+        const std::array<double, 3> xye = ElementCenter(mesh, m);
         std::array<double, 3> xyp;
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];
@@ -209,18 +221,18 @@ void ComputeNodalVol() {
                 xyp[1] = xye[1] + dec2p[iy][1];
                 for (int ix = 0; ix < npxye[0]; ix++) {
                     xyp[0] = xye[0] + dec2p[ix][0];
-                    MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                    MakeSF(m, xyp, cm.idimc, cm.xynodec, ncm, nenode, sf, dsf);
                     for (int ni = 0; ni < nenode; ni++) {
                         int nid = ncm[ni];
                         double sfi = sf[ni];
-                        nvol[nid] += sfi * volp;
+                        cm.nvol[nid] += sfi * volp;
                     }
                 }
             }
         }
     }
 
-    NodeVarComm(nvol, 0);
+    NodeVarComm(grid.part, cm.nvol, 0);
 
     return;
 }

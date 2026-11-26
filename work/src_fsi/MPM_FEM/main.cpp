@@ -24,9 +24,9 @@ int main(int argc, char *argv[]) {
             fsi.fluid_.RestartInput();
         }
 
-        BuildMesh();
+        BuildMesh(g_grid.mesh);
 
-        BuildControlPoint();
+        BuildControlPoint(g_grid.mesh, g_grid.cmesh);
 
         fsi.fluid_.BuildSubcellPoints();
 
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 
         fsi.fluid_.NS_.BuildCrsMat(16);
 
-        ComputeNodalVol();
+        ComputeNodalVol(g_params, g_grid);
 
         fsi.solid_.MeshPointLinklist();
 

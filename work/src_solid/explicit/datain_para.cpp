@@ -81,12 +81,12 @@ void ExplicitSolidMPM::DataInput() {
     infile.ignore(1000, '\n');
     infile.close();
 
-    InitializeMeshAndTimeParameters();
+    InitializeMeshAndTimeParameters(g_params, g_grid);
 
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);
 
-    InputParaGriddata(infile);
+    InputParaGriddata(infile, g_grid);
     // --- solid boundary condition ---
     this->InputBCData(infile);
 

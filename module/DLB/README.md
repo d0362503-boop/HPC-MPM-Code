@@ -15,19 +15,18 @@ particles and rebuilds partition-dependent data. The Cartesian rank grid
 | File                     | Role                                                                                                |
 | ------------------------ | --------------------------------------------------------------------------------------------------- |
 | `module/DLB/mpm_dlb.h`   | `Region`, sampling, region update, and diagnostic interfaces                                         |
-| `module/DLB/mpm_dlb.cpp` | implementation; owns the single `g_current_regions` instance                                        |
+| `module/DLB/mpm_dlb.cpp` | implementation; reads and writes the regions stored in `Partition::regions`                         |
 | `module/mpi_data.cpp`    | `MaterialPoint::{DetermineParticleRank, DetermineDLBParticleRank, RebalanceDLBParticles, ApplyDLB}` |
 | `module/bc.cpp`          | `BoundaryCondition::{CaptureGlobal*, RebuildLocal*}` — BC persistence across repartitions           |
 
 Public API (all collective unless noted):
 
 ```cpp
-void CollectCurrentRegions();                       // Allgather current aelemmin/aelemmax
-const std::vector<Region> &CurrentRegions();        // read-only access (not collective)
-int ComputeSampleSkip(std::size_t local_npts);      // strided-sampling interval
+void CollectCurrentRegions(const Mesh &, Partition &);   // Allgather aelemmin/aelemmax into part.regions
+int ComputeSampleSkip(std::size_t local_npts);           // strided-sampling interval
 std::vector<std::array<double,3>> SelectSamples(coord);  // picks skip internally (collective)
-std::vector<Region> ComputeDLBRegions(local_samples);  // gather → cut on root → Bcast
-void UpdateDLBRegions(const std::vector<Region> &);    // apply + rebuild overlap metadata
+std::vector<Region> ComputeDLBRegions(const Grid &, local_samples);  // gather → cut on root → Bcast
+void UpdateDLBRegions(const std::vector<Region> &, Grid &);          // apply + rebuild overlap metadata
 ```
 
 ## 3. Activation and Call Sites
@@ -54,11 +53,11 @@ MoveParticle()                       // 1. ordinary neighbor migration + inflow,
                                      //    so sampling sees current positions
 SelectSamples(coord)                 // 2. strided local samples; the interval
                                      //    is chosen internally by ComputeSampleSkip
-ComputeDLBRegions(local_samples)     // 3. root cuts new regions, MPI_Bcast
-RebalanceDLBParticles(regions)       // 4. global particle migration to new owners
-UpdateDLBRegions(regions)            // 5. new mesh sizes + overlap tables + weights
+ComputeDLBRegions(grid, local_samples)  // 3. root cuts new regions, MPI_Bcast
+RebalanceDLBParticles(regions)          // 4. global particle migration to new owners
+UpdateDLBRegions(regions, grid)         // 5. new mesh sizes + overlap tables + weights
 BuildMesh(); BuildControlPoint();
-ComputeNodalVol(); RebuildBC();   // 6. partition-dependent data
+ComputeNodalVol(); RebuildBC();         // 6. partition-dependent data
 ```
 
 The physics class then rebuilds its solver system after these six stages.
@@ -73,12 +72,12 @@ struct Region { std::array<int,3> elem_min, elem_max; };  // inclusive, global e
   whole `xyelemw` mesh exactly. It holds *by construction* (§7) and is re-validated at
   runtime: `UpdateDLBRegions` bounds-checks every region, and the migration builders
   `MPI_Abort` on any particle that is covered by zero or two regions.
-- `g_current_regions` is private to `mpm_dlb.cpp`. Other code reads it through
-  `CurrentRegions()`; `CollectCurrentRegions()` and `UpdateDLBRegions()`
-  update it through collective gather/broadcast paths.
+- The regions live in `Partition::regions` of the rank's `Grid`. Other code reads
+  them there; only `CollectCurrentRegions()` and `UpdateDLBRegions()` write them,
+  through collective gather/broadcast paths.
 - Each rank holds its own copy; collectives establish consistency.
-  `BuildMesh()` collects the initial regions from `griddata` and refreshes
-  them after DLB.
+  `InputParaGriddata()` collects the initial regions from `griddata`, and
+  `UpdateDLBRegions()` refreshes them after DLB.
 
 ## 6. Sampling
 
@@ -197,7 +196,7 @@ re-evaluates boundary-cell fill under the new partition.
 
 ## 11. Integration
 
-- Ordinary fluid/solid migration reads `CurrentRegions()`.
+- Ordinary fluid/solid migration reads `Partition::regions`.
 - `PairwiseRepulsivePST` intersects particle support balls with those regions
   to select MPI ghosts, including non-uniform partitions.
 - `CrsMat` rebuilds ownership from the new `aelemmin/aelemmax` bounds.
@@ -221,7 +220,7 @@ re-evaluates boundary-cell fill under the new partition.
   `MoveParticle()` (neighbor-only search) then aborts on particles whose uniform
   owner is not a neighbor. Workaround until this is handled in code: after
   `RestartInput()` + `BuildMesh()`, call
-  `RebalanceDLBParticles(mpm_dlb::CurrentRegions())` once (its global search handles
+  `RebalanceDLBParticles(grid.part.regions)` once (its global search handles
   any source distribution).
 - **Cost:** DLB owner search is O(num × nprocs) per repartition.
 - **Balance quality** is limited by the sampling target (256 per rank on average), particle ordering, and the

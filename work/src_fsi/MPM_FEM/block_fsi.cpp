@@ -188,7 +188,7 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
         };
 
         int m_local;
-        if (!LocateLocalElement(xq, m_local)) { continue; }
+        if (!LocateLocalElement(g_grid.mesh, xq, m_local)) { continue; }
 
         MakeSF(m_local, xq, idimc, xynodec, ncm, nenode, sf, dsf);
 

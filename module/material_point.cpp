@@ -16,13 +16,13 @@
 void MaterialPoint::BuildSubcellPoints() {
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(dec2p);
+    SubcellOffsets(npxye, dxy, dec2p);
 
     int npe = npxye[0] * npxye[1] * npxye[2];
     VectorAssign(nelem * npe, this->coord);
 
     for (int m = 0; m < nelem; m++) {
-        const std::array<double, 3> xye = ElementCenter(m);
+        const std::array<double, 3> xye = ElementCenter(g_grid.mesh, m);
         std::array<double, 3> xyp;
         for (int iz = 0; iz < npxye[2]; iz++) {
             xyp[2] = xye[2] + dec2p[iz][2];

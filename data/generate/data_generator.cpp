@@ -31,9 +31,9 @@ void DataGenerator::BuildData() {
 
     this->InitializeGridGeometry();
 
-    BuildMesh();
+    BuildMesh(g_grid.mesh);
 
-    BuildControlPoint();
+    BuildControlPoint(g_grid.mesh, g_grid.cmesh);
 
     this->CreateBCs();
 

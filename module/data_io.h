@@ -98,8 +98,9 @@ void OutputVector(std::ofstream &outfile, const int size0, std::vector<std::arra
 /**
  * @brief Read per-rank MPI domain-decomposition data from a partitioned grid file.
  * @param infile Input file stream positioned at the grid-data header.
+ * @param grid   Grid of this rank; mesh sizes, control-point sizes and partition are written.
  */
-void InputParaGriddata(std::ifstream &infile);
+void InputParaGriddata(std::ifstream &infile, Grid &grid);
 
 /**
  * @brief Print a progress message to stdout showing current step and view index.

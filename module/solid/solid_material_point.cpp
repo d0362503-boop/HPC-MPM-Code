@@ -58,7 +58,7 @@ void SolidMaterialPointBase::RebuildBC() {
 
 void SolidMaterialPointBase::MoveParticle() {
 
-    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
+    this->DetermineParticleRank(g_grid.part.regions);
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp == 0) return;
 

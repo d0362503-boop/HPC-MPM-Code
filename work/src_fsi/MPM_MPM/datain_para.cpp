@@ -92,7 +92,7 @@ void MPMMPMMonolithicFSI::DataInput() {
     infile.ignore(1000, '\n');
     infile.close();
 
-    InitializeMeshAndTimeParameters();
+    InitializeMeshAndTimeParameters(g_params, g_grid);
 
     // --- Generalized α & Newmark β parameter Init ---
     this->solid_.implicit_.integrator_.GeneralizedAlphaParaSet();
@@ -104,7 +104,7 @@ void MPMMPMMonolithicFSI::DataInput() {
     std::string filename = gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);
 
-    InputParaGriddata(infile);
+    InputParaGriddata(infile, g_grid);
     // --- Solid boundary condition ---
     this->solid_.InputBCData(infile);
     // --- Fluid boundary condition ---

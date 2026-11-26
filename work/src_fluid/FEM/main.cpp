@@ -17,9 +17,9 @@ int main(int argc, char *argv[]) {
 
         if (rstflag == 1 || rstflag == 3) fluid.RestartInput();
 
-        BuildMesh();
+        BuildMesh(g_grid.mesh);
 
-        BuildControlPoint();
+        BuildControlPoint(g_grid.mesh, g_grid.cmesh);
 
         fluid.BuildSubcellPoints();
 
@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
 
         fluid.NS_.BuildCrsMat(16);
 
-        ComputeNodalVol();
+        ComputeNodalVol(g_params, g_grid);
 
         istep = ista - 1;
         int iview = istep / iout;

@@ -130,7 +130,7 @@ void StabilizedFEM::MakeNSStabCoeff(const std::vector<double> &adv_vel) {
     for (int m = 0; m < nelem; m++) {
         double rnue = this->rmue[m] / this->rhoe[m];
 
-        const std::array<double, 3> xye = ElementCenter(m);
+        const std::array<double, 3> xye = ElementCenter(g_grid.mesh, m);
 
         MakeSF(m, xye, idimc, xynodec, ncm, nenode, sf, dsf);
 

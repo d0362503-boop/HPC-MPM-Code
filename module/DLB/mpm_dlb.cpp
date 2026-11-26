@@ -15,7 +15,6 @@ namespace mpm_dlb {
 constexpr int kRootRank = 0;
 constexpr double kMinSampleRate = 1.0e-4;
 constexpr double kSamplesPerRank = 256.0e0;
-std::vector<Region> g_current_regions;
 
 void OuputDLBParticleRatio(int num) {
 
@@ -39,37 +38,37 @@ void AbortDLB(const char *message) {
     MPI_Abort(MPI_COMM_WORLD, 1);
 }
 
-void CollectCurrentRegions() {
+void CollectCurrentRegions(const Mesh &mesh, Partition &part) {
 
     Region local_region;
     for (int dir = 0; dir < 3; ++dir) {
-        local_region.elem_min[dir] = aelemmin[dir];
-        local_region.elem_max[dir] = aelemmax[dir];
+        local_region.elem_min[dir] = mesh.aelemmin[dir];
+        local_region.elem_max[dir] = mesh.aelemmax[dir];
     }
 
     int mpi_initialized = 0;
     MPI_Initialized(&mpi_initialized);
     if (mpi_initialized == 0) {
-        g_current_regions.assign(1, local_region);
+        part.regions.assign(1, local_region);
         return;
     }
 
     int mpi_size = 1;
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    std::array<int, 6> local_bounds = {aelemmin[0], aelemmin[1], aelemmin[2], aelemmax[0], aelemmax[1], aelemmax[2]};
+    std::array<int, 6> local_bounds = {mesh.aelemmin[0], mesh.aelemmin[1], mesh.aelemmin[2],
+                                       mesh.aelemmax[0], mesh.aelemmax[1], mesh.aelemmax[2]};
     std::vector<int> gathered_bounds(6 * mpi_size);
     MPI_Allgather(local_bounds.data(), 6, MPI_INT, gathered_bounds.data(), 6, MPI_INT, MPI_COMM_WORLD);
 
-    g_current_regions.resize(mpi_size);
+    part.regions.resize(mpi_size);
     for (int rank = 0; rank < mpi_size; ++rank) {
         for (int dir = 0; dir < 3; ++dir) {
-            g_current_regions[rank].elem_min[dir] = gathered_bounds[6 * rank + dir];
-            g_current_regions[rank].elem_max[dir] = gathered_bounds[6 * rank + 3 + dir];
+            part.regions[rank].elem_min[dir] = gathered_bounds[6 * rank + dir];
+            part.regions[rank].elem_max[dir] = gathered_bounds[6 * rank + 3 + dir];
         }
     }
 }
 
-const std::vector<Region> &CurrentRegions() { return g_current_regions; }
 
 // Keep samples inside one recursive child range.
 std::vector<std::array<double, 3>> FilterSamples(const std::vector<std::array<double, 3>> &samples, int dir, int lo,
@@ -79,7 +78,7 @@ std::vector<std::array<double, 3>> FilterSamples(const std::vector<std::array<do
 
     for (const auto &sample : samples) {
         std::array<int, 3> element{};
-        if (!LocateGlobalElement(sample, element)) { AbortDLB("DLB sample lies outside the global background mesh"); }
+        if (!LocateGlobalElement(g_grid.mesh, sample, element)) { AbortDLB("DLB sample lies outside the global background mesh"); }
         if (element[dir] >= lo && element[dir] <= hi) { filtered.push_back(sample); }
     }
 
@@ -202,11 +201,11 @@ std::vector<int> CutsFromSamples(const std::vector<std::array<double, 3>> &globa
     return cuts;
 }
 
-std::vector<Region> ComputeDLBRegions(const std::vector<std::array<double, 3>> &local_samples) {
-    if (nxyr[0] * nxyr[1] * nxyr[2] != nprocs) { AbortDLB("nxyr does not match the MPI rank count"); }
+std::vector<Region> ComputeDLBRegions(const Grid &grid, const std::vector<std::array<double, 3>> &local_samples) {
+    if (grid.part.nxyr[0] * grid.part.nxyr[1] * grid.part.nxyr[2] != nprocs) { AbortDLB("nxyr does not match the MPI rank count"); }
 
     for (int dir = 0; dir < 3; ++dir) {
-        if (xyelemw[dir] < nxyr[dir] || dxy[dir] <= 0.0) {
+        if (grid.mesh.xyelemw[dir] < grid.part.nxyr[dir] || grid.mesh.dxy[dir] <= 0.0) {
             AbortDLB("the global mesh cannot provide one element for every process split");
         }
     }
@@ -214,21 +213,21 @@ std::vector<Region> ComputeDLBRegions(const std::vector<std::array<double, 3>> &
     std::vector<std::array<double, 3>> global_samples;
     GatherSamplesToRoot(local_samples, global_samples);
 
-    const int nx = nxyr[0];
-    const int ny = nxyr[1];
-    const int nz = nxyr[2];
+    const int nx = grid.part.nxyr[0];
+    const int ny = grid.part.nxyr[1];
+    const int nz = grid.part.nxyr[2];
     std::vector<Region> regions(nprocs);
 
     if (myrank == kRootRank) {
-        const auto z_cuts = CutsFromSamples(global_samples, 2, 0, xyelemw[2] - 1, nz, xyminw[2], dxy[2]);
+        const auto z_cuts = CutsFromSamples(global_samples, 2, 0, grid.mesh.xyelemw[2] - 1, nz, grid.mesh.xyminw[2], grid.mesh.dxy[2]);
 
         for (int iz = 0; iz < nz; ++iz) {
             const auto z_samples = FilterSamples(global_samples, 2, z_cuts[iz], z_cuts[iz + 1] - 1);
-            const auto y_cuts = CutsFromSamples(z_samples, 1, 0, xyelemw[1] - 1, ny, xyminw[1], dxy[1]);
+            const auto y_cuts = CutsFromSamples(z_samples, 1, 0, grid.mesh.xyelemw[1] - 1, ny, grid.mesh.xyminw[1], grid.mesh.dxy[1]);
 
             for (int iy = 0; iy < ny; ++iy) {
                 const auto y_samples = FilterSamples(z_samples, 1, y_cuts[iy], y_cuts[iy + 1] - 1);
-                const auto x_cuts = CutsFromSamples(y_samples, 0, 0, xyelemw[0] - 1, nx, xyminw[0], dxy[0]);
+                const auto x_cuts = CutsFromSamples(y_samples, 0, 0, grid.mesh.xyelemw[0] - 1, nx, grid.mesh.xyminw[0], grid.mesh.dxy[0]);
 
                 for (int ix = 0; ix < nx; ++ix) {
                     const int rank = ix + nx * iy + nx * ny * iz;
@@ -263,7 +262,7 @@ std::vector<Region> ComputeDLBRegions(const std::vector<std::array<double, 3>> &
     return regions;
 }
 
-void UpdateDLBRegions(const std::vector<Region> &regions) {
+void UpdateDLBRegions(const std::vector<Region> &regions, Grid &grid) {
     if (int(regions.size()) != nprocs || myrank < 0 || myrank >= nprocs) {
         AbortDLB("region count or MPI rank is invalid while updating DLB regions");
     }
@@ -271,48 +270,48 @@ void UpdateDLBRegions(const std::vector<Region> &regions) {
     for (const Region &region : regions) {
         for (int dir = 0; dir < 3; ++dir) {
             if (region.elem_min[dir] < 0 || region.elem_max[dir] < region.elem_min[dir] ||
-                region.elem_max[dir] >= xyelemw[dir]) {
+                region.elem_max[dir] >= grid.mesh.xyelemw[dir]) {
                 AbortDLB("DLB region lies outside the global background mesh");
             }
         }
     }
 
-    g_current_regions = regions;
+    grid.part.regions = regions;
 
     const Region &local_region = regions[myrank];
     for (int dir = 0; dir < 3; ++dir) {
-        aelemmin[dir] = local_region.elem_min[dir];
-        aelemmax[dir] = local_region.elem_max[dir];
-        xyelem[dir] = aelemmax[dir] - aelemmin[dir] + 1;
-        xynode[dir] = xyelem[dir] + 1;
-        xynodec[dir] = xyelem[dir] + idimc[dir];
-        xymin[dir] = xyminw[dir] + dxy[dir] * double(aelemmin[dir]);
-        xymax[dir] = xyminw[dir] + dxy[dir] * double(aelemmax[dir] + 1);
+        grid.mesh.aelemmin[dir] = local_region.elem_min[dir];
+        grid.mesh.aelemmax[dir] = local_region.elem_max[dir];
+        grid.mesh.xyelem[dir] = grid.mesh.aelemmax[dir] - grid.mesh.aelemmin[dir] + 1;
+        grid.mesh.xynode[dir] = grid.mesh.xyelem[dir] + 1;
+        grid.cmesh.xynodec[dir] = grid.mesh.xyelem[dir] + grid.cmesh.idimc[dir];
+        grid.mesh.xymin[dir] = grid.mesh.xyminw[dir] + grid.mesh.dxy[dir] * double(grid.mesh.aelemmin[dir]);
+        grid.mesh.xymax[dir] = grid.mesh.xyminw[dir] + grid.mesh.dxy[dir] * double(grid.mesh.aelemmax[dir] + 1);
     }
 
-    nelem = xyelem[0] * xyelem[1] * xyelem[2];
-    node = xynode[0] * xynode[1] * xynode[2];
-    nodec = xynodec[0] * xynodec[1] * xynodec[2];
-    nu = 0;
-    nv = nu + node;
-    nw = nv + node;
-    np = nw + node;
-    nuc = 0;
-    nvc = nuc + nodec;
-    nwc = nvc + nodec;
-    npc = nwc + nodec;
+    grid.mesh.nelem = grid.mesh.xyelem[0] * grid.mesh.xyelem[1] * grid.mesh.xyelem[2];
+    grid.mesh.node = grid.mesh.xynode[0] * grid.mesh.xynode[1] * grid.mesh.xynode[2];
+    grid.cmesh.nodec = grid.cmesh.xynodec[0] * grid.cmesh.xynodec[1] * grid.cmesh.xynodec[2];
+    grid.mesh.nu = 0;
+    grid.mesh.nv = grid.mesh.nu + grid.mesh.node;
+    grid.mesh.nw = grid.mesh.nv + grid.mesh.node;
+    grid.mesh.np = grid.mesh.nw + grid.mesh.node;
+    grid.cmesh.nuc = 0;
+    grid.cmesh.nvc = grid.cmesh.nuc + grid.cmesh.nodec;
+    grid.cmesh.nwc = grid.cmesh.nvc + grid.cmesh.nodec;
+    grid.cmesh.npc = grid.cmesh.nwc + grid.cmesh.nodec;
 
-    naid.clear();
-    nsbc.clear();
-    nsbl.clear();
-    nsubc.clear();
-    nsubl.clear();
-    naid.reserve(nprocs - 1);
-    nsbc.reserve(nprocs - 1);
-    nsbl.reserve(nprocs - 1);
+    grid.part.naid.clear();
+    grid.part.nsbc.clear();
+    grid.part.nsbl.clear();
+    grid.part.nsubc.clear();
+    grid.part.nsubl.clear();
+    grid.part.naid.reserve(nprocs - 1);
+    grid.part.nsbc.reserve(nprocs - 1);
+    grid.part.nsbl.reserve(nprocs - 1);
 
-    std::vector<int> cp_shares(nodec, 1);
-    std::vector<int> node_shares(node, 1);
+    std::vector<int> cp_shares(grid.cmesh.nodec, 1);
+    std::vector<int> node_shares(grid.mesh.node, 1);
 
     for (int rank = 0; rank < nprocs; ++rank) {
         if (rank == myrank) { continue; }
@@ -324,12 +323,12 @@ void UpdateDLBRegions(const std::vector<Region> &regions) {
         bool cp_overlap = true;
         bool node_overlap = true;
         for (int dir = 0; dir < 3; ++dir) {
-            cp_min[dir] = std::max(aelemmin[dir], regions[rank].elem_min[dir]);
-            cp_max[dir] = std::min(aelemmax[dir] + idimc[dir], regions[rank].elem_max[dir] + idimc[dir]);
+            cp_min[dir] = std::max(grid.mesh.aelemmin[dir], regions[rank].elem_min[dir]);
+            cp_max[dir] = std::min(grid.mesh.aelemmax[dir] + grid.cmesh.idimc[dir], regions[rank].elem_max[dir] + grid.cmesh.idimc[dir]);
             if (cp_min[dir] > cp_max[dir]) { cp_overlap = false; }
 
-            node_min[dir] = std::max(aelemmin[dir], regions[rank].elem_min[dir]);
-            node_max[dir] = std::min(aelemmax[dir] + 1, regions[rank].elem_max[dir] + 1);
+            node_min[dir] = std::max(grid.mesh.aelemmin[dir], regions[rank].elem_min[dir]);
+            node_max[dir] = std::min(grid.mesh.aelemmax[dir] + 1, regions[rank].elem_max[dir] + 1);
             if (node_min[dir] > node_max[dir]) { node_overlap = false; }
         }
         if (!cp_overlap && !node_overlap) { continue; }
@@ -345,19 +344,19 @@ void UpdateDLBRegions(const std::vector<Region> &regions) {
                 (node_max[0] - node_min[0] + 1) * (node_max[1] - node_min[1] + 1) * (node_max[2] - node_min[2] + 1);
         }
 
-        naid.push_back(rank);
-        nsbc.push_back(cp_count);
-        nsbl.push_back(node_count);
+        grid.part.naid.push_back(rank);
+        grid.part.nsbc.push_back(cp_count);
+        grid.part.nsbl.push_back(node_count);
 
         if (node_overlap) {
             for (int k = node_min[2]; k <= node_max[2]; ++k) {
                 for (int j = node_min[1]; j <= node_max[1]; ++j) {
                     for (int i = node_min[0]; i <= node_max[0]; ++i) {
-                        const int il = i - aelemmin[0];
-                        const int jl = j - aelemmin[1];
-                        const int kl = k - aelemmin[2];
-                        const int local_id = il + xynode[0] * jl + xynode[0] * xynode[1] * kl;
-                        nsubl.push_back(local_id);
+                        const int il = i - grid.mesh.aelemmin[0];
+                        const int jl = j - grid.mesh.aelemmin[1];
+                        const int kl = k - grid.mesh.aelemmin[2];
+                        const int local_id = il + grid.mesh.xynode[0] * jl + grid.mesh.xynode[0] * grid.mesh.xynode[1] * kl;
+                        grid.part.nsubl.push_back(local_id);
                         ++node_shares[local_id];
                     }
                 }
@@ -368,11 +367,11 @@ void UpdateDLBRegions(const std::vector<Region> &regions) {
             for (int k = cp_min[2]; k <= cp_max[2]; ++k) {
                 for (int j = cp_min[1]; j <= cp_max[1]; ++j) {
                     for (int i = cp_min[0]; i <= cp_max[0]; ++i) {
-                        const int il = i - aelemmin[0];
-                        const int jl = j - aelemmin[1];
-                        const int kl = k - aelemmin[2];
-                        const int local_id = il + xynodec[0] * jl + xynodec[0] * xynodec[1] * kl;
-                        nsubc.push_back(local_id);
+                        const int il = i - grid.mesh.aelemmin[0];
+                        const int jl = j - grid.mesh.aelemmin[1];
+                        const int kl = k - grid.mesh.aelemmin[2];
+                        const int local_id = il + grid.cmesh.xynodec[0] * jl + grid.cmesh.xynodec[0] * grid.cmesh.xynodec[1] * kl;
+                        grid.part.nsubc.push_back(local_id);
                         ++cp_shares[local_id];
                     }
                 }
@@ -380,18 +379,18 @@ void UpdateDLBRegions(const std::vector<Region> &regions) {
         }
     }
 
-    isb = int(naid.size());
-    isubc = int(nsubc.size());
-    isubl = int(nsubl.size());
-    dbc.assign(nodec * 4, 1.0e0);
-    dbl.assign(node * 4, 1.0e0);
-    for (int nid = 0; nid < nodec; ++nid) {
+    grid.part.isb = int(grid.part.naid.size());
+    grid.part.isubc = int(grid.part.nsubc.size());
+    grid.part.isubl = int(grid.part.nsubl.size());
+    grid.part.dbc.assign(grid.cmesh.nodec * 4, 1.0e0);
+    grid.part.dbl.assign(grid.mesh.node * 4, 1.0e0);
+    for (int nid = 0; nid < grid.cmesh.nodec; ++nid) {
         const double weight = 1.0e0 / double(cp_shares[nid]);
-        for (int dof = 0; dof < 4; ++dof) { dbc[nid + dof * nodec] = weight; }
+        for (int dof = 0; dof < 4; ++dof) { grid.part.dbc[nid + dof * grid.cmesh.nodec] = weight; }
     }
-    for (int nid = 0; nid < node; ++nid) {
+    for (int nid = 0; nid < grid.mesh.node; ++nid) {
         const double weight = 1.0e0 / double(node_shares[nid]);
-        for (int dof = 0; dof < 4; ++dof) { dbl[nid + dof * node] = weight; }
+        for (int dof = 0; dof < 4; ++dof) { grid.part.dbl[nid + dof * grid.mesh.node] = weight; }
     }
 }
 
