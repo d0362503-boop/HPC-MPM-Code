@@ -151,8 +151,8 @@ void SolidMaterialPointBase::DetermineRigidBC() {
         }
     }
 
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->nrigid_normal, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->nrigid_normal, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     VectorAssign(cmesh.nodec, this->rigid_bc.nbc);
     VectorAssign(cmesh.nodec, this->rigid_bc.fbc);

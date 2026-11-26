@@ -14,11 +14,12 @@ void MPMFEMFSIFluidDivider::LoadBoundaryData(std::ifstream &infile) {
 }
 
 void MPMFEMFSIFluidDivider::PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max) {
+    ControlMesh &cmesh = this->grid_.cmesh;
 
-    DataPartitioner::BCRenumber(this->partition_mesh_.ubc, this->mesh_.ubc, xynodec, xynodecw, cp_min, cp_max);
-    DataPartitioner::BCRenumber(this->partition_mesh_.vbc, this->mesh_.vbc, xynodec, xynodecw, cp_min, cp_max);
-    DataPartitioner::BCRenumber(this->partition_mesh_.wbc, this->mesh_.wbc, xynodec, xynodecw, cp_min, cp_max);
-    DataPartitioner::BCRenumber(this->partition_mesh_.pbc, this->mesh_.pbc, xynodec, xynodecw, cp_min, cp_max);
+    DataPartitioner::BCRenumber(this->partition_mesh_.ubc, this->mesh_.ubc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    DataPartitioner::BCRenumber(this->partition_mesh_.vbc, this->mesh_.vbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    DataPartitioner::BCRenumber(this->partition_mesh_.wbc, this->mesh_.wbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    DataPartitioner::BCRenumber(this->partition_mesh_.pbc, this->mesh_.pbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
 
     return;
 }

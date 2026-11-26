@@ -47,11 +47,11 @@ void StabilizedMPM::Particle2Node(const TimeState &ts) {
         }
     }
 
-    NodeVarComm(this->nmass, 0);
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->npres, 0);
-    NodeVarComm(this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
-    NodeVarComm(this->nforce, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nmass, 0);
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->npres, 0);
+    NodeVarComm(this->grid_.part, this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nforce, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     VectorAssign(cmesh.nodec, this->nphi);
     for (int n = 0; n < cmesh.nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / cmesh.nvol[n], 0.0e0, 1.0e0); }

@@ -12,6 +12,7 @@
 #include "module/mpi_data.h"
 
 int DataPartitioner::Run() {
+    Partition &part = this->grid_.part;
 
     std::cout << " ---- Start dividing " << this->CaseName() << " data ----"
               << "\n";
@@ -29,7 +30,7 @@ int DataPartitioner::Run() {
     this->PartitionInitialDataset();
     this->CreateOutputDirectories();
 
-    const int rank_count = nxyr[0] * nxyr[1] * nxyr[2];
+    const int rank_count = part.nxyr[0] * part.nxyr[1] * part.nxyr[2];
     for (int rank_id = 0; rank_id < rank_count; ++rank_id) {
         this->PartitionProcess(rank_id);
 
@@ -48,91 +49,98 @@ int DataPartitioner::Run() {
 }
 
 void DataPartitioner::InputMeshData(std::ifstream &infile) {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int i = 0; i < 3; ++i) infile >> idimc[i];
+    for (int i = 0; i < 3; ++i) infile >> cmesh.idimc[i];
     infile.ignore(1000, '\n');
 
-    for (int i = 0; i < 3; ++i) infile >> xyminw[i];
+    for (int i = 0; i < 3; ++i) infile >> mesh.xyminw[i];
     infile.ignore(1000, '\n');
 
-    for (int i = 0; i < 3; ++i) infile >> xymaxw[i];
+    for (int i = 0; i < 3; ++i) infile >> mesh.xymaxw[i];
     infile.ignore(1000, '\n');
 
-    infile >> nelem;
-    for (int i = 0; i < 3; ++i) infile >> xyelemw[i];
+    infile >> mesh.nelem;
+    for (int i = 0; i < 3; ++i) infile >> mesh.xyelemw[i];
     infile.ignore(1000, '\n');
 
-    infile >> node;
-    for (int i = 0; i < 3; ++i) infile >> xynodew[i];
+    infile >> mesh.node;
+    for (int i = 0; i < 3; ++i) infile >> mesh.xynodew[i];
     infile.ignore(1000, '\n');
 
-    infile >> nodec;
-    for (int i = 0; i < 3; ++i) infile >> xynodecw[i];
+    infile >> cmesh.nodec;
+    for (int i = 0; i < 3; ++i) infile >> cmesh.xynodecw[i];
     infile.ignore(1000, '\n');
 
     return;
 }
 
 void DataPartitioner::OutputMeshData(std::ofstream &outfile, int rank_id) const {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
+    Partition &part = this->grid_.part;
 
     outfile << std::setw(15) << rank_id << "     --- myrank ---" << "\n";
 
-    outfile << std::setw(15) << nelem << std::setw(15) << xyelem[0] << std::setw(15) << xyelem[1] << std::setw(15)
-            << xyelem[2] << "     --- rank element ---" << "\n";
+    outfile << std::setw(15) << mesh.nelem << std::setw(15) << mesh.xyelem[0] << std::setw(15) << mesh.xyelem[1] << std::setw(15)
+            << mesh.xyelem[2] << "     --- rank element ---" << "\n";
 
-    outfile << std::setw(15) << node << std::setw(15) << xynode[0] << std::setw(15) << xynode[1] << std::setw(15)
-            << xynode[2] << "     --- rank node ---" << "\n";
+    outfile << std::setw(15) << mesh.node << std::setw(15) << mesh.xynode[0] << std::setw(15) << mesh.xynode[1] << std::setw(15)
+            << mesh.xynode[2] << "     --- rank node ---" << "\n";
 
-    outfile << std::setw(15) << nodec << std::setw(15) << xynodec[0] << std::setw(15) << xynodec[1] << std::setw(15)
-            << xynodec[2] << "     --- rank control point ---" << "\n";
+    outfile << std::setw(15) << cmesh.nodec << std::setw(15) << cmesh.xynodec[0] << std::setw(15) << cmesh.xynodec[1] << std::setw(15)
+            << cmesh.xynodec[2] << "     --- rank control point ---" << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << nxyr[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << part.nxyr[i];
     outfile << "     --- rank number ---" << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << xymin[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << mesh.xymin[i];
     outfile << "     --- rank minimum coordinate ---" << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << xymax[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << mesh.xymax[i];
     outfile << "     --- rank maximum coordinate ---" << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << aelemmin[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << mesh.aelemmin[i];
     outfile << "     --- rank minimum element ID ---" << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << aelemmax[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << mesh.aelemmax[i];
     outfile << "     --- rank maximum element ID ---" << "\n";
 
-    outfile << std::setw(15) << isb << "     --- overlap rank number ---" << "\n";
-    if (isb != 0) {
-        OutputVector(outfile, isb, naid);
+    outfile << std::setw(15) << part.isb << "     --- overlap rank number ---" << "\n";
+    if (part.isb != 0) {
+        OutputVector(outfile, part.isb, part.naid);
 
-        outfile << std::setw(15) << isubc << "     --- overlap control point number ---" << "\n";
-        OutputVector(outfile, isb, nsbc);
-        OutputVector(outfile, isubc, nsubc);
-        OutputVector(outfile, nodec, dbc);
+        outfile << std::setw(15) << part.isubc << "     --- overlap control point number ---" << "\n";
+        OutputVector(outfile, part.isb, part.nsbc);
+        OutputVector(outfile, part.isubc, part.nsubc);
+        OutputVector(outfile, cmesh.nodec, part.dbc);
 
-        outfile << std::setw(15) << isubl << "     --- overlap node number ---"
+        outfile << std::setw(15) << part.isubl << "     --- overlap node number ---"
                 << "\n";
-        OutputVector(outfile, isb, nsbl);
-        OutputVector(outfile, isubl, nsubl);
-        OutputVector(outfile, node, dbl);
+        OutputVector(outfile, part.isb, part.nsbl);
+        OutputVector(outfile, part.isubl, part.nsubl);
+        OutputVector(outfile, mesh.node, part.dbl);
     }
 
     return;
 }
 
 void DataPartitioner::PartitionInitialDataset() {
+    Mesh &mesh = this->grid_.mesh;
+    Partition &part = this->grid_.part;
 
     for (int i = 0; i < 3; ++i) {
-        this->nexyr1_[i] = xyelemw[i] / nxyr[i];
+        this->nexyr1_[i] = mesh.xyelemw[i] / part.nxyr[i];
         this->nexyr2_[i] = this->nexyr1_[i] + 1;
-        this->nr2_[i] = xyelemw[i] % nxyr[i];
-        this->nr1_[i] = nxyr[i] - this->nr2_[i];
-        dxy[i] = (xymaxw[i] - xyminw[i]) / double(xyelemw[i]);
-        this->drxy1_[i] = (xymaxw[i] - xyminw[i] - dxy[i] * double(this->nr2_[i])) / double(nxyr[i]);
-        this->drxy2_[i] = this->drxy1_[i] + dxy[i];
+        this->nr2_[i] = mesh.xyelemw[i] % part.nxyr[i];
+        this->nr1_[i] = part.nxyr[i] - this->nr2_[i];
+        mesh.dxy[i] = (mesh.xymaxw[i] - mesh.xyminw[i]) / double(mesh.xyelemw[i]);
+        this->drxy1_[i] = (mesh.xymaxw[i] - mesh.xyminw[i] - mesh.dxy[i] * double(this->nr2_[i])) / double(part.nxyr[i]);
+        this->drxy2_[i] = this->drxy1_[i] + mesh.dxy[i];
         this->nxyr1_[i] = this->nexyr1_[i] + 1;
         this->nxyr2_[i] = this->nexyr2_[i] + 1;
-        this->bound12_[i] = xyminw[i] + this->drxy1_[i] * double(this->nr1_[i]);
+        this->bound12_[i] = mesh.xyminw[i] + this->drxy1_[i] * double(this->nr1_[i]);
     }
 
     return;
@@ -174,18 +182,20 @@ void DataPartitioner::BCRenumber(BoundaryCondition &partition_bc, const Boundary
 
 void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id, //
                                     MaterialPoint &point, int rank_id) const {
+    Mesh &mesh = this->grid_.mesh;
+    Partition &part = this->grid_.part;
 
     std::vector<int> irxy(3);
     global_id.resize(point.num);
 
-    const int nrx = nxyr[0];
-    const int nry = nxyr[1];
+    const int nrx = part.nxyr[0];
+    const int nry = part.nxyr[1];
 
     local_num = 0;
     for (int ip = 0; ip < point.num; ++ip) {
         for (int i = 0; i < 3; ++i) {
             if (point.coord[ip][i] < this->bound12_[i]) {
-                irxy[i] = floor((point.coord[ip][i] - xyminw[i]) / this->drxy1_[i]);
+                irxy[i] = floor((point.coord[ip][i] - mesh.xyminw[i]) / this->drxy1_[i]);
             } else {
                 irxy[i] = this->nr1_[i] + floor((point.coord[ip][i] - this->bound12_[i]) / this->drxy2_[i]);
             }
@@ -201,92 +211,95 @@ void DataPartitioner::PointRenumber(int &local_num, std::vector<int> &global_id,
 }
 
 void DataPartitioner::MeshPartition(int rank_id) {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
+    Partition &part = this->grid_.part;
 
-    const int nrx = nxyr[0];
-    const int nry = nxyr[1];
+    const int nrx = part.nxyr[0];
+    const int nry = part.nxyr[1];
 
     std::vector<int> irxy(3);
     irxy[2] = rank_id / (nrx * nry);
     irxy[1] = (rank_id - irxy[2] * (nrx * nry)) / nrx;
     irxy[0] = rank_id - irxy[2] * (nrx * nry) - irxy[1] * nrx;
 
-    isb = 1;
+    part.isb = 1;
 
     std::vector<std::vector<int>> ijkl(6, std::vector<int>(3));
     std::vector<std::vector<int>> ijkc(6, std::vector<int>(3));
     for (int ix = 0; ix < 3; ++ix) {
         if (irxy[ix] < this->nr1_[ix]) {
-            xymin[ix] = xyminw[ix] + this->drxy1_[ix] * double(irxy[ix]);
-            xymax[ix] = xymin[ix] + this->drxy1_[ix];
-            aelemmin[ix] = this->nexyr1_[ix] * irxy[ix];
-            aelemmax[ix] = aelemmin[ix] + this->nexyr1_[ix] - 1;
-            xyelem[ix] = this->nexyr1_[ix];
+            mesh.xymin[ix] = mesh.xyminw[ix] + this->drxy1_[ix] * double(irxy[ix]);
+            mesh.xymax[ix] = mesh.xymin[ix] + this->drxy1_[ix];
+            mesh.aelemmin[ix] = this->nexyr1_[ix] * irxy[ix];
+            mesh.aelemmax[ix] = mesh.aelemmin[ix] + this->nexyr1_[ix] - 1;
+            mesh.xyelem[ix] = this->nexyr1_[ix];
         } else {
-            xymin[ix] = this->bound12_[ix] + this->drxy2_[ix] * double(irxy[ix] - this->nr1_[ix]);
-            xymax[ix] = xymin[ix] + this->drxy2_[ix];
-            aelemmin[ix] = this->nexyr1_[ix] * this->nr1_[ix] + this->nexyr2_[ix] * (irxy[ix] - this->nr1_[ix]);
-            aelemmax[ix] = aelemmin[ix] + this->nexyr2_[ix] - 1;
-            xyelem[ix] = this->nexyr2_[ix];
+            mesh.xymin[ix] = this->bound12_[ix] + this->drxy2_[ix] * double(irxy[ix] - this->nr1_[ix]);
+            mesh.xymax[ix] = mesh.xymin[ix] + this->drxy2_[ix];
+            mesh.aelemmin[ix] = this->nexyr1_[ix] * this->nr1_[ix] + this->nexyr2_[ix] * (irxy[ix] - this->nr1_[ix]);
+            mesh.aelemmax[ix] = mesh.aelemmin[ix] + this->nexyr2_[ix] - 1;
+            mesh.xyelem[ix] = this->nexyr2_[ix];
         }
 
-        xynode[ix] = xyelem[ix] + 1;
-        xynodec[ix] = xyelem[ix] + idimc[ix];
+        mesh.xynode[ix] = mesh.xyelem[ix] + 1;
+        cmesh.xynodec[ix] = mesh.xyelem[ix] + cmesh.idimc[ix];
 
-        if (nxyr[ix] == 1) {
-            int temp_ijkl[] = {-1, -1, 0, xynode[ix] - 1, -1, -1};
-            int temp_ijkc[] = {-1, -1, 0, xynodec[ix] - 1, -1, -1};
+        if (part.nxyr[ix] == 1) {
+            int temp_ijkl[] = {-1, -1, 0, mesh.xynode[ix] - 1, -1, -1};
+            int temp_ijkc[] = {-1, -1, 0, cmesh.xynodec[ix] - 1, -1, -1};
             for (int i = 0; i < 6; ++i) {
                 ijkc[i][ix] = temp_ijkc[i];
                 ijkl[i][ix] = temp_ijkl[i];
             }
         } else if (irxy[ix] == 0) {
-            int temp_ijkl[] = {-1, -1, 0, xynode[ix] - 1, xynode[ix] - 1, xynode[ix] - 1};
-            int temp_ijkc[] = {-1, -1, 0, xynodec[ix] - 1, xynodec[ix] - idimc[ix], xynodec[ix] - 1};
+            int temp_ijkl[] = {-1, -1, 0, mesh.xynode[ix] - 1, mesh.xynode[ix] - 1, mesh.xynode[ix] - 1};
+            int temp_ijkc[] = {-1, -1, 0, cmesh.xynodec[ix] - 1, cmesh.xynodec[ix] - cmesh.idimc[ix], cmesh.xynodec[ix] - 1};
             for (int i = 0; i < 6; ++i) {
                 ijkc[i][ix] = temp_ijkc[i];
                 ijkl[i][ix] = temp_ijkl[i];
             }
-            isb *= 2;
-        } else if (irxy[ix] == nxyr[ix] - 1) {
-            int temp_ijkl[] = {0, 0, 0, xynode[ix] - 1, -1, -1};
-            int temp_ijkc[] = {0, idimc[ix] - 1, 0, xynodec[ix] - 1, -1, -1};
+            part.isb *= 2;
+        } else if (irxy[ix] == part.nxyr[ix] - 1) {
+            int temp_ijkl[] = {0, 0, 0, mesh.xynode[ix] - 1, -1, -1};
+            int temp_ijkc[] = {0, cmesh.idimc[ix] - 1, 0, cmesh.xynodec[ix] - 1, -1, -1};
             for (int i = 0; i < 6; ++i) {
                 ijkc[i][ix] = temp_ijkc[i];
                 ijkl[i][ix] = temp_ijkl[i];
             }
-            isb *= 2;
+            part.isb *= 2;
         } else {
-            int temp_ijkl[] = {0, 0, 0, xynode[ix] - 1, xynode[ix] - 1, xynode[ix] - 1};
-            int temp_ijkc[] = {0, idimc[ix] - 1, 0, xynodec[ix] - 1, xynodec[ix] - idimc[ix], xynodec[ix] - 1};
+            int temp_ijkl[] = {0, 0, 0, mesh.xynode[ix] - 1, mesh.xynode[ix] - 1, mesh.xynode[ix] - 1};
+            int temp_ijkc[] = {0, cmesh.idimc[ix] - 1, 0, cmesh.xynodec[ix] - 1, cmesh.xynodec[ix] - cmesh.idimc[ix], cmesh.xynodec[ix] - 1};
             for (int i = 0; i < 6; ++i) {
                 ijkc[i][ix] = temp_ijkc[i];
                 ijkl[i][ix] = temp_ijkl[i];
             }
-            isb *= 3;
+            part.isb *= 3;
         }
 
-        this->inxyminl_[ix] = aelemmin[ix];
-        this->inxymaxl_[ix] = aelemmax[ix] + 1;
-        this->inxyminc_[ix] = aelemmin[ix];
-        this->inxymaxc_[ix] = aelemmax[ix] + idimc[ix];
+        this->inxyminl_[ix] = mesh.aelemmin[ix];
+        this->inxymaxl_[ix] = mesh.aelemmax[ix] + 1;
+        this->inxyminc_[ix] = mesh.aelemmin[ix];
+        this->inxymaxc_[ix] = mesh.aelemmax[ix] + cmesh.idimc[ix];
     }
 
-    node = xynode[0] * xynode[1] * xynode[2];
-    nodec = xynodec[0] * xynodec[1] * xynodec[2];
-    nelem = xyelem[0] * xyelem[1] * xyelem[2];
+    mesh.node = mesh.xynode[0] * mesh.xynode[1] * mesh.xynode[2];
+    cmesh.nodec = cmesh.xynodec[0] * cmesh.xynodec[1] * cmesh.xynodec[2];
+    mesh.nelem = mesh.xyelem[0] * mesh.xyelem[1] * mesh.xyelem[2];
 
-    isb--;
-    naid.resize(isb);
-    nsbc.resize(isb);
-    nsbl.resize(isb);
-    nsubc.resize(nodec * isb);
-    nsubl.resize(node * isb);
-    VectorAssign(nodec, dbc, 1.0e0);
-    VectorAssign(node, dbl, 1.0e0);
+    part.isb--;
+    part.naid.resize(part.isb);
+    part.nsbc.resize(part.isb);
+    part.nsbl.resize(part.isb);
+    part.nsubc.resize(cmesh.nodec * part.isb);
+    part.nsubl.resize(mesh.node * part.isb);
+    VectorAssign(cmesh.nodec, part.dbc, 1.0e0);
+    VectorAssign(mesh.node, part.dbl, 1.0e0);
 
-    isubc = 0;
-    isubl = 0;
-    isb = 0;
+    part.isubc = 0;
+    part.isubl = 0;
+    part.isb = 0;
     for (int kk = 0; kk < 3; ++kk) {
         int ksc = ijkc[2 * kk][2];
         int kec = ijkc[2 * kk + 1][2];
@@ -307,16 +320,16 @@ void DataPartitioner::MeshPartition(int rank_id) {
                 int iel = ijkl[2 * ii + 1][0];
                 if (isc == -1) continue;
 
-                naid[isb] = rank_id + (ii - 1) + (jj - 1) * nxyr[0] + (kk - 1) * nxyr[0] * nxyr[1];
-                nsbc[isb] = (iec - isc + 1) * (jec - jsc + 1) * (kec - ksc + 1);
-                nsbl[isb] = (iel - isl + 1) * (jel - jsl + 1) * (kel - ksl + 1);
+                part.naid[part.isb] = rank_id + (ii - 1) + (jj - 1) * part.nxyr[0] + (kk - 1) * part.nxyr[0] * part.nxyr[1];
+                part.nsbc[part.isb] = (iec - isc + 1) * (jec - jsc + 1) * (kec - ksc + 1);
+                part.nsbl[part.isb] = (iel - isl + 1) * (jel - jsl + 1) * (kel - ksl + 1);
 
                 for (int k = ksl; k <= kel; ++k) {
                     for (int j = jsl; j <= jel; ++j) {
                         for (int i = isl; i <= iel; ++i) {
-                            int nn = i + j * xynode[0] + k * xynode[0] * xynode[1];
-                            nsubl[isubl++] = nn;
-                            dbl[nn] += 1.0e0;
+                            int nn = i + j * mesh.xynode[0] + k * mesh.xynode[0] * mesh.xynode[1];
+                            part.nsubl[part.isubl++] = nn;
+                            part.dbl[nn] += 1.0e0;
                         }
                     }
                 }
@@ -324,13 +337,13 @@ void DataPartitioner::MeshPartition(int rank_id) {
                 for (int k = ksc; k <= kec; ++k) {
                     for (int j = jsc; j <= jec; ++j) {
                         for (int i = isc; i <= iec; ++i) {
-                            int nn = i + j * xynodec[0] + k * xynodec[0] * xynodec[1];
-                            nsubc[isubc++] = nn;
-                            dbc[nn] += 1.0e0;
+                            int nn = i + j * cmesh.xynodec[0] + k * cmesh.xynodec[0] * cmesh.xynodec[1];
+                            part.nsubc[part.isubc++] = nn;
+                            part.dbc[nn] += 1.0e0;
                         }
                     }
                 }
-                ++isb;
+                ++part.isb;
             }
         }
     }
@@ -339,8 +352,9 @@ void DataPartitioner::MeshPartition(int rank_id) {
 }
 
 void DataPartitioner::LoadPartitionParameters(std::ifstream &infile) {
+    Partition &part = this->grid_.part;
 
-    for (int i = 0; i < 3; ++i) { infile >> nxyr[i]; }
+    for (int i = 0; i < 3; ++i) { infile >> part.nxyr[i]; }
     infile >> this->grid_input_file_;
     infile >> this->point_input_file_;
     infile >> this->grid_output_prefix_;

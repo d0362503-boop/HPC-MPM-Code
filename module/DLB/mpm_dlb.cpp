@@ -71,14 +71,14 @@ void CollectCurrentRegions(const Mesh &mesh, Partition &part) {
 
 
 // Keep samples inside one recursive child range.
-std::vector<std::array<double, 3>> FilterSamples(const std::vector<std::array<double, 3>> &samples, int dir, int lo,
-                                                 int hi) {
+std::vector<std::array<double, 3>> FilterSamples(const Mesh &mesh, const std::vector<std::array<double, 3>> &samples,
+                                                 int dir, int lo, int hi) {
     std::vector<std::array<double, 3>> filtered;
     filtered.reserve(samples.size());
 
     for (const auto &sample : samples) {
         std::array<int, 3> element{};
-        if (!LocateGlobalElement(g_grid.mesh, sample, element)) { AbortDLB("DLB sample lies outside the global background mesh"); }
+        if (!LocateGlobalElement(mesh, sample, element)) { AbortDLB("DLB sample lies outside the global background mesh"); }
         if (element[dir] >= lo && element[dir] <= hi) { filtered.push_back(sample); }
     }
 
@@ -222,11 +222,11 @@ std::vector<Region> ComputeDLBRegions(const Grid &grid, const std::vector<std::a
         const auto z_cuts = CutsFromSamples(global_samples, 2, 0, grid.mesh.xyelemw[2] - 1, nz, grid.mesh.xyminw[2], grid.mesh.dxy[2]);
 
         for (int iz = 0; iz < nz; ++iz) {
-            const auto z_samples = FilterSamples(global_samples, 2, z_cuts[iz], z_cuts[iz + 1] - 1);
+            const auto z_samples = FilterSamples(grid.mesh, global_samples, 2, z_cuts[iz], z_cuts[iz + 1] - 1);
             const auto y_cuts = CutsFromSamples(z_samples, 1, 0, grid.mesh.xyelemw[1] - 1, ny, grid.mesh.xyminw[1], grid.mesh.dxy[1]);
 
             for (int iy = 0; iy < ny; ++iy) {
-                const auto y_samples = FilterSamples(z_samples, 1, y_cuts[iy], y_cuts[iy + 1] - 1);
+                const auto y_samples = FilterSamples(grid.mesh, z_samples, 1, y_cuts[iy], y_cuts[iy + 1] - 1);
                 const auto x_cuts = CutsFromSamples(y_samples, 0, 0, grid.mesh.xyelemw[0] - 1, nx, grid.mesh.xyminw[0], grid.mesh.dxy[0]);
 
                 for (int ix = 0; ix < nx; ++ix) {

@@ -10,6 +10,13 @@
 
 class DataPartitioner {
   public:
+    /**
+     * @brief Bind the partitioner to the grid and run parameters it reads and rewrites.
+     * @param grid   Grid being partitioned (global mesh, overwritten with each rank window).
+     * @param params Run parameters of the case.
+     */
+    DataPartitioner(Grid &grid, RunParams &params) : grid_(grid), params_(params) {}
+
     virtual ~DataPartitioner() = default;
 
     /**
@@ -37,6 +44,9 @@ class DataPartitioner {
                            bool compute_values = true);
 
   protected:
+    Grid &grid_;        // grid being partitioned
+    RunParams &params_; // run parameters of the case
+
     /** @brief Return the physical case name used in partitioner messages. */
     virtual std::string CaseName() const = 0;
 

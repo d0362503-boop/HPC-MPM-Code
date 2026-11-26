@@ -125,7 +125,7 @@ Newton criteria remain independent of this preconditioning layer.
 ## Newton iteration
 
 `MPMMPMMonolithicFSI` is a `NonlinearProblem` (`module/implicit/newton_solver.h`), and
-`SolveFSISystem()` calls `SolveNewton(*this, max_NR_it)`. Its `BeginNewtonStep()`
+`SolveFSISystem(ts)` calls `SolveNewton(*this, ts, max_NR_it)`. Its `BeginNewtonStep()`
 builds the lumped interface weights and active-component mask
 once at the beginning of the time step. Fluid stabilization coefficients
 are computed from the step-start nodal velocity and remain frozen during Newton.

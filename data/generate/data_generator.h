@@ -3,8 +3,17 @@
 #include <fstream>
 #include <string>
 
+#include "module/mesh.h"
+
 class DataGenerator {
   public:
+    /**
+     * @brief Bind the generator to the grid and run parameters it fills.
+     * @param grid   Grid being generated (global mesh of the case).
+     * @param params Run parameters read from input.txt.
+     */
+    DataGenerator(Grid &grid, RunParams &params) : grid_(grid), params_(params) {}
+
     /** @brief Destroy the generator after its case data has been written. */
     virtual ~DataGenerator() = default;
 
@@ -16,6 +25,9 @@ class DataGenerator {
     int Run();
 
   protected:
+    Grid &grid_;        // grid being generated
+    RunParams &params_; // run parameters of the case
+
     /** @brief Return the physical case name used in generator messages. */
     virtual std::string CaseName() const = 0;
 

@@ -103,7 +103,7 @@ void MaterialPoint::CalNodalUnitNormal() {
         }
     }
 
-    NodeVarComm(this->nnormal, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nnormal, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     for (int n = 0; n < cmesh.nodec; n++) {
         double norm = std::sqrt(std::pow(this->nnormal[n + cmesh.nuc], 2)   //

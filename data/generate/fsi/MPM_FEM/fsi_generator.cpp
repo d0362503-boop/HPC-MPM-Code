@@ -17,29 +17,30 @@
 #include "module/mesh.h"
 
 void MPMFEMFSISolidGenerator::CreateBCs() {
+    ControlMesh &cmesh = this->grid_.cmesh;
 
-    const int xnodec = xynodec[0];
-    const int ynodec = xynodec[1];
-    const int znodec = xynodec[2];
+    const int xnodec = cmesh.xynodec[0];
+    const int ynodec = cmesh.xynodec[1];
+    const int znodec = cmesh.xynodec[2];
 
-    this->ubc.nbc.resize(nodec);
-    this->vbc.nbc.resize(nodec);
-    this->wbc.nbc.resize(nodec);
-    this->ubc.fbc.resize(nodec);
-    this->vbc.fbc.resize(nodec);
-    this->wbc.fbc.resize(nodec);
+    this->points_.ubc.nbc.resize(cmesh.nodec);
+    this->points_.vbc.nbc.resize(cmesh.nodec);
+    this->points_.wbc.nbc.resize(cmesh.nodec);
+    this->points_.ubc.fbc.resize(cmesh.nodec);
+    this->points_.vbc.fbc.resize(cmesh.nodec);
+    this->points_.wbc.fbc.resize(cmesh.nodec);
 
-    this->ubc.ibc = 0;
-    this->vbc.ibc = 0;
-    this->wbc.ibc = 0;
+    this->points_.ubc.ibc = 0;
+    this->points_.vbc.ibc = 0;
+    this->points_.wbc.ibc = 0;
     for (int k = 0; k < znodec; ++k) {
         for (int j = 0; j < ynodec; ++j) {
             for (int i = 0; i < xnodec; ++i) {
                 const int id = i + xnodec * j + xnodec * ynodec * k;
                 if (j == 0 || j == ynodec - 1) {
-                    this->vbc.nbc[this->vbc.ibc] = id;
-                    this->vbc.fbc[this->vbc.ibc] = 0.0e0;
-                    this->vbc.ibc++;
+                    this->points_.vbc.nbc[this->points_.vbc.ibc] = id;
+                    this->points_.vbc.fbc[this->points_.vbc.ibc] = 0.0e0;
+                    this->points_.vbc.ibc++;
                 }
             }
         }
@@ -49,49 +50,51 @@ void MPMFEMFSISolidGenerator::CreateBCs() {
 }
 
 void MPMFEMFSISolidGenerator::CreateParticles() {
+    Mesh &mesh = this->grid_.mesh;
+    RunParams &params = this->params_;
 
-    const int xelem = xyelem[0];
-    const int yelem = xyelem[1];
-    const int zelem = xyelem[2];
-    const double dx = dxy[0];
-    const double dy = dxy[1];
-    const double dz = dxy[2];
-    const double xmin = xymin[0];
-    const double ymin = xymin[1];
-    const double zmin = xymin[2];
-    const int nspe = npxye[0] * npxye[1] * npxye[2];
+    const int xelem = mesh.xyelem[0];
+    const int yelem = mesh.xyelem[1];
+    const int zelem = mesh.xyelem[2];
+    const double dx = mesh.dxy[0];
+    const double dy = mesh.dxy[1];
+    const double dz = mesh.dxy[2];
+    const double xmin = mesh.xymin[0];
+    const double ymin = mesh.xymin[1];
+    const double zmin = mesh.xymin[2];
+    const int nspe = params.npxye[0] * params.npxye[1] * params.npxye[2];
 
     this->solid_point_volume_ = dx * dy * dz / static_cast<double>(nspe);
-    this->solid_point_mass_ = this->rho * this->solid_point_volume_;
+    this->solid_point_mass_ = this->points_.rho * this->solid_point_volume_;
 
     std::array<std::array<double, 3>, 6> dec2p;
-    SubcellOffsets(npxye, dxy, dec2p);
+    SubcellOffsets(params.npxye, mesh.dxy, dec2p);
 
-    this->coord.resize(nelem * nspe);
-    this->matid.resize(nelem * nspe);
-    this->id.resize(nelem * nspe);
-    this->surf_point.resize(nelem * nspe);
+    this->points_.coord.resize(mesh.nelem * nspe);
+    this->points_.matid.resize(mesh.nelem * nspe);
+    this->points_.id.resize(mesh.nelem * nspe);
+    this->points_.surf_point.resize(mesh.nelem * nspe);
 
-    this->num = 0;
+    this->points_.num = 0;
     for (int k = 0; k < zelem; ++k) {
         for (int j = 0; j < yelem; ++j) {
             for (int i = 0; i < xelem; ++i) {
                 const double ecx = dx * (static_cast<double>(i) + 0.5e0) + xmin;
                 const double ecy = dy * (static_cast<double>(j) + 0.5e0) + ymin;
                 const double ecz = dz * (static_cast<double>(k) + 0.5e0) + zmin;
-                for (int kp = 0; kp < npxye[2]; ++kp) {
+                for (int kp = 0; kp < params.npxye[2]; ++kp) {
                     const double zp = ecz + dec2p[kp][2];
-                    for (int jp = 0; jp < npxye[1]; ++jp) {
+                    for (int jp = 0; jp < params.npxye[1]; ++jp) {
                         const double yp = ecy + dec2p[jp][1];
-                        for (int ip = 0; ip < npxye[0]; ++ip) {
+                        for (int ip = 0; ip < params.npxye[0]; ++ip) {
                             const double xp = ecx + dec2p[ip][0];
                             if (std::pow(xp - 1.0e-2, 2) + std::pow(zp - 4.0e-2, 2) < std::pow(1.25e-3, 2)) {
-                                this->coord[this->num][0] = xp;
-                                this->coord[this->num][1] = yp;
-                                this->coord[this->num][2] = zp;
-                                this->matid[this->num] = 0;
-                                this->id[this->num] = this->num;
-                                this->num++;
+                                this->points_.coord[this->points_.num][0] = xp;
+                                this->points_.coord[this->points_.num][1] = yp;
+                                this->points_.coord[this->points_.num][2] = zp;
+                                this->points_.matid[this->points_.num] = 0;
+                                this->points_.id[this->points_.num] = this->points_.num;
+                                this->points_.num++;
                             }
                         }
                     }
@@ -100,76 +103,78 @@ void MPMFEMFSISolidGenerator::CreateParticles() {
         }
     }
 
-    this->coord.resize(this->num);
-    this->matid.resize(this->num);
-    this->id.resize(this->num);
-    this->surf_point.resize(this->num);
+    this->points_.coord.resize(this->points_.num);
+    this->points_.matid.resize(this->points_.num);
+    this->points_.id.resize(this->points_.num);
+    this->points_.surf_point.resize(this->points_.num);
     this->MarkSurfacePoints();
 
     return;
 }
 
 void MPMFEMFSISolidGenerator::MarkSurfacePoints() {
+    RunParams &params = this->params_;
 
-    if (this->num == 0) { return; }
+    if (this->points_.num == 0) { return; }
 
     double upper_surface = -std::numeric_limits<double>::infinity();
-    for (int i = 0; i < this->num; ++i) { upper_surface = std::max(upper_surface, this->coord[i][2]); }
-    for (int i = 0; i < this->num; ++i) {
-        if (std::abs(this->coord[i][2] - upper_surface) <= mtol) { this->surf_point[i] = 1; }
+    for (int i = 0; i < this->points_.num; ++i) { upper_surface = std::max(upper_surface, this->points_.coord[i][2]); }
+    for (int i = 0; i < this->points_.num; ++i) {
+        if (std::abs(this->points_.coord[i][2] - upper_surface) <= params.mtol) { this->points_.surf_point[i] = 1; }
     }
 
     return;
 }
 
 void MPMFEMFSIFluidGenerator::CreateBCs() {
+    ControlMesh &cmesh = this->grid_.cmesh;
 
-    const int xnodec = xynodec[0];
-    const int ynodec = xynodec[1];
-    const int znodec = xynodec[2];
+    const int xnodec = cmesh.xynodec[0];
+    const int ynodec = cmesh.xynodec[1];
+    const int znodec = cmesh.xynodec[2];
 
-    this->ubc.nbc.resize(nodec);
-    this->vbc.nbc.resize(nodec);
-    this->wbc.nbc.resize(nodec);
-    this->pbc.nbc.resize(nodec);
-    this->ubc.fbc.resize(nodec);
-    this->vbc.fbc.resize(nodec);
-    this->wbc.fbc.resize(nodec);
-    this->pbc.fbc.resize(nodec);
+    this->points_.ubc.nbc.resize(cmesh.nodec);
+    this->points_.vbc.nbc.resize(cmesh.nodec);
+    this->points_.wbc.nbc.resize(cmesh.nodec);
+    this->points_.pbc.nbc.resize(cmesh.nodec);
+    this->points_.ubc.fbc.resize(cmesh.nodec);
+    this->points_.vbc.fbc.resize(cmesh.nodec);
+    this->points_.wbc.fbc.resize(cmesh.nodec);
+    this->points_.pbc.fbc.resize(cmesh.nodec);
 
-    this->ubc.ibc = 0;
-    this->vbc.ibc = 0;
-    this->wbc.ibc = 0;
-    this->pbc.ibc = 0;
+    this->points_.ubc.ibc = 0;
+    this->points_.vbc.ibc = 0;
+    this->points_.wbc.ibc = 0;
+    this->points_.pbc.ibc = 0;
     for (int k = 0; k < znodec; ++k) {
         for (int j = 0; j < ynodec; ++j) {
             for (int i = 0; i < xnodec; ++i) {
                 const int id = i + xnodec * j + xnodec * ynodec * k;
                 if (i == 0 || i == xnodec - 1) {
-                    this->ubc.nbc[this->ubc.ibc] = id;
-                    this->ubc.fbc[this->ubc.ibc] = 0.0e0;
-                    this->ubc.ibc++;
-                    this->wbc.nbc[this->wbc.ibc] = id;
-                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
-                    this->wbc.ibc++;
+                    this->points_.ubc.nbc[this->points_.ubc.ibc] = id;
+                    this->points_.ubc.fbc[this->points_.ubc.ibc] = 0.0e0;
+                    this->points_.ubc.ibc++;
+                    this->points_.wbc.nbc[this->points_.wbc.ibc] = id;
+                    this->points_.wbc.fbc[this->points_.wbc.ibc] = 0.0e0;
+                    this->points_.wbc.ibc++;
                 }
                 if (j == 0 || j == ynodec - 1) {
-                    this->vbc.nbc[this->vbc.ibc] = id;
-                    this->vbc.fbc[this->vbc.ibc] = 0.0e0;
-                    this->vbc.ibc++;
+                    this->points_.vbc.nbc[this->points_.vbc.ibc] = id;
+                    this->points_.vbc.fbc[this->points_.vbc.ibc] = 0.0e0;
+                    this->points_.vbc.ibc++;
                 }
                 if (k == 0 || k == znodec - 1) {
-                    this->ubc.nbc[this->ubc.ibc] = id;
-                    this->ubc.fbc[this->ubc.ibc] = 0.0e0;
-                    this->ubc.ibc++;
-                    this->wbc.nbc[this->wbc.ibc] = id;
-                    this->wbc.fbc[this->wbc.ibc] = 0.0e0;
-                    this->wbc.ibc++;
+                    this->points_.ubc.nbc[this->points_.ubc.ibc] = id;
+                    this->points_.ubc.fbc[this->points_.ubc.ibc] = 0.0e0;
+                    this->points_.ubc.ibc++;
+                    this->points_.wbc.nbc[this->points_.wbc.ibc] = id;
+                    this->points_.wbc.fbc[this->points_.wbc.ibc] = 0.0e0;
+                    this->points_.wbc.ibc++;
                 }
                 if (i == 0 && k == znodec - 1) {
-                    this->pbc.nbc[this->pbc.ibc] = id;
-                    this->pbc.fbc[this->pbc.ibc] = 0.0e0;
-                    this->pbc.ibc++;
+                    this->points_.pbc.nbc[this->points_.pbc.ibc] = id;
+                    this->points_.pbc.fbc[this->points_.pbc.ibc] = 0.0e0;
+                    this->points_.pbc.ibc++;
                 }
             }
         }
@@ -180,10 +185,10 @@ void MPMFEMFSIFluidGenerator::CreateBCs() {
 
 void MPMFEMFSIFluidGenerator::WriteBCData(std::ofstream &outfile) {
 
-    this->ubc.BCOutput(outfile, "uwbc");
-    this->vbc.BCOutput(outfile, "vwbc");
-    this->wbc.BCOutput(outfile, "wwbc");
-    this->pbc.BCOutput(outfile, "hpbc");
+    this->points_.ubc.BCOutput(outfile, "uwbc");
+    this->points_.vbc.BCOutput(outfile, "vwbc");
+    this->points_.wbc.BCOutput(outfile, "wwbc");
+    this->points_.pbc.BCOutput(outfile, "hpbc");
 
     return;
 }
@@ -191,66 +196,69 @@ void MPMFEMFSIFluidGenerator::WriteBCData(std::ofstream &outfile) {
 std::string MPMFEMFSIGenerator::CaseName() const { return "MPM-FEM FSI"; }
 
 void MPMFEMFSIGenerator::LoadInput() {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
+    RunParams &params = this->params_;
 
     std::ifstream infile = OpenInputFile("input.txt");
 
     infile.ignore(1000, '\n');
     std::string solswitch_str;
-    infile >> solswitch_str >> rstflag >> nlstep;
+    infile >> solswitch_str >> params.rstflag >> params.nlstep;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> ista >> iend >> iout;
+    infile >> params.ista >> params.iend >> params.iout;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
     double spec_rad; // read past; not used by the generator
-    infile >> dt >> mtol >> spec_rad;
+    infile >> params.dt >> params.mtol >> spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; ++i) infile >> xymin[i];
+    for (int i = 0; i < 3; ++i) infile >> mesh.xymin[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; ++i) infile >> xymax[i];
+    for (int i = 0; i < 3; ++i) infile >> mesh.xymax[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; ++i) infile >> xyelem[i];
+    for (int i = 0; i < 3; ++i) infile >> mesh.xyelem[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; ++i) infile >> idimc[i];
+    for (int i = 0; i < 3; ++i) infile >> cmesh.idimc[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; ++i) infile >> npxye[i];
+    for (int i = 0; i < 3; ++i) infile >> params.npxye[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> this->solid_.rho;
+    infile >> this->solid_.points_.rho;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> nmat >> npropmax;
+    infile >> this->solid_.materials_.nmat >> this->solid_.materials_.npropmax;
     infile.ignore(1000, '\n');
 
-    VectorAssign(nmat, iprop);
-    VectorAssign(nmat, nprop);
-    mat_prop.assign(nmat, std::vector<double>(npropmax, 0.0));
-    for (int n = 0; n < nmat; ++n) {
+    VectorAssign(this->solid_.materials_.nmat, this->solid_.materials_.iprop);
+    VectorAssign(this->solid_.materials_.nmat, this->solid_.materials_.nprop);
+    this->solid_.materials_.mat_prop.assign(this->solid_.materials_.nmat, std::vector<double>(this->solid_.materials_.npropmax, 0.0));
+    for (int n = 0; n < this->solid_.materials_.nmat; ++n) {
         infile.ignore(1000, '\n');
-        infile >> iprop[n] >> nprop[n];
+        infile >> this->solid_.materials_.iprop[n] >> this->solid_.materials_.nprop[n];
         infile.ignore(1000, '\n');
 
         infile.ignore(1000, '\n');
-        for (int i = 0; i < nprop[n]; ++i) { infile >> mat_prop[n][i]; }
+        for (int i = 0; i < this->solid_.materials_.nprop[n]; ++i) { infile >> this->solid_.materials_.mat_prop[n][i]; }
         infile.ignore(1000, '\n');
     }
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; ++i) infile >> bb[i];
+    for (int i = 0; i < 3; ++i) infile >> params.bb[i];
     infile.ignore(1000, '\n');
 
     return;
@@ -290,8 +298,8 @@ void MPMFEMFSIGenerator::WriteVisualizationOutputs() {
 
 #ifdef HAVE_HDF5
     std::cout << "Making VTK HDF5 files" << "\n";
-    WriteVTKHDFMesh("grid.vtkhdf");
-    WriteVTKHDFPoints("sp.vtkhdf", this->solid_);
+    WriteVTKHDFMesh("grid.vtkhdf", this->grid_.mesh);
+    WriteVTKHDFPoints("sp.vtkhdf", this->solid_.points_);
 #endif
 
     return;

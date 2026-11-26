@@ -369,7 +369,7 @@ void StabilizedMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_
         }
     }
 
-    NodeVarComm(mat.b_rhs, offsets);
+    NodeVarComm(this->grid_.part, mat.b_rhs, offsets);
 
     this->implicit_.AddInertialForce(*this, mat, naccel_am, offsets);
 

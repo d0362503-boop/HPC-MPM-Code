@@ -2,7 +2,11 @@
 
 int main() {
 
-    MPMMPMFSIGenerator generator;
+    Grid grid;
+
+    RunParams params;
+
+    MPMMPMFSIGenerator generator(grid, params);
 
     return generator.Run();
 }

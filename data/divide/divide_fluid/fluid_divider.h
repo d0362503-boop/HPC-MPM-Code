@@ -10,6 +10,14 @@
 class FluidDivider : public DataPartitioner {
   public:
     /**
+     * @brief Bind the fluid partitioner and its particle sets to the grid being partitioned.
+     * @param grid   Grid being partitioned (global mesh, overwritten with each rank window).
+     * @param params Run parameters of the case.
+     */
+    FluidDivider(Grid &grid, RunParams &params)
+        : DataPartitioner(grid, params), points_(grid, params), partition_points_(grid, params) {}
+
+    /**
      * @brief Partition fluid material points into this rank's local window.
      * @param rank_id Index of the MPI rank whose partition is being built.
      *

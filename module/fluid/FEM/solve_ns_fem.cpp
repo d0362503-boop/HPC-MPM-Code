@@ -385,7 +385,7 @@ void StabilizedFEM::AssembleSystem(CrsMat &mat, const std::vector<double> &adv_v
         }
     }
 
-    NodeVarComm(mat.b_rhs, offsets);
+    NodeVarComm(this->grid_.part, mat.b_rhs, offsets);
 
     return;
 }

@@ -41,19 +41,20 @@ PIC, FLIP, TPIC, or APIC transfers.
 The module's time-step operations are called in this order:
 
 ```
-DataInput()
+StabilizedMPM wp(grid, params)
+DataInput(grid, params)
 RestartInput()          (if rstflag == 1 or 3)
-BuildMesh()
-BuildControlPoint()
+BuildMesh(grid.mesh)
+BuildControlPoint(grid.mesh, grid.cmesh)
 NS_.BuildCrsMat(16)
-ComputeNodalVol()
-for istep = ista .. iend
+ComputeNodalVol(params, grid)
+for ts.istep = ista .. iend
     MeshPointLinklist()
-    Particle2Node()
-    SolveNS()
-    Node2Particle()
+    Particle2Node(ts)
+    SolveNS(ts)
+    Node2Particle(ts)       (commits nodal kinematics and npres <- npres_k first)
     if (do_dlb && istep % iout == 0)
-        ApplyDLB()          (if nprocs > 1: MoveParticle + repartition + rebuilds)
+        ApplyDLB(grid)      (if nprocs > 1: MoveParticle + repartition + rebuilds)
     else
         MoveParticle()      (if nprocs > 1)
     output / restart    (if istep % iout == 0)

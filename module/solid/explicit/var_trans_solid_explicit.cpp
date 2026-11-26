@@ -53,10 +53,10 @@ void ExplicitSolidMPM::Particle2Node(const TimeState &ts) {
         }
     }
 
-    NodeVarComm(this->nmass, 0);
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
-    NodeVarComm(this->nforce, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nmass, 0);
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nforce, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
     this->ApplyVelocityBC(this->nvel, ts);
@@ -97,7 +97,7 @@ void ExplicitSolidMPM::DoMUSL(const TimeState &ts) {
         }
     }
 
-    NodeVarComm(this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
     this->ApplyVelocityBC(this->nvel, ts);

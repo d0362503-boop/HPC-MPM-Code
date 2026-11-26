@@ -291,7 +291,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
         }
     }
 
-    NodeVarComm(this->added_mass, 0);
+    NodeVarComm(this->grid_.part, this->added_mass, 0);
 
     // --- Transfet variables to (n+α_f) time interlevel ---
     const double af = this->fluid_.integrator_.alpha_f;
@@ -367,7 +367,7 @@ void MPMFEMBlockFSI::CalFSIForce() {
         }
     }
 
-    NodeVarComm(this->nfsi_force, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nfsi_force, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
     for (int n = 0; n < cmesh.nodec; n++) {
         if (this->solid_.nphi[n] < this->phi_cut) {

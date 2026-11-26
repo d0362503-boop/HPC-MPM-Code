@@ -6,7 +6,17 @@
 
 #include <string>
 
-class FluidGenerator : public DataGenerator, public MaterialPoint {
+class FluidGenerator : public DataGenerator {
+  public:
+    /**
+     * @brief Bind the fluid generator and its particle set to the grid being generated.
+     * @param grid   Grid being generated (global mesh of the case).
+     * @param params Run parameters read from input.txt.
+     */
+    FluidGenerator(Grid &grid, RunParams &params) : DataGenerator(grid, params), points_(grid, params) {}
+
+    MaterialPoint points_; // generated fluid particles and boundary conditions
+
   protected:
     /** @brief Return the fluid case label. */
     std::string CaseName() const override;

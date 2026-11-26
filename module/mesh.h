@@ -37,33 +37,15 @@ struct Grid {
     Partition part;     // rank overlap bookkeeping
 };
 
-inline Grid g_grid; // transitional global instance
+inline Grid g_grid; // transitional global instance (still read by CrsMat)
 
-// ----- Transitional aliases: to be removed once all users take Grid explicitly -----
-inline int &node = g_grid.mesh.node, &nodew = g_grid.mesh.nodew, &nelem = g_grid.mesh.nelem;
-inline int &nelemw = g_grid.mesh.nelemw;
-inline int &nu = g_grid.mesh.nu, &nv = g_grid.mesh.nv, &nw = g_grid.mesh.nw, &np = g_grid.mesh.np;
-inline std::array<int, 3> &xynode = g_grid.mesh.xynode, &xyelem = g_grid.mesh.xyelem;
-inline std::array<int, 3> &aelemmin = g_grid.mesh.aelemmin, &aelemmax = g_grid.mesh.aelemmax;
-inline std::array<int, 3> &xynodew = g_grid.mesh.xynodew, &xyelemw = g_grid.mesh.xyelemw;
-inline std::array<double, 3> &dxy = g_grid.mesh.dxy, &xymin = g_grid.mesh.xymin, &xymax = g_grid.mesh.xymax;
-inline std::array<double, 3> &xyminw = g_grid.mesh.xyminw, &xymaxw = g_grid.mesh.xymaxw;
-inline std::vector<std::array<int, 8>> &nc = g_grid.mesh.nc;
-inline std::vector<std::array<double, 3>> &xyn = g_grid.mesh.xyn;
-
-inline int &nodec = g_grid.cmesh.nodec, &nodecw = g_grid.cmesh.nodecw;
+// ----- Transitional aliases still read by CrsMat; remove together with g_grid when CrsMat takes the grid -----
+inline int &nodec = g_grid.cmesh.nodec;
 inline int &nuc = g_grid.cmesh.nuc, &nvc = g_grid.cmesh.nvc, &nwc = g_grid.cmesh.nwc, &npc = g_grid.cmesh.npc;
 inline std::array<int, 3> &xynodec = g_grid.cmesh.xynodec, &xynodecw = g_grid.cmesh.xynodecw;
-inline std::array<int, 3> &idimc = g_grid.cmesh.idimc, &idiml = g_grid.cmesh.idiml;
-inline std::vector<double> &nvol = g_grid.cmesh.nvol;
-inline std::vector<std::vector<int>> &ncc = g_grid.cmesh.ncc;
-inline std::vector<std::array<double, 3>> &xyc = g_grid.cmesh.xyc;
-
-inline std::array<int, 3> &nxyr = g_grid.part.nxyr;
-inline int &isb = g_grid.part.isb, &isubc = g_grid.part.isubc, &isubl = g_grid.part.isubl;
-inline std::vector<int> &naid = g_grid.part.naid, &nsbc = g_grid.part.nsbc, &nsubc = g_grid.part.nsubc;
-inline std::vector<int> &nsbl = g_grid.part.nsbl, &nsubl = g_grid.part.nsubl;
-inline std::vector<double> &dbc = g_grid.part.dbc, &dbl = g_grid.part.dbl;
+inline std::array<int, 3> &idimc = g_grid.cmesh.idimc;
+inline std::array<int, 3> &aelemmin = g_grid.mesh.aelemmin, &aelemmax = g_grid.mesh.aelemmax;
+inline std::vector<double> &dbc = g_grid.part.dbc;
 
 /// Transitional: NodeVarComm on the global partition.
 template <typename T> void NodeVarComm(std::vector<T> &dat, int offset) { NodeVarComm(g_grid.part, dat, offset); }

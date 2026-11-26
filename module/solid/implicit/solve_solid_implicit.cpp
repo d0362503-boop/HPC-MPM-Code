@@ -231,7 +231,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
         }
     }
 
-    NodeVarComm(mat.b_rhs, offsets);
+    NodeVarComm(this->grid_.part, mat.b_rhs, offsets);
 
     std::vector<double> naccel_am(cmesh.nodec * 3);
     // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---

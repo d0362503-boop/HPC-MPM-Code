@@ -7,6 +7,8 @@
 
 class MPMFEMFSISolidGenerator : public SolidGenerator {
   public:
+    using SolidGenerator::SolidGenerator;
+
     /** Create MPM-solid boundary conditions for the coupled domain. */
     void CreateBCs() override;
 
@@ -22,8 +24,19 @@ class MPMFEMFSISolidGenerator : public SolidGenerator {
     void MarkSurfacePoints();
 };
 
-class MPMFEMFSIFluidGenerator : public MaterialPoint {
+class MPMFEMFSIFluidGenerator {
   public:
+    /**
+     * @brief Bind the FEM-fluid boundary-condition set to the grid being generated.
+     * @param grid   Grid being generated (global mesh of the case).
+     * @param params Run parameters read from input.txt.
+     */
+    MPMFEMFSIFluidGenerator(Grid &grid, RunParams &params) : grid_(grid), params_(params), points_(grid, params) {}
+
+    Grid &grid_;           // grid being generated
+    RunParams &params_;    // run parameters of the case
+    MaterialPoint points_; // FEM-fluid boundary conditions
+
     /** Create FEM-fluid velocity and pressure boundary conditions on the mesh control points. */
     void CreateBCs();
 
@@ -36,6 +49,15 @@ class MPMFEMFSIFluidGenerator : public MaterialPoint {
 };
 
 class MPMFEMFSIGenerator : public DataGenerator {
+  public:
+    /**
+     * @brief Build the coupled generator; solid and FEM fluid share `grid` and `params`.
+     * @param grid   Grid being generated (global mesh of the case).
+     * @param params Run parameters read from input.txt.
+     */
+    MPMFEMFSIGenerator(Grid &grid, RunParams &params)
+        : DataGenerator(grid, params), solid_(grid, params), fluid_(grid, params) {}
+
   protected:
     /** Return the MPM-FEM FSI case label. */
     std::string CaseName() const override;

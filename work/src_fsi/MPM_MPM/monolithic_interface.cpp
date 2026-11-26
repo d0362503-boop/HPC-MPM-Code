@@ -76,7 +76,7 @@ void MPMMPMMonolithicFSI::LumpedLagrangeMultiplier() {
     VectorAssign(cmesh.nodec, this->nlm_lump);
     this->nlm_lump = this->nlm_lump_local;
 
-    NodeVarComm(this->nlm_lump, 0);
+    NodeVarComm(this->grid_.part, this->nlm_lump, 0);
 
     return;
 }
@@ -104,7 +104,7 @@ void MPMMPMMonolithicFSI::CorrectFluidPenetration() {
         }
     }
 
-    NodeVarComm(final_phi, 0);
+    NodeVarComm(this->grid_.part, final_phi, 0);
 
     for (int n = 0; n < cmesh.nodec; ++n) { final_phi[n] = std::clamp(final_phi[n] / cmesh.nvol[n], 0.0, 1.0); }
     const interface_geometry::InterfaceSDF interface(this->grid_, std::move(final_phi));

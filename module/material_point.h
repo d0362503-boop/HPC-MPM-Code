@@ -21,11 +21,6 @@ class MaterialPoint {
     const Grid &grid_;        // rank grid (read-only)
     const RunParams &params_; // run parameters
 
-    /** @brief Transitional: bind to the global grid and run parameters until all owners pass them. */
-    MaterialPoint()
-        : grid_(g_grid), params_(g_params), flip(g_grid.cmesh, g_params), pic(g_grid.cmesh), apic(g_grid.cmesh),
-          tpic(g_grid.cmesh) {}
-
     /**
      * @brief Bind the material-point set to this rank's grid and the run parameters.
      * @param grid   Grid of this rank (background mesh, control points and partition).

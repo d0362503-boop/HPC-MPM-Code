@@ -41,7 +41,7 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
         }
     }
 
-    NodeVarComm(nJbar, 0);
+    NodeVarComm(this->grid_.part, nJbar, 0);
 
     this->CutOffSmallNodalVar(nJbar, this->nmass, {0});
 

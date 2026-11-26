@@ -2,7 +2,11 @@
 
 int main() {
 
-  FluidGenerator generator;
+  Grid grid;
+
+  RunParams params;
+
+  FluidGenerator generator(grid, params);
 
   return generator.Run();
 }

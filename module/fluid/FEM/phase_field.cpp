@@ -47,8 +47,8 @@ void StabilizedFEM::Particle2NodePhi() {
         }
     }
 
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->nphi, 0);
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->nphi, 0);
 
     for (int n = 0; n < cmesh.nodec; n++) {
         this->nphi[n] /= this->nvof[n];

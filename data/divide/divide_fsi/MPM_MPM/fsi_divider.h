@@ -7,6 +7,8 @@
 
 class MPMMPMFSISolidDivider : public SolidDivider {
   public:
+    using SolidDivider::SolidDivider;
+
     // Expose the base hook implementations for the FSI coordinator.
     using SolidDivider::LoadBoundaryData;
     using SolidDivider::LoadPointData;
@@ -16,6 +18,8 @@ class MPMMPMFSISolidDivider : public SolidDivider {
 
 class MPMMPMFSIFluidDivider : public FluidDivider {
   public:
+    using FluidDivider::FluidDivider;
+
     // Expose the base hook implementations for the FSI coordinator.
     using FluidDivider::LoadBoundaryData;
     using FluidDivider::LoadPointData;
@@ -24,6 +28,15 @@ class MPMMPMFSIFluidDivider : public FluidDivider {
 };
 
 class MPMMPMFSIDivider : public DataPartitioner {
+  public:
+    /**
+     * @brief Build the coupled partitioner; solid and fluid share `grid` and `params`.
+     * @param grid   Grid being partitioned (global mesh, overwritten with each rank window).
+     * @param params Run parameters of the case.
+     */
+    MPMMPMFSIDivider(Grid &grid, RunParams &params)
+        : DataPartitioner(grid, params), solid_(grid, params), fluid_(grid, params) {}
+
   protected:
     /** @brief Return the MPM-MPM FSI case label. */
     std::string CaseName() const override;

@@ -6,7 +6,18 @@
 
 #include <string>
 
-class SolidGenerator : public DataGenerator, public MaterialPoint {
+class SolidGenerator : public DataGenerator {
+  public:
+    /**
+     * @brief Bind the solid generator and its particle set to the grid being generated.
+     * @param grid   Grid being generated (global mesh of the case).
+     * @param params Run parameters read from input.txt.
+     */
+    SolidGenerator(Grid &grid, RunParams &params) : DataGenerator(grid, params), points_(grid, params) {}
+
+    MaterialPoint points_; // generated solid particles and boundary conditions
+    MaterialTable materials_; // solid material table read from input.txt
+
   protected:
     /** @brief Return the solid case label. */
     std::string CaseName() const override;

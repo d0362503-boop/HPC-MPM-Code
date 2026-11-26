@@ -36,9 +36,9 @@ and [implicit solid](../../../module/solid/implicit/README.md) guides.
 ```text
 fluid_.SetPFDomain()          // blend element density/viscosity from the liquid fraction nphi
 solid_.MeshPointLinklist()
-solid_.Particle2Node()        // solid P2G, including solid volume fraction nvof
-SolveFSISystem()              // block iteration (below)
-solid_.Node2Particle()
+solid_.Particle2Node(ts)      // solid P2G, including solid volume fraction nvof
+SolveFSISystem(ts)            // block iteration (below)
+solid_.Node2Particle(ts)
 solid_.MoveParticle()
 output / restart every iout steps
 ```
@@ -54,9 +54,9 @@ DetectFSIInterface()       // solid nphi = clamp(nvof / nvol, 0, 1); interface n
 UpdateFSIInterfaceBC()     // initial interface velocity = solid step-start nodal velocity
 force a PC rebuild of NS_ and SM_
 for block_it = 0 .. max_block_iter
-    fluid_.SolveNS()                        // n+1 iterate only; nvel/npres stay at level n
+    fluid_.SolveNS(ts)                      // n+1 iterate only; nvel/npres stay at level n
     CalFSIForce()                           // added mass and fluid stress force on the solid
-    solid_.SolveSolid()                     // Newton with the FSISolid overrides
+    solid_.SolveSolid(ts)                   // Newton with the FSISolid overrides
     v_s = solid endpoint velocity from the displacement increment
     Anderson_relaxation_M1(...)             // update the imposed interface velocity
     residual of v_s - v_f on the interface; converged -> break
