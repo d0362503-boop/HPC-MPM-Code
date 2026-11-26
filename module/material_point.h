@@ -97,9 +97,9 @@ class MaterialPoint {
      * @param ts   Current time state; its load factor `facl` scales the prescribed values.
      */
     virtual void ApplyVelocityBC(std::vector<double> &nvel, const TimeState &ts) {
-        this->ubc.BCSetVal(nuc, nvel, ts.facl);
-        this->vbc.BCSetVal(nvc, nvel, ts.facl);
-        this->wbc.BCSetVal(nwc, nvel, ts.facl);
+        this->ubc.BCSetVal(this->grid_.cmesh.nuc, nvel, ts.facl);
+        this->vbc.BCSetVal(this->grid_.cmesh.nvc, nvel, ts.facl);
+        this->wbc.BCSetVal(this->grid_.cmesh.nwc, nvel, ts.facl);
 
         return;
     }
@@ -109,9 +109,9 @@ class MaterialPoint {
      * @param naccel Vector to be zeroed in-place at constrained DOFs.
      */
     virtual void ApplyAccelerationBC(std::vector<double> &naccel) {
-        this->ubc.BCSetZero(nuc, naccel);
-        this->vbc.BCSetZero(nvc, naccel);
-        this->wbc.BCSetZero(nwc, naccel);
+        this->ubc.BCSetZero(this->grid_.cmesh.nuc, naccel);
+        this->vbc.BCSetZero(this->grid_.cmesh.nvc, naccel);
+        this->wbc.BCSetZero(this->grid_.cmesh.nwc, naccel);
 
         return;
     }
@@ -122,10 +122,10 @@ class MaterialPoint {
      * @param ts     Current time state; the increment is `facl * dt` times the prescribed velocity.
      */
     virtual void ApplyDisplacementBC(std::vector<double> &ndispl, const TimeState &ts) {
-        const double scale = ts.facl * dt;
-        this->ubc.BCSetDispl(nuc, ndispl, scale);
-        this->vbc.BCSetDispl(nvc, ndispl, scale);
-        this->wbc.BCSetDispl(nwc, ndispl, scale);
+        const double scale = ts.facl * this->params_.dt;
+        this->ubc.BCSetDispl(this->grid_.cmesh.nuc, ndispl, scale);
+        this->vbc.BCSetDispl(this->grid_.cmesh.nvc, ndispl, scale);
+        this->wbc.BCSetDispl(this->grid_.cmesh.nwc, ndispl, scale);
 
         return;
     }
@@ -141,8 +141,8 @@ class MaterialPoint {
                              const std::vector<int> &offsets) {
 
         VectorAssign(numerator.size(), result);
-        for (int n = 0; n < nodec; n++) {
-            if (weight[n] > mtol) {
+        for (int n = 0; n < this->grid_.cmesh.nodec; n++) {
+            if (weight[n] > this->params_.mtol) {
                 for (int offset : offsets) { result[n + offset] = numerator[n + offset] / weight[n]; }
             }
         }
@@ -158,8 +158,8 @@ class MaterialPoint {
      */
     void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight, const std::vector<int> &offsets) {
 
-        for (int n = 0; n < nodec; n++) {
-            if (weight[n] > mtol) {
+        for (int n = 0; n < this->grid_.cmesh.nodec; n++) {
+            if (weight[n] > this->params_.mtol) {
                 for (int offset : offsets) { var[n + offset] /= weight[n]; }
             }
         }
@@ -269,10 +269,10 @@ class MaterialPoint {
     int GetInflowSign(int dir, int mesh_id) {
 
         int sign = 0;
-        int mid = mesh_id + aelemmin[dir];
+        int mid = mesh_id + this->grid_.mesh.aelemmin[dir];
         if (mid == 0) {
             sign = 1;
-        } else if (mid == xyelemw[dir] - 1) {
+        } else if (mid == this->grid_.mesh.xyelemw[dir] - 1) {
             sign = -1;
         }
 
@@ -514,9 +514,9 @@ void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vect
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
                                    const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) const noexcept {
-    node_var[nid + nuc] += sfi * point_mass[pid] * point_var[pid][0];
-    node_var[nid + nvc] += sfi * point_mass[pid] * point_var[pid][1];
-    node_var[nid + nwc] += sfi * point_mass[pid] * point_var[pid][2];
+    node_var[nid + this->grid_.cmesh.nuc] += sfi * point_mass[pid] * point_var[pid][0];
+    node_var[nid + this->grid_.cmesh.nvc] += sfi * point_mass[pid] * point_var[pid][1];
+    node_var[nid + this->grid_.cmesh.nwc] += sfi * point_mass[pid] * point_var[pid][2];
 
     return;
 }

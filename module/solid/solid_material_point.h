@@ -120,9 +120,9 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @return Weighted body force plus applied force in the three momentum components.
      */
     virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept {
-        double fx = bb[0] * ts.facl;
-        double fy = bb[1] * ts.facl;
-        double fz = bb[2] * ts.facl;
+        double fx = this->params_.bb[0] * ts.facl;
+        double fy = this->params_.bb[1] * ts.facl;
+        double fz = this->params_.bb[2] * ts.facl;
 
         std::array<double, 3> nfext;
         nfext[0] = sfi * (this->mass[pid] * fx + this->trac_force[pid][0]);
@@ -167,9 +167,9 @@ class SolidMaterialPointBase : public MaterialPoint {
 
         MaterialPoint::ApplyVelocityBC(nvel, ts);
 
-        this->rigid_bc.BCSetZero(nuc, nvel);
-        this->rigid_bc.BCSetZero(nvc, nvel);
-        this->rigid_bc.BCSetZero(nwc, nvel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nuc, nvel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nvc, nvel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nwc, nvel);
 
         return;
     }
@@ -183,9 +183,9 @@ class SolidMaterialPointBase : public MaterialPoint {
 
         MaterialPoint::ApplyAccelerationBC(naccel);
 
-        this->rigid_bc.BCSetZero(nuc, naccel);
-        this->rigid_bc.BCSetZero(nvc, naccel);
-        this->rigid_bc.BCSetZero(nwc, naccel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nuc, naccel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nvc, naccel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nwc, naccel);
 
         return;
     }
@@ -200,10 +200,10 @@ class SolidMaterialPointBase : public MaterialPoint {
 
         MaterialPoint::ApplyDisplacementBC(ndispl, ts);
 
-        const double scale = ts.facl * dt;
-        this->rigid_bc.BCSetDispl(nuc, ndispl, scale);
-        this->rigid_bc.BCSetDispl(nvc, ndispl, scale);
-        this->rigid_bc.BCSetDispl(nwc, ndispl, scale);
+        const double scale = ts.facl * this->params_.dt;
+        this->rigid_bc.BCSetDispl(this->grid_.cmesh.nuc, ndispl, scale);
+        this->rigid_bc.BCSetDispl(this->grid_.cmesh.nvc, ndispl, scale);
+        this->rigid_bc.BCSetDispl(this->grid_.cmesh.nwc, ndispl, scale);
 
         return;
     }

@@ -74,10 +74,10 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
 
     /** @brief Allocate and zero fluid nodal fields. */
     void InitializeMeshData() {
-        VectorAssign(nodec * 3, this->nvel);
-        VectorAssign(nodec * 3, this->naccel);
-        VectorAssign(nodec, this->npres);
-        VectorAssign(nodec, this->nphi);
+        VectorAssign(this->grid_.cmesh.nodec * 3, this->nvel);
+        VectorAssign(this->grid_.cmesh.nodec * 3, this->naccel);
+        VectorAssign(this->grid_.cmesh.nodec, this->npres);
+        VectorAssign(this->grid_.cmesh.nodec, this->nphi);
 
         return;
     };
@@ -87,8 +87,8 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @return Current control-point offsets for x, y, z momentum and pressure.
      */
     std::vector<int> RHSOffsets() const {
-        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2),
-                nodec * (this->rhs_start + 3)};
+        return {this->grid_.cmesh.nodec * this->rhs_start, this->grid_.cmesh.nodec * (this->rhs_start + 1), this->grid_.cmesh.nodec * (this->rhs_start + 2),
+                this->grid_.cmesh.nodec * (this->rhs_start + 3)};
     }
 
     /**
@@ -98,7 +98,7 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      */
     std::vector<double> ComputeNodeAccelFromVel() const {
 
-        return this->integrator_.ComputeNodeAccelFromVel(this->nvel_k, this->nvel, this->naccel, dt);
+        return this->integrator_.ComputeNodeAccelFromVel(this->nvel_k, this->nvel, this->naccel, this->params_.dt);
     }
 
     /**
@@ -203,10 +203,10 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @param mat PETSc matrix.
      */
     void BuildPetscBCList(CrsMat &mat) override {
-        mat.AddBCComponent(this->ubc, nuc);
-        mat.AddBCComponent(this->vbc, nvc);
-        mat.AddBCComponent(this->wbc, nwc);
-        mat.AddBCComponent(this->pbc, npc);
+        mat.AddBCComponent(this->ubc, this->grid_.cmesh.nuc);
+        mat.AddBCComponent(this->vbc, this->grid_.cmesh.nvc);
+        mat.AddBCComponent(this->wbc, this->grid_.cmesh.nwc);
+        mat.AddBCComponent(this->pbc, this->grid_.cmesh.npc);
 
         return;
     };
@@ -216,10 +216,10 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @param rr Residual vector.
      */
     void BCResidualSet(std::vector<double> &rr) override {
-        this->ubc.BCSetZero(nuc, rr);
-        this->vbc.BCSetZero(nvc, rr);
-        this->wbc.BCSetZero(nwc, rr);
-        this->pbc.BCSetZero(npc, rr);
+        this->ubc.BCSetZero(this->grid_.cmesh.nuc, rr);
+        this->vbc.BCSetZero(this->grid_.cmesh.nvc, rr);
+        this->wbc.BCSetZero(this->grid_.cmesh.nwc, rr);
+        this->pbc.BCSetZero(this->grid_.cmesh.npc, rr);
 
         return;
     };
