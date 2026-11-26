@@ -1,12 +1,8 @@
-#include "module/bc.h"
 #include "module/fluid/FEM/stabilized_fem.h"
 #include "module/mesh.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
 #include "module/solid/solid_material_point.h"
 #include "work/src_fsi/MPM_FEM/block_fsi.h"
-#include <cmath>
-#include <optional>
-#include <string>
 #include <vector>
 
 using namespace implicitmpm;

@@ -1,12 +1,7 @@
 #include <algorithm>
 #include <array>
-#include <cmath>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/cal_mat.h"
 #include "module/dataset.h"
 #include "module/map_and_interpolate.h"

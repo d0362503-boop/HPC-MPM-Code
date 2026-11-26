@@ -2,13 +2,10 @@
 
 #include <mpi.h>
 
-#include <algorithm>
 #include <cmath>
-#include <iomanip>
 #include <vector>
 
 #include "module/dataset.h"
-#include "module/map_and_interpolate.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"

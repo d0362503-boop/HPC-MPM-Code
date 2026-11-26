@@ -7,14 +7,10 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <numeric>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/dataset.h"
 #include "module/fluid/FEM/stabilized_fem.h"
-#include "module/map_and_interpolate.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/relaxation.h"

@@ -3,18 +3,10 @@
 #include <mpi.h>
 
 #include "module/bc.h"
-#include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
-#include "module/shape_function.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <numeric>
 #include <vector>
 
 void Anderson_relaxation_M2(const Grid &grid, int iteration, const std::vector<double> &nodal_var, std::vector<double> &var_old,
@@ -166,9 +158,9 @@ void Aitken_relaxation(const Grid &grid, int iteration, double &relax_coef, cons
                 + (res_old[i + 1 * num] * dr2) * grid.part.dbc[nid + grid.cmesh.nvc] //
                 + (res_old[i + 2 * num] * dr3) * grid.part.dbc[nid + grid.cmesh.nwc];
         // --- ∑ |Δr_i|^2 ---
-        deno += pow(dr1, 2) * grid.part.dbc[nid + grid.cmesh.nuc]   //
-                + pow(dr2, 2) * grid.part.dbc[nid + grid.cmesh.nvc] //
-                + pow(dr3, 2) * grid.part.dbc[nid + grid.cmesh.nwc];
+        deno += std::pow(dr1, 2) * grid.part.dbc[nid + grid.cmesh.nuc]   //
+                + std::pow(dr2, 2) * grid.part.dbc[nid + grid.cmesh.nvc] //
+                + std::pow(dr3, 2) * grid.part.dbc[nid + grid.cmesh.nwc];
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &nume, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);

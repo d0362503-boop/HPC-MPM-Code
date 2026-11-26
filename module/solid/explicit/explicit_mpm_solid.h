@@ -1,14 +1,9 @@
 #pragma once
 
-#include <cmath>
-#include <string>
 #include <vector>
 
 #include "module/dataset.h"
-#include "module/map_and_interpolate.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
-#include "module/solver/crsmat.h"
 #include "module/solid/solid_material_point.h"
 
 namespace explicitmpm {

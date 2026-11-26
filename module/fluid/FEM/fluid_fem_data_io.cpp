@@ -1,7 +1,5 @@
 #include <array>
-#include <cmath>
 #include <iomanip>
-#include <iostream>
 #include <vector>
 
 #include "module/dataset.h"

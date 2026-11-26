@@ -4,9 +4,6 @@
 #include "module/dataset.h"
 #include "module/mesh.h"
 #include <array>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
 class FLIP {

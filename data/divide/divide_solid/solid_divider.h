@@ -2,7 +2,6 @@
 
 #include "data/divide/data_partitioner.h"
 
-#include "module/bc.h"
 #include "module/material_point.h"
 
 #include <string>

@@ -1,19 +1,13 @@
 #include <mpi.h>
 
 #include <array>
-#include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/cal_mat.h"
 #include "module/dataset.h"
 #include "module/implicit/newton_solver.h"
-#include "module/map_and_interpolate.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"

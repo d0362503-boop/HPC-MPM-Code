@@ -4,12 +4,8 @@
 #include "module/map_and_interpolate.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
 #include "module/shape_function.h"
 #include <cmath>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <mpi.h>
 #include <vector>
 

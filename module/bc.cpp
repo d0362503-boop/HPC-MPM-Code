@@ -1,9 +1,7 @@
 #include "module/bc.h"
-#include "module/dataset.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 
-#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iomanip>

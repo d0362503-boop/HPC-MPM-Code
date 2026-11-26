@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <vector>
 
 /** @brief Generalized-alpha parameters and Newmark kinematics in the n+alpha convention. */

@@ -1,14 +1,12 @@
 #include "module/solver/native_solver.h"
-#include "module/bc.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/solver/crsmat.h"
 #include <cmath>
+#include <iostream>
 #include <mpi.h>
-#include <optional>
-#include <string>
 #include <vector>
 
 int GPBiCGSafe(CrsMat &mat) {

@@ -1,16 +1,10 @@
-#include <algorithm>
-#include <cmath>
 #include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <mpi.h>
 #include <string>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/solid/explicit/explicit_mpm_solid.h"

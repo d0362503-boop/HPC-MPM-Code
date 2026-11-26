@@ -5,7 +5,6 @@
 
 #include "data/generate/output_util.h"
 #include "module/data_io.h"
-#include "module/dataset.h"
 #include "module/mesh.h"
 
 int DataGenerator::Run() {

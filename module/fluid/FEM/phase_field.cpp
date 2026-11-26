@@ -4,12 +4,7 @@
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 #include <array>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <mpi.h>
-#include <optional>
-#include <string>
 #include <vector>
 
 using namespace stabilizedfem;

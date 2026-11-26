@@ -3,7 +3,6 @@
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
-#include <vector>
 
 #include "module/cal_mat.h"
 #include "module/dataset.h"

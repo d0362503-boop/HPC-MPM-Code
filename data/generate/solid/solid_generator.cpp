@@ -3,7 +3,6 @@
 #include "data/generate/output_util.h"
 
 #include <array>
-#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>

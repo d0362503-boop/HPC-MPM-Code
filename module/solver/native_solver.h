@@ -1,9 +1,7 @@
 #pragma once
 
 #include "module/solver/crsmat.h"
-#include <cmath>
 #include <mpi.h>
-#include <vector>
 
 /**
  * @brief Solve the linear system in `mat` using the stabilized GPBiCG method.

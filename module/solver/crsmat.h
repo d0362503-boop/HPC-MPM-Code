@@ -6,7 +6,6 @@
 
 #include "module/bc.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
 
 class MaterialPoint; // forward declaration
 

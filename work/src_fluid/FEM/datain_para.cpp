@@ -1,15 +1,10 @@
-#include "module/bc.h"
 #include "module/data_io.h"
 #include "module/dataset.h"
 #include "module/fluid/FEM/stabilized_fem.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include <cmath>
 #include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <string>
-#include <vector>
 
 using namespace stabilizedfem;
 

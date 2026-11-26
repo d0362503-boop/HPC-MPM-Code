@@ -1,11 +1,7 @@
 #include "module/mesh.h"
 #include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/shape_function.h"
 #include <algorithm>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
 void SubcellOffsets(const std::array<int, 3> &npxye, const std::array<double, 3> &dxy,

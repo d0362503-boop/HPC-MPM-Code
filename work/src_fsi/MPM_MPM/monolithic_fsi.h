@@ -3,7 +3,6 @@
 #include <array>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/implicit/newton_solver.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"

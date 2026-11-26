@@ -3,13 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/dataset.h"
 #include "module/fluid/FEM/stabilized_fem.h"
 #include "module/material_point.h"

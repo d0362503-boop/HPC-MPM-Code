@@ -1,6 +1,4 @@
 #include "module/cal_mat.h"
-#include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include <array>
 #include <vector>
@@ -39,7 +37,7 @@ void MakeSF(const Grid &grid, const int m, const std::array<double, 3> &xyg, std
                     if (idimc[ii] == 1) {
                         double xy = mesh.xymin[ii] + dxi * double(ixyn[ii]);
                         double dxnpi = xyg[ii] - xy;
-                        double xi = abs(dxnpi) / dxi;
+                        double xi = std::abs(dxnpi) / dxi;
                         sfxy[ii] = 1.0e0 - xi;
                         if (dxnpi < 0.0e0) {
                             dsfxy[ii] = 1.0e0 / dxi;

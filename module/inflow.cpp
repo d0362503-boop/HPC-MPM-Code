@@ -1,8 +1,5 @@
 #include <algorithm>
-#include <array>
-#include <cmath>
 #include <mpi.h>
-#include <vector>
 
 #include "module/dataset.h"
 #include "module/material_point.h"

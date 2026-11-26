@@ -3,8 +3,6 @@
 #include <iomanip>
 #include <string>
 
-#include "module/data_io.h"
-#include "module/dataset.h"
 #include "module/mesh.h"
 
 #ifdef HAVE_HDF5

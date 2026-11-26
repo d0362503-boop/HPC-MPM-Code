@@ -7,7 +7,6 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
-#include <vector>
 
 #include "module/data_io.h"
 #include "module/dataset.h"

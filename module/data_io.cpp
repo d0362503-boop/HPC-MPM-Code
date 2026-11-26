@@ -1,14 +1,8 @@
 #include "module/data_io.h"
 #include "module/DLB/mpm_dlb.h"
-#include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
-#include "module/shape_function.h"
-#include <cmath>
 #include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <stdexcept>
 #include <vector>
 

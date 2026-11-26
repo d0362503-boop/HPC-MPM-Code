@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cmath>
 #include <vector>
 
 #include "module/dataset.h"
@@ -8,7 +7,6 @@
 #include "module/implicit/newton_solver.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
 #include "module/solver/crsmat.h"
 
 namespace stabilizedmpm {

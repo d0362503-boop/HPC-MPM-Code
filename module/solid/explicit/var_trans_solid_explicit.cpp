@@ -1,4 +1,3 @@
-#include "module/bc.h"
 #include "module/cal_mat.h"
 #include "module/dataset.h"
 #include "module/map_and_interpolate.h"
@@ -9,10 +8,6 @@
 #include "module/solid/constitutive_model.h"
 #include "module/solid/explicit/explicit_mpm_solid.h"
 #include <array>
-#include <cmath>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
 using namespace std;

@@ -1,4 +1,3 @@
-#include "module/bc.h"
 #include "module/dataset.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/map_and_interpolate.h"
@@ -9,8 +8,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
-#include <iomanip>
 #include <vector>
 
 using namespace stabilizedmpm;

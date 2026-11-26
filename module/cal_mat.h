@@ -1,11 +1,7 @@
 #pragma once
 
-#include "module/dataset.h"
-#include "module/mesh.h"
 #include <array>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <utility>
 
 inline constexpr std::array<std::array<int, 3>, 3> kVoigtIndex = {{{{0, 5, 4}}, {{5, 1, 3}}, {{4, 3, 2}}}}; // Voigt index map

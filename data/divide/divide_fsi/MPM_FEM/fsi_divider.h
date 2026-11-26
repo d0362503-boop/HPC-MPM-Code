@@ -3,7 +3,6 @@
 #include "data/divide/divide_solid/solid_divider.h"
 
 #include <string>
-#include <vector>
 
 class MPMFEMFSISolidDivider : public SolidDivider {
   public:
