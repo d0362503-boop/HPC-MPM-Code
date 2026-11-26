@@ -106,7 +106,7 @@ void ImplicitSolidMPM::Node2Particle(const TimeState &ts) {
 
             this->UpdateConstitutiveModel(pid, this->stress, this->det_def_grad, this->def_grad, delta_def_grad);
 
-            if (iprop[this->matid[pid]] != -1) {
+            if (this->materials_.iprop[this->matid[pid]] != -1) {
                 std::array<std::array<double, 3>, 3> ADp{};
                 for (int ni = 0; ni < nenode; ni++) {
                     int nid = ncm[ni];

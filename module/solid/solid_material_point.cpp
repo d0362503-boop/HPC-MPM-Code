@@ -132,7 +132,7 @@ void SolidMaterialPointBase::DetermineRigidBC() {
     for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
-            if (iprop[this->matid[pid]] == -1) {
+            if (this->materials_.iprop[this->matid[pid]] == -1) {
                 std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
                 MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
                 for (int ni = 0; ni < nenode; ni++) {
@@ -211,9 +211,9 @@ void SolidMaterialPointBase::UpdateConstitutiveModel(int pid, std::vector<std::a
     std::array<std::array<double, 3>, 3> F = def_grad[pid];
     std::array<std::array<double, 3>, 3> dF = delta_def_grad[pid];
 
-    int ipp = iprop[this->matid[pid]];
+    int ipp = this->materials_.iprop[this->matid[pid]];
 
-    cm_.UpdateStress(ipp, stress[pid], F, dF, mat_prop[this->matid[pid]], //
+    cm_.UpdateStress(ipp, stress[pid], F, dF, this->materials_.mat_prop[this->matid[pid]], //
                      this->det_def_grad[pid], det_def_grad_bar[pid]);
 
     return;

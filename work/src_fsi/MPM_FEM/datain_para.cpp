@@ -71,19 +71,19 @@ void MPMFEMBlockFSI::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> nmat >> npropmax;
+    infile >> this->solid_.materials_.nmat >> this->solid_.materials_.npropmax;
     infile.ignore(1000, '\n');
 
-    VectorAssign(nmat, iprop);
-    VectorAssign(nmat, nprop);
-    mat_prop.assign(nmat, std::vector<double>(npropmax));
-    for (int n = 0; n < nmat; n++) {
+    VectorAssign(this->solid_.materials_.nmat, this->solid_.materials_.iprop);
+    VectorAssign(this->solid_.materials_.nmat, this->solid_.materials_.nprop);
+    this->solid_.materials_.mat_prop.assign(this->solid_.materials_.nmat, std::vector<double>(this->solid_.materials_.npropmax));
+    for (int n = 0; n < this->solid_.materials_.nmat; n++) {
         infile.ignore(1000, '\n');
-        infile >> iprop[n] >> nprop[n];
+        infile >> this->solid_.materials_.iprop[n] >> this->solid_.materials_.nprop[n];
         infile.ignore(1000, '\n');
 
         infile.ignore(1000, '\n');
-        for (int i = 0; i < nprop[n]; i++) { infile >> mat_prop[n][i]; }
+        for (int i = 0; i < this->solid_.materials_.nprop[n]; i++) { infile >> this->solid_.materials_.mat_prop[n][i]; }
         infile.ignore(1000, '\n');
     }
 

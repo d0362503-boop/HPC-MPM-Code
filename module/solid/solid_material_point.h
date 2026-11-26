@@ -14,6 +14,7 @@
 class SolidMaterialPointBase : public MaterialPoint {
   public:
     bool Fbar_flag = false;
+    MaterialTable materials_; // solid material models and properties
     // --- Data Initialize ---
 
     /**

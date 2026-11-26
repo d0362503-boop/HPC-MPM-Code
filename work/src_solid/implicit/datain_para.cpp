@@ -60,17 +60,17 @@ void ImplicitSolidMPM::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> this->rho >> nmat >> npropmax;
+    infile >> this->rho >> this->materials_.nmat >> this->materials_.npropmax;
     infile.ignore(1000, '\n');
 
-    VectorAssign(nmat, iprop);
-    VectorAssign(nmat, nprop);
-    mat_prop.assign(nmat, std::vector<double>(npropmax));
-    for (int n = 0; n < nmat; n++) {
+    VectorAssign(this->materials_.nmat, this->materials_.iprop);
+    VectorAssign(this->materials_.nmat, this->materials_.nprop);
+    this->materials_.mat_prop.assign(this->materials_.nmat, std::vector<double>(this->materials_.npropmax));
+    for (int n = 0; n < this->materials_.nmat; n++) {
         infile.ignore(1000, '\n');
-        infile >> iprop[n] >> nprop[n];
+        infile >> this->materials_.iprop[n] >> this->materials_.nprop[n];
         infile.ignore(1000, '\n');
-        for (int i = 0; i < nprop[n]; i++) { infile >> mat_prop[n][i]; }
+        for (int i = 0; i < this->materials_.nprop[n]; i++) { infile >> this->materials_.mat_prop[n][i]; }
         infile.ignore(1000, '\n');
     }
 
