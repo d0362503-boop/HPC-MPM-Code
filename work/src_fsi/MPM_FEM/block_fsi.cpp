@@ -85,7 +85,7 @@ void MPMFEMBlockFSI::SolveFSISystem(const TimeState &ts) {
         if (this->CheckBlockConvergence(block_it, nvel_k, r0r_fsi_ref)) { break; }
     }
 
-    this->fluid_.CommitNodalKinematics();
+    this->fluid_.CommitNodalSolution();
 
     // this->CalDragLiftCoeffForTurekCFD();
 

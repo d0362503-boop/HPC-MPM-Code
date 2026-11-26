@@ -105,7 +105,7 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * @brief Solve the stabilized Navier-Stokes system for the n+1 iterate.
      *
      * Leaves `nvel`, `npres` and `naccel` at time level n; call
-     * CommitNodalKinematics() once the time step is accepted.
+     * CommitNodalSolution() once the time step is accepted.
      * @param ts Current time state of this step (load factor and physical time).
      */
     void SolveNS(const TimeState &ts);
@@ -152,7 +152,7 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      * Updates `naccel` from the generalized-α velocity relation, then copies
      * `nvel_k` to `nvel` and `npres_k` to `npres`.
      */
-    void CommitNodalKinematics();
+    void CommitNodalSolution();
 
     /** @brief Project particle liquid/gas indicator to control points. */
     void Particle2NodePhi();

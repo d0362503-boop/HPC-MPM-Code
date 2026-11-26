@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
 
             fluid.SolveNS(g_time);
 
-            fluid.CommitNodalKinematics();
+            fluid.CommitNodalSolution();
 
             if (istep % iout == 0) {
                 iview++;

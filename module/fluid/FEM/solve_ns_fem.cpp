@@ -389,7 +389,7 @@ void StabilizedFEM::UpdateNRIncrement() {
     return;
 }
 
-void StabilizedFEM::CommitNodalKinematics() {
+void StabilizedFEM::CommitNodalSolution() {
 
     this->naccel = this->ComputeNodeAccelFromVel();
     std::copy(this->nvel_k.begin(), this->nvel_k.end(), this->nvel.begin());

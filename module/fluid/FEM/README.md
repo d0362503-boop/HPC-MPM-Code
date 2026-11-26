@@ -54,7 +54,7 @@ loop:
 EndNewtonStep
 ```
 
-`SolveNS` does not commit; the owner calls `CommitNodalKinematics` once the
+`SolveNS` does not commit; the owner calls `CommitNodalSolution` once the
 time step is accepted.
 
 ### 1. Generalized-α Time Levels
@@ -127,7 +127,7 @@ matrix values update while the numerical PC can be reused; FieldSplit groups
 are preserved by checking the actual PC type. See the
 [shared solver guide](../../solver/README.md).
 
-### 5. Time-History Update (`CommitNodalKinematics`)
+### 5. Time-History Update (`CommitNodalSolution`)
 Called once per accepted time step (after FSI block convergence, not inside `SolveNS`):
 ```
 naccel ← (nvel_k − nvel)/(γΔt) − (1−γ)/γ · naccel

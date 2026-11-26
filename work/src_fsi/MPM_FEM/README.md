@@ -61,7 +61,7 @@ for block_it = 0 .. max_block_iter
     Anderson_relaxation_M1(...)             // update the imposed interface velocity
     residual of v_s - v_f on the interface; converged -> break
     block_it == max_block_iter -> MPI_Abort
-fluid_.CommitNodalKinematics()              // naccel, nvel, npres <- n+1, once per step
+fluid_.CommitNodalSolution()                // naccel, nvel, npres <- n+1, once per step
 ```
 
 The interface residual compares `v_s` with the fluid iterate `fluid_.nvel_k`.
