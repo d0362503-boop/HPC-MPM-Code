@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cmath>
 #include <vector>
 
 #include "module/dataset.h"
@@ -60,6 +59,12 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
         this->NS_.owner_ = this;
         this->PF_.owner_ = this;
     }
+
+    /**
+     * @brief Read `file.dat`, the fluid parameter file and this rank's grid data for a
+     *        stand-alone FEM fluid run (defined by the `work/src_fluid/FEM` driver).
+     */
+    void DataInput();
 
     /**
      * @brief Read fluid boundary-condition data from input stream.
