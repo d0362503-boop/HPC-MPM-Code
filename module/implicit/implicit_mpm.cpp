@@ -1,6 +1,5 @@
 #include "module/implicit/implicit_mpm.h"
 
-#include <algorithm>
 #include <vector>
 
 #include "module/dataset.h"
@@ -38,8 +37,8 @@ void ImplicitMPM::AddInertialForce(const MaterialPoint &mp, CrsMat &mat, const s
 void ImplicitMPM::CommitNodalKinematics(MaterialPoint &mp, const std::vector<double> &nvel_k,
                                         const std::vector<double> &naccel_k) const {
 
-    std::copy(nvel_k.begin(), nvel_k.end(), mp.nvel.begin());
-    std::copy(naccel_k.begin(), naccel_k.end(), mp.naccel.begin());
+    mp.nvel = nvel_k;
+    mp.naccel = naccel_k;
 
     return;
 }
