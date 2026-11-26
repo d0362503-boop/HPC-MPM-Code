@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cmath>
 #include <vector>
 
 #include "module/dataset.h"
@@ -8,7 +7,6 @@
 #include "module/implicit/newton_solver.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
 #include "module/solver/crsmat.h"
 
 namespace stabilizedmpm {
@@ -24,8 +22,8 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     // Stabilization-coefficient selector
     static constexpr StabCoeff stab_coeff = StabCoeff::VMS;
 
-    // SUPG/PSPG and LSIC stabilization coefficients
-    std::vector<double> tau1, tau2;
+    // Per-particle PSPG tau/rho and rho*tau_LSIC
+    std::vector<double> tau_pspg, tau_lsic;
 
     CrsMat NS_;            // Navier-Stokes system matrix
     ImplicitMPM implicit_; // implicit time integration and kinematics
@@ -33,7 +31,13 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
 
-    StabilizedMPM() {
+    /**
+     * @brief Configure the MPM Navier-Stokes system and inflow buffer on this rank's grid.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    StabilizedMPM(const Grid &grid, const RunParams &params)
+        : MaterialPoint(grid, params), ifp(grid, params), NS_(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->do_dlb = false;
@@ -49,8 +53,12 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
         this->NS_.owner_ = this;
     }
 
-    /** @brief Read fluid parameters and initialize state. */
-    void DataInput();
+    /**
+     * @brief Read fluid parameters and initialize state.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
+     */
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Read fluid boundary-condition data from input stream.
@@ -64,21 +72,39 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /** @brief Initialize fluid particle state. */
     void InitializePointData() override;
 
-    /** @brief Map fluid particle mass/momentum to control points (P2G). */
-    void Particle2Node() override;
+    /**
+     * @brief Map fluid particle mass/momentum to control points (P2G).
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void Particle2Node(const TimeState &ts) override;
 
-    /** @brief Map nodal velocity/pressure back to fluid particles (G2P). */
-    void Node2Particle() override;
+    /**
+     * @brief Commit the converged nodal kinematics and pressure, then map them back to
+     *        fluid particles (G2P).
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void Node2Particle(const TimeState &ts) override;
 
-    /** @brief Solve the stabilized Navier-Stokes system. */
-    void SolveNS();
+    /** @brief Accept the converged pressure iterate as the nodal pressure: `npres <- npres_k`. */
+    void CommitNodalPressure();
+
+    std::vector<double> npres_k; // nodal pressure at the iterate
+
+    /**
+     * @brief Solve the stabilized Navier-Stokes system.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void SolveNS(const TimeState &ts);
 
     // Newton steps driven by SolveNewton().
     /** @brief Freeze stabilization coefficients and reset the displacement, pressure and Newton scratch state. */
     void BeginNewtonStep() override;
 
-    /** @brief Apply iterate BCs and kinematics, then assemble the Navier-Stokes tangent and residual. */
-    void AssembleNewtonSystem() override;
+    /**
+     * @brief Apply iterate BCs and kinematics, then assemble the Navier-Stokes tangent and residual.
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     */
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the Navier-Stokes residual.
@@ -91,9 +117,10 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Solve the Navier-Stokes system for the velocity-pressure correction.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Release the Navier-Stokes linear-system storage. */
     void EndNewtonStep() override;
@@ -110,8 +137,8 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      * @return Current control-point offsets for x, y, z momentum and pressure.
      */
     std::vector<int> RHSOffsets() const {
-        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2),
-                nodec * (this->rhs_start + 3)};
+        return {this->grid_.cmesh.nodec * this->rhs_start, this->grid_.cmesh.nodec * (this->rhs_start + 1), this->grid_.cmesh.nodec * (this->rhs_start + 2),
+                this->grid_.cmesh.nodec * (this->rhs_start + 3)};
     }
 
     /**
@@ -132,8 +159,9 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Write fluid particle data to VTK HDF5 files.
      * @param iview Output view index.
+     * @param ts Current time state; its physical time is written with the data.
      */
-    void OutputPointDataVTKHDF(int iview) override;
+    void OutputPointDataVTKHDF(int iview, const TimeState &ts) override;
 
     /** @brief Write fluid restart data. */
     void RestartOutput() override;
@@ -141,10 +169,13 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     /** @brief Move particles across MPI rank boundaries. */
     void MoveParticle() override;
 
-    /** @brief Apply DLB and rebuild the fluid Navier-Stokes matrix structure. */
-    void ApplyDLB() override {
+    /**
+     * @brief Apply DLB and rebuild the fluid Navier-Stokes matrix structure.
+     * @param grid Writable view of the grid this object observes; repartitioned in place.
+     */
+    void ApplyDLB(Grid &grid) override {
 
-        MaterialPoint::ApplyDLB();
+        MaterialPoint::ApplyDLB(grid);
 
         this->NS_.BuildCrsMat(16);
 
@@ -160,10 +191,10 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      * @param mat PETSc matrix.
      */
     void BuildPetscBCList(CrsMat &mat) override {
-        mat.AddBCComponent(this->ubc, nuc);
-        mat.AddBCComponent(this->vbc, nvc);
-        mat.AddBCComponent(this->wbc, nwc);
-        mat.AddBCComponent(this->pbc, npc);
+        mat.AddBCComponent(this->ubc, this->grid_.cmesh.nuc);
+        mat.AddBCComponent(this->vbc, this->grid_.cmesh.nvc);
+        mat.AddBCComponent(this->wbc, this->grid_.cmesh.nwc);
+        mat.AddBCComponent(this->pbc, this->grid_.cmesh.npc);
 
         return;
     };
@@ -173,18 +204,21 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      * @param rr Residual vector.
      */
     void BCResidualSet(std::vector<double> &rr) override {
-        this->ubc.BCSetZero(nuc, rr);
-        this->vbc.BCSetZero(nvc, rr);
-        this->wbc.BCSetZero(nwc, rr);
-        this->pbc.BCSetZero(npc, rr);
+        this->ubc.BCSetZero(this->grid_.cmesh.nuc, rr);
+        this->vbc.BCSetZero(this->grid_.cmesh.nvc, rr);
+        this->wbc.BCSetZero(this->grid_.cmesh.nwc, rr);
+        this->pbc.BCSetZero(this->grid_.cmesh.npc, rr);
 
         return;
     };
 
-    /** @brief Apply Dirichlet displacement increments for NR iteration. */
-    void BCNRSet() {
-        this->ApplyDisplacementBC(this->ndispl);
-        this->pbc.BCSetVal(0, this->npres);
+    /**
+     * @brief Apply Dirichlet displacement increments for NR iteration.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
+     */
+    void BCNRSet(const TimeState &ts) {
+        this->ApplyDisplacementBC(this->ndispl, ts);
+        this->pbc.BCSetVal(0, this->npres_k, ts.facl);
 
         return;
     };
@@ -195,9 +229,10 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      * @param mat Target system, cleared by the caller before assembly.
      * @param naccel_k Nodal acceleration at the current endpoint iterate.
      * @param nvel_k Nodal velocity at the current endpoint iterate.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &nvel_k, //
-                                const std::vector<double> &naccel_k);
+                                const std::vector<double> &naccel_k, const TimeState &ts);
 
     /** @brief Apply converged NR increment to nodal variables. */
     void UpdateNRIncrement() override;
@@ -221,10 +256,12 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
      */
     void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) override;
 
-  private:
+  protected:
     // Newton scratch state of the current step.
     std::vector<double> nvel_k_, naccel_k_; // nodal velocity and acceleration at the iterate
-    double r0r_;                            // initial residual reference
+
+  private:
+    double r0r_; // initial residual reference
 };
 
 } // namespace stabilizedmpm

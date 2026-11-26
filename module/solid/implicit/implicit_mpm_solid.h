@@ -1,15 +1,11 @@
 #pragma once
 
-#include <cmath>
-#include <string>
 #include <vector>
 
 #include "module/dataset.h"
 #include "module/implicit/implicit_mpm.h"
 #include "module/implicit/newton_solver.h"
-#include "module/map_and_interpolate.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
 #include "module/solid/solid_material_point.h"
 #include "module/solver/crsmat.h"
 
@@ -24,8 +20,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
     std::vector<int> blocks;      // target scalar block indices
     int rhs_start;           // first target component index
 
-    /** @brief Initialize the three-component implicit solid system and its PETSc owner. */
-    ImplicitSolidMPM() {
+    /**
+     * @brief Initialize the three-component implicit solid system and its PETSc owner.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    ImplicitSolidMPM(const Grid &grid, const RunParams &params) : SolidMaterialPointBase(grid, params), SM_(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8};
         this->rhs_start = 0;
         this->NR_flag = true;
@@ -45,30 +45,38 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
 
     /**
      * @brief Read and initialize standalone implicit-solid input data.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Map solid particle mass/volume/momentum/force to control points (P2G).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Particle2Node() override;
+    void Particle2Node(const TimeState &ts) override;
 
     /**
      * @brief Map updated nodal kinematics back to solid particles (G2P).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Node2Particle() override;
+    void Node2Particle(const TimeState &ts) override;
 
     /**
      * @brief Driver for one implicit solid time step.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void SolveSolid() override;
+    void SolveSolid(const TimeState &ts) override;
 
     // Newton steps driven by SolveNewton().
     /** @brief Reset the displacement increment and Newton scratch state. */
     void BeginNewtonStep() override;
 
-    /** @brief Apply iterate BCs and kinematics, then assemble the solid tangent and residual. */
-    void AssembleNewtonSystem() override;
+    /**
+     * @brief Apply iterate BCs and kinematics, then assemble the solid tangent and residual.
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     */
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the solid residual; linear elasticity only reports and never converges early.
@@ -81,9 +89,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
     /**
      * @brief Solve the solid system for the displacement correction.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Release the solid linear-system storage. */
     void EndNewtonStep() override;
@@ -100,13 +109,16 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @return Current control-point offsets for x, y and z momentum.
      */
     std::vector<int> RHSOffsets() const {
-        return {nodec * this->rhs_start, nodec * (this->rhs_start + 1), nodec * (this->rhs_start + 2)};
+        return {this->grid_.cmesh.nodec * this->rhs_start, this->grid_.cmesh.nodec * (this->rhs_start + 1), this->grid_.cmesh.nodec * (this->rhs_start + 2)};
     }
 
-    /** @brief Apply DLB and rebuild the implicit-solid matrix structure. */
-    void ApplyDLB() override {
+    /**
+     * @brief Apply DLB and rebuild the implicit-solid matrix structure.
+     * @param grid Writable view of the grid this object observes; repartitioned in place.
+     */
+    void ApplyDLB(Grid &grid) override {
 
-        MaterialPoint::ApplyDLB();
+        MaterialPoint::ApplyDLB(grid);
 
         this->SM_.BuildCrsMat(9);
 
@@ -122,9 +134,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
 
     /**
      * @brief Apply Dirichlet displacement increments for current NR iteration.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
      */
-    void BCNRSet() {
-        this->ApplyDisplacementBC(this->ndispl);
+    void BCNRSet(const TimeState &ts) {
+        this->ApplyDisplacementBC(this->ndispl, ts);
 
         return;
     };
@@ -134,12 +147,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @param rr Residual vector.
      */
     void BCResidualSet(std::vector<double> &rr) override {
-        this->ubc.BCSetZero(nuc, rr);
-        this->vbc.BCSetZero(nvc, rr);
-        this->wbc.BCSetZero(nwc, rr);
-        this->rigid_bc.BCSetZero(nuc, rr);
-        this->rigid_bc.BCSetZero(nvc, rr);
-        this->rigid_bc.BCSetZero(nwc, rr);
+        this->ubc.BCSetZero(this->grid_.cmesh.nuc, rr);
+        this->vbc.BCSetZero(this->grid_.cmesh.nvc, rr);
+        this->wbc.BCSetZero(this->grid_.cmesh.nwc, rr);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nuc, rr);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nvc, rr);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nwc, rr);
 
         return;
     };
@@ -149,12 +162,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @param mat PETSc matrix.
      */
     void BuildPetscBCList(CrsMat &mat) override {
-        mat.AddBCComponent(this->ubc, nuc);
-        mat.AddBCComponent(this->vbc, nvc);
-        mat.AddBCComponent(this->wbc, nwc);
-        mat.AddBCComponent(this->rigid_bc, nuc);
-        mat.AddBCComponent(this->rigid_bc, nvc);
-        mat.AddBCComponent(this->rigid_bc, nwc);
+        mat.AddBCComponent(this->ubc, this->grid_.cmesh.nuc);
+        mat.AddBCComponent(this->vbc, this->grid_.cmesh.nvc);
+        mat.AddBCComponent(this->wbc, this->grid_.cmesh.nwc);
+        mat.AddBCComponent(this->rigid_bc, this->grid_.cmesh.nuc);
+        mat.AddBCComponent(this->rigid_bc, this->grid_.cmesh.nvc);
+        mat.AddBCComponent(this->rigid_bc, this->grid_.cmesh.nwc);
 
         return;
     };
@@ -164,9 +177,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
      * @param mat Target system, cleared by the caller before assembly.
      * @param naccel_k Nodal acceleration at the current endpoint iterate.
      * @param stress_k  Particle stress state for tangent assembly.
+     * @param ts        Current time state (load factor for body forces).
      */
     virtual void AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                std::vector<std::array<double, 6>> &stress_k);
+                                std::vector<std::array<double, 6>> &stress_k, const TimeState &ts);
 
     /**
      * @brief Tangent-modulus contribution for one particle-node pair.

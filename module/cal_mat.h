@@ -1,12 +1,12 @@
 #pragma once
 
-#include "module/dataset.h"
-#include "module/mesh.h"
 #include <array>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <utility>
+
+inline constexpr std::array<std::array<int, 3>, 3> kVoigtIndex = {{{{0, 5, 4}}, {{5, 1, 3}}, {{4, 3, 2}}}}; // Voigt index map
+inline constexpr std::array<std::array<double, 3>, 3> kIdentity3 = {                                // 3x3 identity
+    {{{1.0e0, 0.0e0, 0.0e0}}, {{0.0e0, 1.0e0, 0.0e0}}, {{0.0e0, 0.0e0, 1.0e0}}}};
 
 /**
  * @brief Return the sign of a scalar value.

@@ -3,8 +3,6 @@
 #include <iomanip>
 #include <string>
 
-#include "module/data_io.h"
-#include "module/dataset.h"
 #include "module/mesh.h"
 
 #ifdef HAVE_HDF5
@@ -13,33 +11,36 @@
 #include "module/vtk_hdf5.h"
 #endif
 
-void WriteGlobalMeshHeader(std::ofstream &outfile) {
-    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << idimc[i];
+void WriteGlobalMeshHeader(std::ofstream &outfile, const Grid &grid) {
+    const Mesh &mesh = grid.mesh;
+    const ControlMesh &cmesh = grid.cmesh;
+
+    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << cmesh.idimc[i];
     outfile << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << xymin[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << mesh.xymin[i];
     outfile << "\n";
 
-    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << xymax[i];
+    for (int i = 0; i < 3; ++i) outfile << std::setw(15) << mesh.xymax[i];
     outfile << "\n";
 
-    outfile << std::setw(10) << nelem;
-    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << xyelem[i];
+    outfile << std::setw(10) << mesh.nelem;
+    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << mesh.xyelem[i];
     outfile << "\n";
 
-    outfile << std::setw(10) << node;
-    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << xynode[i];
+    outfile << std::setw(10) << mesh.node;
+    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << mesh.xynode[i];
     outfile << "\n";
 
-    outfile << std::setw(10) << nodec;
-    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << xynodec[i];
+    outfile << std::setw(10) << cmesh.nodec;
+    for (int i = 0; i < 3; ++i) outfile << std::setw(10) << cmesh.xynodec[i];
     outfile << "\n";
 }
 
 #ifdef HAVE_HDF5
-void WriteVTKHDFMesh(const std::string &filename) {
+void WriteVTKHDFMesh(const std::string &filename, const Mesh &mesh) {
     vtkhdf::VTKHDFWriter writer(filename, MPI_COMM_SELF);
-    vtkhdf::WriteHexMeshTopology(writer, xyn, nc);
+    vtkhdf::WriteHexMeshTopology(writer, mesh.xyn, mesh.nc);
     writer.SetTime(0.0e0);
 }
 

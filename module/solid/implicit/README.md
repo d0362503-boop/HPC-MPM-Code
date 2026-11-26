@@ -58,15 +58,15 @@ displacement iterate; `implicit_.CommitNodalKinematics()` commits the converged 
 ### 2. Newton–Raphson Loop (`SolveSolid`)
 
 `ImplicitSolidMPM` is a `NonlinearProblem` (`module/implicit/newton_solver.h`);
-`SolveSolid()` sets `max_NR_it` from `NR_flag` and calls
-`SolveNewton(*this, max_NR_it)`, which runs the steps in this order:
+`SolveSolid(ts)` sets `max_NR_it` from `NR_flag` and calls
+`SolveNewton(*this, ts, max_NR_it)`, which runs the steps in this order:
 
 ```cpp
 BeginNewtonStep();                          // zero ndispl, snapshot stress_k_
 for NR_it = 0 .. max_NR_it
-    AssembleNewtonSystem();                 // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
+    AssembleNewtonSystem(ts);               // BCNRSet, predictor, zero amat/b_rhs/x_lhs, AssembleSystem
     if CheckNewtonConvergence(NR_it, ksp_its) break; // NR_flag: SM_.CheckNRConvergence; else print only
-    ksp_its = SolveNewtonCorrection(NR_it); // SM_.SolveSystem: PETSc or native linear solve
+    ksp_its = SolveNewtonCorrection(NR_it, ts); // SM_.SolveSystem: PETSc or native linear solve
     UpdateNRIncrement();                    // ndispl += x_lhs
 EndNewtonStep();                            // release SM_ storage
 ```

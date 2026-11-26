@@ -1,19 +1,24 @@
 #pragma once
 
 #include <cmath>
-#include <string>
 #include <vector>
 
-#include "module/data_io.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
 #include "module/solid/constitutive_model.h"
 
 class SolidMaterialPointBase : public MaterialPoint {
   public:
+    /**
+     * @brief Bind the solid material-point set to this rank's grid.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    SolidMaterialPointBase(const Grid &grid, const RunParams &params) : MaterialPoint(grid, params) {}
+
     bool Fbar_flag = false;
+    MaterialTable materials_; // solid material models and properties
     // --- Data Initialize ---
 
     /**
@@ -45,8 +50,9 @@ class SolidMaterialPointBase : public MaterialPoint {
     /**
      * @brief Write solid particle data to VTK HDF5 visualization files.
      * @param iview Output view index.
+     * @param ts Current time state; its physical time is written with the data.
      */
-    void OutputPointDataVTKHDF(int iview) override;
+    void OutputPointDataVTKHDF(int iview, const TimeState &ts) override;
 
     /**
      * @brief Write solid restart data to per-rank `*_re.txt` files.
@@ -115,12 +121,13 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @brief Map particle body and applied forces to one control point.
      * @param pid Particle supplying mass and applied traction-force components.
      * @param sfi Shape-function weight at the receiving control point.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      * @return Weighted body force plus applied force in the three momentum components.
      */
-    virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept {
-        double fx = bb[0] * facl;
-        double fy = bb[1] * facl;
-        double fz = bb[2] * facl;
+    virtual std::array<double, 3> ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept {
+        double fx = this->params_.bb[0] * ts.facl;
+        double fy = this->params_.bb[1] * ts.facl;
+        double fz = this->params_.bb[2] * ts.facl;
 
         std::array<double, 3> nfext;
         nfext[0] = sfi * (this->mass[pid] * fx + this->trac_force[pid][0]);
@@ -159,14 +166,15 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @brief Apply prescribed Dirichlet boundary values to a velocity/displacement vector,
      *        including rigid-body constraints.
      * @param nvel Vector to be modified in-place at constrained DOFs.
+     * @param ts   Current time state; its load factor `facl` scales the prescribed values.
      */
-    void ApplyVelocityBC(std::vector<double> &nvel) override {
+    void ApplyVelocityBC(std::vector<double> &nvel, const TimeState &ts) override {
 
-        MaterialPoint::ApplyVelocityBC(nvel);
+        MaterialPoint::ApplyVelocityBC(nvel, ts);
 
-        this->rigid_bc.BCSetZero(nuc, nvel);
-        this->rigid_bc.BCSetZero(nvc, nvel);
-        this->rigid_bc.BCSetZero(nwc, nvel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nuc, nvel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nvc, nvel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nwc, nvel);
 
         return;
     }
@@ -180,9 +188,9 @@ class SolidMaterialPointBase : public MaterialPoint {
 
         MaterialPoint::ApplyAccelerationBC(naccel);
 
-        this->rigid_bc.BCSetZero(nuc, naccel);
-        this->rigid_bc.BCSetZero(nvc, naccel);
-        this->rigid_bc.BCSetZero(nwc, naccel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nuc, naccel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nvc, naccel);
+        this->rigid_bc.BCSetZero(this->grid_.cmesh.nwc, naccel);
 
         return;
     }
@@ -191,20 +199,25 @@ class SolidMaterialPointBase : public MaterialPoint {
      * @brief Apply prescribed Dirichlet values to a nodal displacement increment,
      *        including rigid-body constraints.
      * @param ndispl Displacement increment modified in-place at constrained DOFs.
+     * @param ts     Current time state; the increment is `facl * dt` times the prescribed velocity.
      */
-    void ApplyDisplacementBC(std::vector<double> &ndispl) override {
+    void ApplyDisplacementBC(std::vector<double> &ndispl, const TimeState &ts) override {
 
-        MaterialPoint::ApplyDisplacementBC(ndispl);
+        MaterialPoint::ApplyDisplacementBC(ndispl, ts);
 
-        this->rigid_bc.BCSetDispl(nuc, ndispl);
-        this->rigid_bc.BCSetDispl(nvc, ndispl);
-        this->rigid_bc.BCSetDispl(nwc, ndispl);
+        const double scale = ts.facl * this->params_.dt;
+        this->rigid_bc.BCSetDispl(this->grid_.cmesh.nuc, ndispl, scale);
+        this->rigid_bc.BCSetDispl(this->grid_.cmesh.nvc, ndispl, scale);
+        this->rigid_bc.BCSetDispl(this->grid_.cmesh.nwc, ndispl, scale);
 
         return;
     }
 
-    /** @brief Advance the solid nodal solve using the selected explicit or implicit method. */
-    virtual void SolveSolid() = 0;
+    /**
+     * @brief Advance the solid nodal solve using the selected explicit or implicit method.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    virtual void SolveSolid(const TimeState &ts) = 0;
 
     /**
      * @brief Identify particles whose material ID corresponds to a rigid body and tag them in `rigid_bc`.

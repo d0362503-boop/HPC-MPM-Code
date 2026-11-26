@@ -7,14 +7,10 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <numeric>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/dataset.h"
 #include "module/fluid/FEM/stabilized_fem.h"
-#include "module/map_and_interpolate.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/relaxation.h"
@@ -25,13 +21,18 @@
 
 using namespace mpmfemblockfsi;
 
-void MPMFEMBlockFSI::DetectFSIInterface() {
+FSIFluid::FSIFluid(MPMFEMBlockFSI &fsi) : StabilizedFEM(fsi.grid_, fsi.params_), fsi_(fsi) {}
 
-    VectorAssign(nodec, this->fsi_intf.nbc);
-    VectorAssign(nodec, this->solid_.nphi);
+FSISolid::FSISolid(MPMFEMBlockFSI &fsi) : ImplicitSolidMPM(fsi.grid_, fsi.params_), fsi_(fsi) {}
+
+void MPMFEMBlockFSI::DetectFSIInterface() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
+    VectorAssign(cmesh.nodec, this->fsi_intf.nbc);
+    VectorAssign(cmesh.nodec, this->solid_.nphi);
     this->fsi_intf.ibc = 0;
-    for (int n = 0; n < nodec; n++) {
-        this->solid_.nphi[n] = this->solid_.nvof[n] / nvol[n];
+    for (int n = 0; n < cmesh.nodec; n++) {
+        this->solid_.nphi[n] = this->solid_.nvof[n] / cmesh.nvol[n];
         this->solid_.nphi[n] = std::clamp(this->solid_.nphi[n], 0.0e0, 1.0e0);
         if (this->solid_.nphi[n] > this->phi_cut) { this->fsi_intf.nbc[this->fsi_intf.ibc++] = n; }
     }
@@ -40,27 +41,29 @@ void MPMFEMBlockFSI::DetectFSIInterface() {
 }
 
 void MPMFEMBlockFSI::UpdateFSIInterfaceBC() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     int num = this->fsi_intf.ibc;
     if (num == 0) return;
     VectorAssign(num * 3, this->fsi_intf.fbc);
     for (int i = 0; i < num; i++) {
         int nid = this->fsi_intf.nbc[i];
-        this->fsi_intf.fbc[i + 0 * num] = this->solid_.nvel[nid + nuc];
-        this->fsi_intf.fbc[i + 1 * num] = this->solid_.nvel[nid + nvc];
-        this->fsi_intf.fbc[i + 2 * num] = this->solid_.nvel[nid + nwc];
+        this->fsi_intf.fbc[i + 0 * num] = this->solid_.nvel[nid + cmesh.nuc];
+        this->fsi_intf.fbc[i + 1 * num] = this->solid_.nvel[nid + cmesh.nvc];
+        this->fsi_intf.fbc[i + 2 * num] = this->solid_.nvel[nid + cmesh.nwc];
     }
 
     return;
 }
 
-void MPMFEMBlockFSI::SolveFSISystem() {
+void MPMFEMBlockFSI::SolveFSISystem(const TimeState &ts) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->DetectFSIInterface();
 
     int num = this->fsi_intf.ibc;
-    double rtr_fsi_ref, r0r_fsi_ref, rkr_fsi_ref, rtr_fsi_abs;
-    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3), //
+    double r0r_fsi_ref = 0.0e0;
+    std::vector<double> nvel_k(cmesh.nodec * 3), naccel_k(cmesh.nodec * 3), //
         r_k_old(num * 3, 0.0e0), r_k_older(num * 3, 0.0e0),     //
         u_s_old(num * 3, 0.0e0), u_s_older(num * 3, 0.0e0);
 
@@ -70,77 +73,86 @@ void MPMFEMBlockFSI::SolveFSISystem() {
     this->solid_.SM_.force_rebuild_next_ = true;
     for (int block_it = 0; block_it <= this->max_block_iter; block_it++) {
 
-        this->fluid_.SolveNS();
+        this->fluid_.SolveNS(ts);
 
         this->CalFSIForce();
 
-        this->solid_.SolveSolid();
+        this->solid_.SolveSolid(ts);
 
         this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, nvel_k, naccel_k);
 
-        Anderson_relaxation_M1(block_it, u_s_old, nvel_k, r_k_old, this->fsi_intf);
-        // Aitken_relaxation(block_it, this->relax_omega, nvel_k, r_k_old, this->fsi_intf);
-        // Anderson_relaxation_M2(block_it, nvel_k, u_s_old, u_s_older, r_k_old, r_k_older, this->fsi_intf);
+        Anderson_relaxation_M1(this->grid_, block_it, u_s_old, nvel_k, r_k_old, this->fsi_intf);
+        // Aitken_relaxation(this->grid_, block_it, this->relax_omega, nvel_k, r_k_old, this->fsi_intf);
+        // Anderson_relaxation_M2(this->grid_, block_it, nvel_k, u_s_old, u_s_older, r_k_old, r_k_older, this->fsi_intf);
 
-        if (block_it == 0) {
-            this->CalFSIResidual(r0r_fsi_ref, rtr_fsi_abs, nvel_k);
-            rkr_fsi_ref = r0r_fsi_ref;
-        } else {
-            this->CalFSIResidual(rkr_fsi_ref, rtr_fsi_abs, nvel_k);
-        }
-        rtr_fsi_ref = (r0r_fsi_ref > 1.0e-12) ? (rkr_fsi_ref / r0r_fsi_ref) : 0.0e0;
-
-        // --- Convergence check ---
-        if (rtr_fsi_ref < this->tol_ref || r0r_fsi_ref < this->tol_ref || //
-            rtr_fsi_abs < this->tol_abs) {
-            if (myrank == 0) {
-                std::cout << "Block_converge:" << std::setw(10) << block_it  //
-                          << std::setw(15) << std::scientific << rtr_fsi_ref //
-                          << std::setw(15) << std::scientific << r0r_fsi_ref //
-                          << std::setw(15) << std::scientific << rtr_fsi_abs << "\n";
-            }
-            break;
-        } else if (block_it == this->max_block_iter) {
-            if (myrank == 0) {
-                std::cout << "Block_it:" << std::setw(10) << block_it << "\n";
-                std::cout << "Block iteration can not converge" << "\n";
-            }
-            MPI_Abort(MPI_COMM_WORLD, -1);
-        }
+        if (this->CheckBlockConvergence(block_it, nvel_k, r0r_fsi_ref)) { break; }
     }
 
+    this->fluid_.CommitNodalSolution();
+
     // this->CalDragLiftCoeffForTurekCFD();
-
-    this->fluid_.naccel = this->fluid_.ComputeNodeAccelFromVel();
-
-    this->fluid_.UpdateNodalVar();
 
     return;
 }
 
+bool MPMFEMBlockFSI::CheckBlockConvergence(int block_it, const std::vector<double> &nvel_k, double &r0r_ref) {
+
+    double rkr_ref, rtr_abs;
+    if (block_it == 0) {
+        this->CalFSIResidual(r0r_ref, rtr_abs, nvel_k);
+        rkr_ref = r0r_ref;
+    } else {
+        this->CalFSIResidual(rkr_ref, rtr_abs, nvel_k);
+    }
+    const double rtr_ref = (r0r_ref > 1.0e-12) ? (rkr_ref / r0r_ref) : 0.0e0;
+
+    // --- Convergence check ---
+    if (rtr_ref < this->tol_ref || r0r_ref < this->tol_ref || rtr_abs < this->tol_abs) {
+        if (myrank == 0) {
+            std::cout << "Block_converge:" << std::setw(10) << block_it  //
+                      << std::setw(15) << std::scientific << rtr_ref     //
+                      << std::setw(15) << std::scientific << r0r_ref     //
+                      << std::setw(15) << std::scientific << rtr_abs << "\n";
+        }
+        return true;
+    }
+
+    if (block_it == this->max_block_iter) {
+        if (myrank == 0) {
+            std::cout << "Block_it:" << std::setw(10) << block_it << "\n";
+            std::cout << "Block iteration can not converge" << "\n";
+        }
+        MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    return false;
+}
+
 void MPMFEMBlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const Partition &part = this->grid_.part;
 
     double norm = 0.0e0, intf_num = 0.0e0;
     for (int n = 0; n < this->fsi_intf.ibc; n++) {
         int nid = this->fsi_intf.nbc[n];
 
-        double us1 = nvel_k[nid + nuc];
-        double us2 = nvel_k[nid + nvc];
-        double us3 = nvel_k[nid + nwc];
+        double us1 = nvel_k[nid + cmesh.nuc];
+        double us2 = nvel_k[nid + cmesh.nvc];
+        double us3 = nvel_k[nid + cmesh.nwc];
 
-        double uf1 = this->fluid_.nvel[nid + nuc];
-        double uf2 = this->fluid_.nvel[nid + nvc];
-        double uf3 = this->fluid_.nvel[nid + nwc];
+        double uf1 = this->fluid_.nvel_k[nid + cmesh.nuc];
+        double uf2 = this->fluid_.nvel_k[nid + cmesh.nvc];
+        double uf3 = this->fluid_.nvel_k[nid + cmesh.nwc];
 
         double dr1 = us1 - uf1;
         double dr2 = us2 - uf2;
         double dr3 = us3 - uf3;
 
-        norm += dr1 * dr1 * dbc[nid + nuc]   //
-                + dr2 * dr2 * dbc[nid + nvc] //
-                + dr3 * dr3 * dbc[nid + nwc];
+        norm += dr1 * dr1 * part.dbc[nid + cmesh.nuc]   //
+                + dr2 * dr2 * part.dbc[nid + cmesh.nvc] //
+                + dr3 * dr3 * part.dbc[nid + cmesh.nwc];
 
-        intf_num += dbc[nid];
+        intf_num += part.dbc[nid];
     }
 
     MPI_Allreduce(MPI_IN_PLACE, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -153,6 +165,8 @@ void MPMFEMBlockFSI::CalFSIResidual(double &rtr_ref, double &rtr_dof, const std:
 }
 
 void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     const double cylinder_center_x = 0.2e0;
     const double cylinder_center_z = 0.2e0;
@@ -161,7 +175,7 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
 
     const double radius_eval = cylinder_radius;
     const double dtheta = 2.0e0 * M_PI / static_cast<double>(surface_quad_points);
-    const double y_mid = 0.5e0 * (xyminw[1] + xymaxw[1]);
+    const double y_mid = 0.5e0 * (mesh.xyminw[1] + mesh.xymaxw[1]);
 
     double fx = 0.0e0;
     double fz = 0.0e0;
@@ -181,9 +195,9 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
         };
 
         int m_local;
-        if (!LocateLocalElement(xq, m_local)) { continue; }
+        if (!LocateLocalElement(mesh, xq, m_local)) { continue; }
 
-        MakeSF(m_local, xq, idimc, xynodec, ncm, nenode, sf, dsf);
+        MakeSF(this->grid_, m_local, xq, ncm, nenode, sf, dsf);
 
         double phi_q = 0.0e0;
         double pres_q = 0.0e0;
@@ -199,17 +213,17 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
             phi_q += sfi * this->fluid_.nphi[nid];
             pres_q += sfi * this->fluid_.npres[nid];
 
-            grad_vel_q[0][0] += dsfi1 * this->fluid_.nvel[nid + nuc];
-            grad_vel_q[0][1] += dsfi2 * this->fluid_.nvel[nid + nuc];
-            grad_vel_q[0][2] += dsfi3 * this->fluid_.nvel[nid + nuc];
+            grad_vel_q[0][0] += dsfi1 * this->fluid_.nvel[nid + cmesh.nuc];
+            grad_vel_q[0][1] += dsfi2 * this->fluid_.nvel[nid + cmesh.nuc];
+            grad_vel_q[0][2] += dsfi3 * this->fluid_.nvel[nid + cmesh.nuc];
 
-            grad_vel_q[1][0] += dsfi1 * this->fluid_.nvel[nid + nvc];
-            grad_vel_q[1][1] += dsfi2 * this->fluid_.nvel[nid + nvc];
-            grad_vel_q[1][2] += dsfi3 * this->fluid_.nvel[nid + nvc];
+            grad_vel_q[1][0] += dsfi1 * this->fluid_.nvel[nid + cmesh.nvc];
+            grad_vel_q[1][1] += dsfi2 * this->fluid_.nvel[nid + cmesh.nvc];
+            grad_vel_q[1][2] += dsfi3 * this->fluid_.nvel[nid + cmesh.nvc];
 
-            grad_vel_q[2][0] += dsfi1 * this->fluid_.nvel[nid + nwc];
-            grad_vel_q[2][1] += dsfi2 * this->fluid_.nvel[nid + nwc];
-            grad_vel_q[2][2] += dsfi3 * this->fluid_.nvel[nid + nwc];
+            grad_vel_q[2][0] += dsfi1 * this->fluid_.nvel[nid + cmesh.nwc];
+            grad_vel_q[2][1] += dsfi2 * this->fluid_.nvel[nid + cmesh.nwc];
+            grad_vel_q[2][2] += dsfi3 * this->fluid_.nvel[nid + cmesh.nwc];
         }
 
         double rmuf = phi_q * this->fluid_.rmul + (1.0e0 - phi_q) * this->fluid_.rmug;
@@ -226,7 +240,7 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
         double tx = sigma_q[0][0] * nx + sigma_q[0][2] * nz;
         double tz = sigma_q[2][0] * nx + sigma_q[2][2] * nz;
 
-        double dgamma = radius_eval * dtheta * dxy[1];
+        double dgamma = radius_eval * dtheta * mesh.dxy[1];
         fx += tx * dgamma;
         fz += tz * dgamma;
     }
@@ -234,8 +248,8 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
     MPI_Allreduce(MPI_IN_PLACE, &fx, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &fz, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    double cd = 2.0e0 * fx / (this->fluid_.rhol * 0.1e0 * dxy[1]);
-    double cl = 2.0e0 * fz / (this->fluid_.rhol * 0.1e0 * dxy[1]);
+    double cd = 2.0e0 * fx / (this->fluid_.rhol * 0.1e0 * mesh.dxy[1]);
+    double cl = 2.0e0 * fz / (this->fluid_.rhol * 0.1e0 * mesh.dxy[1]);
 
     if (myrank == 0) {
         std::cout << "Surface traction Cd Cl:" //
@@ -247,18 +261,21 @@ void MPMFEMBlockFSI::CalDragLiftCoeffForTurekCFD() {
 }
 
 void MPMFEMBlockFSI::CalFSIForce() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(nodec, this->added_mass);
-    for (int m = 0; m < nelem; m++) {
+    VectorAssign(cmesh.nodec, this->added_mass);
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->solid_.idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->solid_.coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
@@ -270,29 +287,29 @@ void MPMFEMBlockFSI::CalFSIForce() {
         }
     }
 
-    NodeVarComm(this->added_mass, 0);
+    NodeVarComm(this->grid_.part, this->added_mass, 0);
 
     // --- Transfet variables to (n+α_f) time interlevel ---
     const double af = this->fluid_.integrator_.alpha_f;
     const double af0 = 1.0e0 - af;
 
-    std::vector<double> nvel_af(nodec * 3), npres_af(nodec);
-    for (int n = 0; n < nodec * 3; n++) { //
-        nvel_af[n] = af0 * this->fluid_.nvel_old[n] + af * this->fluid_.nvel[n];
+    std::vector<double> nvel_af(cmesh.nodec * 3), npres_af(cmesh.nodec);
+    for (int n = 0; n < cmesh.nodec * 3; n++) { //
+        nvel_af[n] = af0 * this->fluid_.nvel[n] + af * this->fluid_.nvel_k[n];
     }
-    for (int n = 0; n < nodec; n++) { //
-        npres_af[n] = af0 * this->fluid_.npres_old[n] + af * this->fluid_.npres[n];
+    for (int n = 0; n < cmesh.nodec; n++) { //
+        npres_af[n] = af0 * this->fluid_.npres[n] + af * this->fluid_.npres_k[n];
     }
     // -----------------------------------------------------
 
-    double G_Weight = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
+    double G_Weight = (mesh.dxy[0] * mesh.dxy[1] * mesh.dxy[2]) / (params.npxye[0] * params.npxye[1] * params.npxye[2]);
 
-    VectorAssign(nodec * 3, this->nfsi_force);
-    for (int m = 0; m < nelem; m++) {
+    VectorAssign(cmesh.nodec * 3, this->nfsi_force);
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->fluid_.idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->fluid_.coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             double phi_k = 0.0e0, pres_k = 0.0e0;
             std::array<std::array<double, 3>, 3> grad_vel_k{};
@@ -307,15 +324,15 @@ void MPMFEMBlockFSI::CalFSIForce() {
                 // --- Pressure ---
                 pres_k += sfi * npres_af[nid];
                 // --- Gradient of velocity ---
-                grad_vel_k[0][0] += dsfi1 * nvel_af[nid + nuc];
-                grad_vel_k[0][1] += dsfi2 * nvel_af[nid + nuc];
-                grad_vel_k[0][2] += dsfi3 * nvel_af[nid + nuc];
-                grad_vel_k[1][0] += dsfi1 * nvel_af[nid + nvc];
-                grad_vel_k[1][1] += dsfi2 * nvel_af[nid + nvc];
-                grad_vel_k[1][2] += dsfi3 * nvel_af[nid + nvc];
-                grad_vel_k[2][0] += dsfi1 * nvel_af[nid + nwc];
-                grad_vel_k[2][1] += dsfi2 * nvel_af[nid + nwc];
-                grad_vel_k[2][2] += dsfi3 * nvel_af[nid + nwc];
+                grad_vel_k[0][0] += dsfi1 * nvel_af[nid + cmesh.nuc];
+                grad_vel_k[0][1] += dsfi2 * nvel_af[nid + cmesh.nuc];
+                grad_vel_k[0][2] += dsfi3 * nvel_af[nid + cmesh.nuc];
+                grad_vel_k[1][0] += dsfi1 * nvel_af[nid + cmesh.nvc];
+                grad_vel_k[1][1] += dsfi2 * nvel_af[nid + cmesh.nvc];
+                grad_vel_k[1][2] += dsfi3 * nvel_af[nid + cmesh.nvc];
+                grad_vel_k[2][0] += dsfi1 * nvel_af[nid + cmesh.nwc];
+                grad_vel_k[2][1] += dsfi2 * nvel_af[nid + cmesh.nwc];
+                grad_vel_k[2][2] += dsfi3 * nvel_af[nid + cmesh.nwc];
             }
 
             double rhof = phi_k * this->fluid_.rhol + (1.0e0 - phi_k) * this->fluid_.rhog;
@@ -335,24 +352,24 @@ void MPMFEMBlockFSI::CalFSIForce() {
                 double dsfi2 = dsf[ni][1];
                 double dsfi3 = dsf[ni][2];
 
-                this->nfsi_force[nid + nuc] +=
+                this->nfsi_force[nid + cmesh.nuc] +=
                     G_Weight * this->solid_.nphi[nid] * (dsfi1 * sts_k[0][0] + dsfi2 * sts_k[0][1] + dsfi3 * sts_k[0][2]);
-                this->nfsi_force[nid + nvc] +=
+                this->nfsi_force[nid + cmesh.nvc] +=
                     G_Weight * this->solid_.nphi[nid] * (dsfi1 * sts_k[1][0] + dsfi2 * sts_k[1][1] + dsfi3 * sts_k[1][2]);
-                this->nfsi_force[nid + nwc] +=
+                this->nfsi_force[nid + cmesh.nwc] +=
                     G_Weight * this->solid_.nphi[nid] * (dsfi1 * sts_k[2][0] + dsfi2 * sts_k[2][1] + dsfi3 * sts_k[2][2]);
             }
             pid = this->fluid_.idp2p[pid];
         }
     }
 
-    NodeVarComm(this->nfsi_force, {nuc, nvc, nwc});
+    NodeVarComm(this->grid_.part, this->nfsi_force, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         if (this->solid_.nphi[n] < this->phi_cut) {
-            this->nfsi_force[n + nuc] = 0.0e0;
-            this->nfsi_force[n + nvc] = 0.0e0;
-            this->nfsi_force[n + nwc] = 0.0e0;
+            this->nfsi_force[n + cmesh.nuc] = 0.0e0;
+            this->nfsi_force[n + cmesh.nvc] = 0.0e0;
+            this->nfsi_force[n + cmesh.nwc] = 0.0e0;
         }
     }
 
@@ -367,11 +384,12 @@ double FSISolid::ComputeNRLumpedMassMat(int pid, double sfi) const noexcept {
     return emd;
 }
 
-std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const noexcept {
+std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept {
+    const RunParams &params = this->params_;
 
-    double fx = bb[0] * facl;
-    double fy = bb[1] * facl;
-    double fz = bb[2] * facl;
+    double fx = params.bb[0] * ts.facl;
+    double fy = params.bb[1] * ts.facl;
+    double fz = params.bb[2] * ts.facl;
 
     std::array<double, 3> nfext;
     nfext[0] = sfi * ((this->mass[pid] + this->vol[pid] * this->fsi_.fluid_.rhol) * fx + this->trac_force[pid][0]);
@@ -382,18 +400,19 @@ std::array<double, 3> FSISolid::ComputeExternalForce(int pid, double sfi) const 
 }
 
 void FSISolid::AddInertialForceToRHS(CrsMat &mat, const std::vector<double> &naccel, const std::vector<int> &offsets) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec; n++) {
-        mat.b_rhs[n + offsets[0]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nuc];
-        mat.b_rhs[n + offsets[1]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nvc];
-        mat.b_rhs[n + offsets[2]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + nwc];
+    for (int n = 0; n < cmesh.nodec; n++) {
+        mat.b_rhs[n + offsets[0]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + cmesh.nuc];
+        mat.b_rhs[n + offsets[1]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + cmesh.nvc];
+        mat.b_rhs[n + offsets[2]] -= (this->nmass[n] + this->fsi_.added_mass[n]) * naccel[n + cmesh.nwc];
     }
 
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         // --- FSI force ---
-        mat.b_rhs[n + offsets[0]] -= this->fsi_.nfsi_force[n + nuc];
-        mat.b_rhs[n + offsets[1]] -= this->fsi_.nfsi_force[n + nvc];
-        mat.b_rhs[n + offsets[2]] -= this->fsi_.nfsi_force[n + nwc];
+        mat.b_rhs[n + offsets[0]] -= this->fsi_.nfsi_force[n + cmesh.nuc];
+        mat.b_rhs[n + offsets[1]] -= this->fsi_.nfsi_force[n + cmesh.nvc];
+        mat.b_rhs[n + offsets[2]] -= this->fsi_.nfsi_force[n + cmesh.nwc];
     }
 
     return;

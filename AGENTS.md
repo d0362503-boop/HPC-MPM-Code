@@ -33,11 +33,12 @@ Never point `file.dat` at source-tree paths in the repository `data/` directory.
 
 ## 3. Code Architecture
 
-- **Global inline variables** in `dataset.h`, `mesh.h`, `mpi_data.h`. Functions operate on global state. Moving variables into classes risks ODR violations.
-- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm) / `ExplicitSolidMPM`; `MaterialPoint` → `StabilizedMPM`. Shared implicit pieces live in `module/implicit/` (see its README). Implicit time integration (generalized-α integrator, endpoint kinematics, inertia terms, kinematic commits) lives in the `ImplicitMPM` component (`module/implicit/implicit_mpm.h`), owned as `implicit_` by `ImplicitSolidMPM` and `StabilizedMPM`; `StabilizedFEM` owns its own `integrator_`. The implicit MPM Newton loop is `SolveNewton()` over the `NonlinearProblem` interface (`module/implicit/newton_solver.h`), implemented by `ImplicitSolidMPM`, `StabilizedMPM` and `MPMMPMMonolithicFSI`; failure aborts stay in their convergence checks.
+- **Grid and run state are passed explicitly.** `Grid` (`mesh.h`: `Mesh`, `ControlMesh`, `Partition`), `RunParams` and `TimeState` (`dataset.h`) are owned by the driver or data-tool `main`. Physics classes hold `const Grid &grid_` / `const RunParams &params_` set in their constructors; `TimeState` is passed per call (`SolveNS(ts)`, `Particle2Node(ts)`, …); only `ApplyDLB(Grid &)` and `DataInput(Grid &, RunParams &)` write the grid. Free functions take what they use (`MakeSF(grid, …)`, `NodeVarComm(part, …)`).
+- **No mutable globals** besides `myrank` / `nprocs` (process-wide, set once). `CrsMat` holds `const Grid &grid_` / `const RunParams &params_` from its owner and receives the time step through `SolveSystem(NR_it, istep)`. Mathematical constants (`kVoigtIndex`, `kIdentity3`) live in `cal_mat.h`.
+- **Class hierarchy:** `MaterialPoint` → `SolidMaterialPointBase` → `ImplicitSolidMPM` (implicitmpm) / `ExplicitSolidMPM`; `MaterialPoint` → `StabilizedMPM`. Shared implicit pieces live in `module/implicit/` (see its README). Implicit time integration (generalized-α integrator, endpoint kinematics, inertia terms, kinematic commits) lives in the `ImplicitMPM` component (`module/implicit/implicit_mpm.h`), owned as `implicit_` by `ImplicitSolidMPM` and `StabilizedMPM`; `StabilizedFEM` owns its own `integrator_`. The implicit MPM Newton loop is `SolveNewton()` over the `NonlinearProblem` interface (`module/implicit/newton_solver.h`), implemented by `ImplicitSolidMPM`, `StabilizedMPM`, `StabilizedFEM` and `MPMMPMMonolithicFSI`; failure aborts stay in their convergence checks.
 - **Interpolation:** FLIP / PIC / TPIC / APIC in `map_and_interpolate.h` / `map_and_interpolate.cpp`, selected by `solswitch` (`MapScheme` enum parsed from the input string).
 - **Linear algebra:** `CrsMat` in `module/solver/crsmat.h`. Wraps PETSc. Parallel ownership and inactive-row handling are now explicit; see `module/solver/README.md`.
-- **Dynamic load balancing:** `module/DLB/` repartitions background elements across ranks from particle samples (fluid MPM only, `do_dlb` flag in `input.txt`). Regions are broadcast state — read them via `mpm_dlb::CurrentRegions()`; see `module/DLB/README.md`.
+- **Dynamic load balancing:** `module/DLB/` repartitions background elements across ranks from particle samples (fluid MPM only, `do_dlb` flag in `input.txt`). Regions are broadcast state stored in `Partition::regions`; see `module/DLB/README.md`.
 
 ## 4. Code Style
 
@@ -80,7 +81,7 @@ Follow `.clang-tidy` (Google style). When editing legacy files, match surroundin
 
 ## 6. Common Pitfalls
 
-1. grep `inline` in `*.h` to find global variables before refactoring.
+1. Do not add `inline` globals; extend `Grid` / `RunParams` / `TimeState` (or the owning class) and pass them explicitly.
 2. Do not assume class encapsulation.
 3. When adding `.cpp` files, update the relevant `CMakeLists.txt`.
 

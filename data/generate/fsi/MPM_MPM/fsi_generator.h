@@ -8,6 +8,8 @@
 
 class MPMMPMFSIFluidGenerator : public FluidGenerator {
   public:
+    using FluidGenerator::FluidGenerator;
+
     /** Create MPM-fluid boundary conditions for the coupled domain. */
     void CreateBCs() override;
 
@@ -21,6 +23,8 @@ class MPMMPMFSIFluidGenerator : public FluidGenerator {
 
 class MPMMPMFSISolidGenerator : public SolidGenerator {
   public:
+    using SolidGenerator::SolidGenerator;
+
     /** Create MPM-solid boundary conditions for the coupled domain. */
     void CreateBCs() override;
 
@@ -37,6 +41,15 @@ class MPMMPMFSISolidGenerator : public SolidGenerator {
 };
 
 class MPMMPMFSIGenerator : public DataGenerator {
+  public:
+    /**
+     * @brief Build the coupled generator; fluid and solid share `grid` and `params`.
+     * @param grid   Grid being generated (global mesh of the case).
+     * @param params Run parameters read from input.txt.
+     */
+    MPMMPMFSIGenerator(Grid &grid, RunParams &params)
+        : DataGenerator(grid, params), fluid_(grid, params), solid_(grid, params) {}
+
   protected:
     /** Return the MPM-MPM FSI case label. */
     std::string CaseName() const override;

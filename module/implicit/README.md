@@ -18,9 +18,9 @@ physics-specific Newton steps stay in each solver; linear algebra stays in
 ```cpp
 problem.BeginNewtonStep();
 for NR_it = 0 .. max_it
-    problem.AssembleNewtonSystem();
+    problem.AssembleNewtonSystem(ts);
     if problem.CheckNewtonConvergence(NR_it, ksp_its) break;
-    ksp_its = problem.SolveNewtonCorrection(NR_it);
+    ksp_its = problem.SolveNewtonCorrection(NR_it, ts);
     problem.UpdateNRIncrement();
 problem.EndNewtonStep();
 ```

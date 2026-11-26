@@ -1,6 +1,5 @@
 #include "module/solid/constitutive_model.h"
 #include "module/cal_mat.h"
-#include "module/dataset.h"
 #include <cmath>
 #include <vector>
 
@@ -77,7 +76,7 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
     std::array<std::array<double, 3>, 3> sig{};
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            sig[i][j] = (mu * (be[i][j] - eye_mat[i][j]) + lmd * lnjac * eye_mat[i][j]) / jac;
+            sig[i][j] = (mu * (be[i][j] - kIdentity3[i][j]) + lmd * lnjac * kIdentity3[i][j]) / jac;
         }
     }
 
@@ -99,8 +98,8 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
             for (int k = 0; k < 3; k++) {
                 for (int j = 0; j < 3; j++) {
                     for (int i = 0; i < 3; i++) {
-                        ccc[i][j][k][l] = CC[0] * (eye_mat[i][j] * eye_mat[k][l]) +
-                                          CC[1] * (eye_mat[i][k] * eye_mat[j][l] + eye_mat[i][l] * eye_mat[j][k]);
+                        ccc[i][j][k][l] = CC[0] * (kIdentity3[i][j] * kIdentity3[k][l]) +
+                                          CC[1] * (kIdentity3[i][k] * kIdentity3[j][l] + kIdentity3[i][l] * kIdentity3[j][k]);
                     }
                 }
             }
@@ -110,7 +109,7 @@ void ConstitutiveModel::MatNeoHookean(std::array<double, 6> &stress, const std::
         for (int l = 0; l < 3; l++) {
             for (int k = 0; k < 3; k++) {
                 for (int j = 0; j < 3; j++) {
-                    for (int i = 0; i < 3; i++) { this->stif_mat[idm[i][j]][idm[k][l]] = ccc[i][j][k][l]; }
+                    for (int i = 0; i < 3; i++) { this->stif_mat[kVoigtIndex[i][j]][kVoigtIndex[k][l]] = ccc[i][j][k][l]; }
                 }
             }
         }
@@ -175,7 +174,7 @@ void ConstitutiveModel::MatStVk(std::array<double, 6> &stress, const std::array<
         for (int l = 0; l < 3; l++) {
             for (int k = 0; k < 3; k++) {
                 for (int j = 0; j < 3; j++) {
-                    for (int i = 0; i < 3; i++) { this->stif_mat[idm[i][j]][idm[k][l]] = ccc[i][j][k][l]; }
+                    for (int i = 0; i < 3; i++) { this->stif_mat[kVoigtIndex[i][j]][kVoigtIndex[k][l]] = ccc[i][j][k][l]; }
                 }
             }
         }
@@ -233,7 +232,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
 
         std::array<std::array<double, 3>, 3> dev_sig{};
         for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) { dev_sig[i][j] = sig[i][j] - TraceMat3(sig) / 3.0e0 * eye_mat[i][j]; }
+            for (int j = 0; j < 3; j++) { dev_sig[i][j] = sig[i][j] - TraceMat3(sig) / 3.0e0 * kIdentity3[i][j]; }
         }
 
         std::array<std::array<std::array<std::array<double, 3>, 3>, 3>, 3> ccc_hp{}, ccc_dev{}, ccc_w{}, ccc{};
@@ -242,26 +241,26 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
             for (int k = 0; k < 3; k++) {
                 for (int j = 0; j < 3; j++) {
                     for (int i = 0; i < 3; i++) {
-                        double I4_sym = 0.5e0 * (eye_mat[i][k] * eye_mat[j][l] + eye_mat[i][l] * eye_mat[j][k]);
+                        double I4_sym = 0.5e0 * (kIdentity3[i][k] * kIdentity3[j][l] + kIdentity3[i][l] * kIdentity3[j][k]);
 
                         double Aij = first_inv * be_iso[i][j] - be2_iso[i][j];
                         double Akl = first_inv * be_iso[k][l] - be2_iso[k][l];
 
-                        ccc_hp[i][j][k][l] = bulk / jac * (eye_mat[i][j] * eye_mat[k][l]) - 2.0e0 * hp * I4_sym;
+                        ccc_hp[i][j][k][l] = bulk / jac * (kIdentity3[i][j] * kIdentity3[k][l]) - 2.0e0 * hp * I4_sym;
 
                         ccc_dev[i][j][k][l] =
-                            -2.0e0 / 3.0e0 * (dev_sig[i][j] * eye_mat[k][l] + eye_mat[i][j] * dev_sig[k][l]);
+                            -2.0e0 / 3.0e0 * (dev_sig[i][j] * kIdentity3[k][l] + kIdentity3[i][j] * dev_sig[k][l]);
 
                         double term1 = 4.0e0 / (3.0e0 * jac) * (c1 * first_inv + 2.0e0 * c2 * second_inv) *
-                                       (I4_sym - (1.0e0 / 3.0e0) * eye_mat[i][j] * eye_mat[k][l]);
+                                       (I4_sym - (1.0e0 / 3.0e0) * kIdentity3[i][j] * kIdentity3[k][l]);
 
                         double term2 = 4.0e0 * c2 / jac *
                                        (be_iso[i][j] * be_iso[k][l] -
                                         0.5e0 * (be_iso[i][k] * be_iso[j][l] + be_iso[i][l] * be_iso[j][k]));
 
-                        double term3 = -4.0e0 * c2 / (3.0e0 * jac) * (Aij * eye_mat[k][l] + eye_mat[i][j] * Akl);
+                        double term3 = -4.0e0 * c2 / (3.0e0 * jac) * (Aij * kIdentity3[k][l] + kIdentity3[i][j] * Akl);
 
-                        double term4 = 8.0e0 * c2 * second_inv / (9.0e0 * jac) * eye_mat[i][j] * eye_mat[k][l];
+                        double term4 = 8.0e0 * c2 * second_inv / (9.0e0 * jac) * kIdentity3[i][j] * kIdentity3[k][l];
 
                         ccc_w[i][j][k][l] = term1 + term2 + term3 + term4;
 
@@ -275,7 +274,7 @@ void ConstitutiveModel::MatMooneyRivlin(std::array<double, 6> &stress, const std
         for (int l = 0; l < 3; l++) {
             for (int k = 0; k < 3; k++) {
                 for (int j = 0; j < 3; j++) {
-                    for (int i = 0; i < 3; i++) { this->stif_mat[idm[i][j]][idm[k][l]] = ccc[i][j][k][l]; }
+                    for (int i = 0; i < 3; i++) { this->stif_mat[kVoigtIndex[i][j]][kVoigtIndex[k][l]] = ccc[i][j][k][l]; }
                 }
             }
         }

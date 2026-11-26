@@ -15,7 +15,11 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
   public:
     MPMFEMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSIFluid(MPMFEMBlockFSI &fsi) : fsi_(fsi) {}
+    /**
+     * @brief Bind to the FSI coordinator and share its grid and run parameters.
+     * @param fsi Coordinator owning this sub-solver.
+     */
+    explicit FSIFluid(MPMFEMBlockFSI &fsi);
 
     // ---- Boundary Condition Overrides ----
     // --- For PETSc ---
@@ -24,18 +28,35 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
     // --- For self-defined ---
     void BCResidualSet(std::vector<double> &rr) override;
 
-    void BCSet() override;
+  protected:
+    /**
+     * @brief Apply fluid BCs and the solid interface velocity to the n+1 Newton iterate.
+     * @param ts Current time state; its load factor `facl` scales the prescribed values.
+     */
+    void BCNRSet(const TimeState &ts) override;
 };
 
 class FSISolid : public implicitmpm::ImplicitSolidMPM {
   public:
     MPMFEMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSISolid(MPMFEMBlockFSI &fsi) : fsi_(fsi) {}
+    /**
+     * @brief Bind to the FSI coordinator and share its grid and run parameters.
+     * @param fsi Coordinator owning this sub-solver.
+     */
+    explicit FSISolid(MPMFEMBlockFSI &fsi);
 
     double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
-    std::array<double, 3> ComputeExternalForce(int pid, double sfi) const noexcept override;
+    /**
+     * @brief Nodal external force from one solid particle: body force on the solid plus
+     *        added fluid mass, and the particle traction force.
+     * @param pid Solid particle index.
+     * @param sfi Shape-function value of the node at the particle.
+     * @param ts Current time state; its load factor `facl` scales the body force.
+     * @return Force contribution of this particle to the node.
+     */
+    std::array<double, 3> ComputeExternalForce(int pid, double sfi, const TimeState &ts) const noexcept override;
 
     /**
      * @brief Add solid inertia, added-mass inertia and FSI forces to the RHS.
@@ -48,6 +69,9 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
 
 class MPMFEMBlockFSI {
   public:
+    const Grid &grid_;        // rank grid shared by both sub-solvers
+    const RunParams &params_; // run parameters
+
     BoundaryCondition fsi_intf;
 
     // --- Sub-solvers (constructed with reference to this coordinator) ---
@@ -64,7 +88,13 @@ class MPMFEMBlockFSI {
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
     // -----------------------------------------------------------------
-    MPMFEMBlockFSI() : fluid_(*this), solid_(*this) {}
+    /**
+     * @brief Build the coupled solver; both sub-solvers share `grid` and `params`.
+     * @param grid   Grid of this rank, shared by fluid and solid.
+     * @param params Run parameters of this run.
+     */
+    MPMFEMBlockFSI(const Grid &grid, const RunParams &params)
+        : grid_(grid), params_(params), fluid_(*this), solid_(*this) {}
 
     std::vector<double> added_mass;
     std::vector<double> nfsi_force;
@@ -74,14 +104,20 @@ class MPMFEMBlockFSI {
      *
      * Loads shared global parameters, then dispatches fluid and solid
      * boundary-condition/particle input to the corresponding sub-solvers.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     void DetectFSIInterface();
 
     void UpdateFSIInterfaceBC();
 
-    void SolveFSISystem();
+    /**
+     * @brief Advance one time step with partitioned (block-iterative) fluid-solid coupling.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void SolveFSISystem(const TimeState &ts);
 
     void CalFSIResidual(double &rtr_ref, double &rtr_dof, const std::vector<double> &nvel_k);
 
@@ -91,6 +127,18 @@ class MPMFEMBlockFSI {
      * @brief Specifically for Turek CFD problem (Cylinder flow)
      */
     void CalDragLiftCoeffForTurekCFD();
+
+  private:
+    /**
+     * @brief Check fluid-solid interface velocity agreement for the current block iteration.
+     *
+     * Aborts the run when the iteration reaches `max_block_iter` without converging.
+     * @param block_it Current block iteration index; iteration 0 sets the reference residual.
+     * @param nvel_k Solid nodal velocity at n+1 from this block iteration.
+     * @param r0r_ref Interface velocity mismatch norm of the first iteration; written when `block_it == 0`.
+     * @return Whether the interface velocity mismatch is within the relative or absolute tolerance.
+     */
+    bool CheckBlockConvergence(int block_it, const std::vector<double> &nvel_k, double &r0r_ref);
 };
 
 } // namespace mpmfemblockfsi

@@ -3,12 +3,12 @@
 #include "module/dataset.h"
 #include "module/material_point.h"
 #include "module/mesh.h"
-#include <fstream>
-#include <iomanip>
 #include <mpi.h>
 #include <vector>
 
 void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &regions) {
+    const Mesh &mesh = this->grid_.mesh;
+    const Partition &part = this->grid_.part;
 
     if (int(regions.size()) != nprocs) {
         std::cerr << "particle migration error on rank " << myrank << ": invalid region count\n";
@@ -17,22 +17,22 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
 
     std::vector<int> checkmp(this->num, -1);
     this->par_comm_.ofp_id.assign(this->num, 0);
-    this->par_comm_.comm_ranks = naid;
-    this->par_comm_.nsp.assign(isb, 0);
-    this->par_comm_.nrp.assign(isb, 0);
+    this->par_comm_.comm_ranks = part.naid;
+    this->par_comm_.nsp.assign(part.isb, 0);
+    this->par_comm_.nrp.assign(part.isb, 0);
     this->par_comm_.nnmp = 0;
     this->par_comm_.nrmp = 0;
 
     for (int ip = 0; ip < this->num; ++ip) {
         std::array<int, 3> element{};
-        if (!LocateGlobalElement(this->coord[ip], element)) {
+        if (!LocateGlobalElement(mesh, this->coord[ip], element)) {
             this->par_comm_.ofp_id[this->par_comm_.nrmp++] = ip;
             continue;
         }
 
         bool stay = true;
         for (int dir = 0; dir < 3; ++dir) {
-            if (element[dir] < aelemmin[dir] || element[dir] > aelemmax[dir]) {
+            if (element[dir] < mesh.aelemmin[dir] || element[dir] > mesh.aelemmax[dir]) {
                 stay = false;
                 break;
             }
@@ -44,8 +44,8 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
         }
 
         int peer = -1;
-        for (int i = 0; i < isb; ++i) {
-            const int rank = naid[i];
+        for (int i = 0; i < part.isb; ++i) {
+            const int rank = part.naid[i];
             bool inside = true;
             for (int dir = 0; dir < 3; ++dir) {
                 if (element[dir] < regions[rank].elem_min[dir] || element[dir] > regions[rank].elem_max[dir]) {
@@ -71,9 +71,9 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
         checkmp[ip] = peer;
     }
 
-    std::vector<int> idmploc(isb);
+    std::vector<int> idmploc(part.isb);
     this->par_comm_.nmps = 0;
-    for (int i = 0; i < isb; i++) {
+    for (int i = 0; i < part.isb; i++) {
         idmploc[i] = this->par_comm_.nmps;
         this->par_comm_.nmps += this->par_comm_.nsp[i];
     }
@@ -93,16 +93,17 @@ void MaterialPoint::DetermineParticleRank(const std::vector<mpm_dlb::Region> &re
         }
     }
 
-    const std::vector<int> one_each(isb, 1); // one count per neighbor
-    internal::PeerSendrecv(naid, one_each, one_each, 1, this->par_comm_.nsp, this->par_comm_.nrp);
+    const std::vector<int> one_each(part.isb, 1); // one count per neighbor
+    internal::PeerSendrecv(part.naid, one_each, one_each, 1, this->par_comm_.nsp, this->par_comm_.nrp);
 
     this->par_comm_.nrps = 0;
-    for (int i = 0; i < isb; i++) { this->par_comm_.nrps += this->par_comm_.nrp[i]; }
+    for (int i = 0; i < part.isb; i++) { this->par_comm_.nrps += this->par_comm_.nrp[i]; }
 
     return;
 }
 
 void MaterialPoint::DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> &regions) {
+    const Mesh &mesh = this->grid_.mesh;
 
     if (int(regions.size()) != nprocs) {
         if (myrank == 0) { std::cerr << "DLB error: region count does not match the MPI rank count\n"; }
@@ -117,7 +118,7 @@ void MaterialPoint::DetermineDLBParticleRank(const std::vector<mpm_dlb::Region> 
 
     for (int ip = 0; ip < this->num; ++ip) {
         std::array<int, 3> element{};
-        if (!LocateGlobalElement(this->coord[ip], element)) {
+        if (!LocateGlobalElement(mesh, this->coord[ip], element)) {
             this->par_comm_.ofp_id[this->par_comm_.nrmp++] = ip;
             continue;
         }
@@ -216,7 +217,12 @@ void MaterialPoint::RebalanceDLBParticles(const std::vector<mpm_dlb::Region> &re
     return;
 }
 
-void MaterialPoint::ApplyDLB() {
+void MaterialPoint::ApplyDLB(Grid &grid) {
+
+    if (&grid != &this->grid_) {
+        std::cerr << "ApplyDLB error on rank " << myrank << ": grid is not the one this object observes\n";
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
 
     mpm_dlb::OuputDLBParticleRatio(this->num);
 
@@ -224,17 +230,17 @@ void MaterialPoint::ApplyDLB() {
 
     const auto local_samples = mpm_dlb::SelectSamples(this->coord);
 
-    const auto regions = mpm_dlb::ComputeDLBRegions(local_samples);
+    const auto regions = mpm_dlb::ComputeDLBRegions(grid, local_samples);
 
     this->RebalanceDLBParticles(regions);
 
-    mpm_dlb::UpdateDLBRegions(regions);
+    mpm_dlb::UpdateDLBRegions(regions, grid);
 
-    BuildMesh();
+    BuildMesh(grid.mesh);
 
-    BuildControlPoint();
+    BuildControlPoint(grid.mesh, grid.cmesh);
 
-    ComputeNodalVol();
+    ComputeNodalVol(this->params_, grid);
 
     this->RebuildBC();
 

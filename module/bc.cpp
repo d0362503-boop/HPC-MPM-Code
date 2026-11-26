@@ -1,9 +1,7 @@
 #include "module/bc.h"
-#include "module/dataset.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 
-#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -49,12 +47,12 @@ void BoundaryCondition::BCOutput(std::ofstream &outfile, std::string bc_name, bo
     return;
 }
 
-void BoundaryCondition::BCSetVal(int nn, std::vector<double> &variable) {
+void BoundaryCondition::BCSetVal(int nn, std::vector<double> &variable, double scale) {
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = this->fbc[i] * facl;
+            variable[n] = this->fbc[i] * scale;
         }
     }
 
@@ -73,31 +71,31 @@ void BoundaryCondition::BCSetZero(int nn, std::vector<double> &variable) {
     return;
 }
 
-void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable) {
+void BoundaryCondition::BCSetDispl(int nn, std::vector<double> &variable, double scale) {
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
             int n = this->nbc[i] + nn;
-            variable[n] = facl * dt * this->fbc[i];
+            variable[n] = scale * this->fbc[i];
         }
     }
 
     return;
 }
 
-void BoundaryCondition::BCSetFreeSlip(std::vector<double> &variable, //
-                                      const std::vector<double> &normal) {
+void BoundaryCondition::BCSetFreeSlip(std::vector<double> &variable, const std::vector<double> &normal,
+                                      const ControlMesh &cmesh, double tol) {
 
     if (this->ibc != 0) {
         for (int i = 0; i < this->ibc; i++) {
-            const int n1 = this->nbc[i] + nuc;
-            const int n2 = this->nbc[i] + nvc;
-            const int n3 = this->nbc[i] + nwc;
+            const int n1 = this->nbc[i] + cmesh.nuc;
+            const int n2 = this->nbc[i] + cmesh.nvc;
+            const int n3 = this->nbc[i] + cmesh.nwc;
             const double nx = normal[n1];
             const double ny = normal[n2];
             const double nz = normal[n3];
             const double norm = std::sqrt(nx * nx + ny * ny + nz * nz);
-            if (norm > mtol) {
+            if (norm > tol) {
                 const double qn = variable[n1] * nx + variable[n2] * ny + variable[n3] * nz;
                 variable[n1] -= qn * nx;
                 variable[n2] -= qn * ny;
@@ -113,19 +111,21 @@ void BoundaryCondition::BCSetFreeSlip(std::vector<double> &variable, //
     return;
 }
 
-void BoundaryCondition::CaptureGlobalControlPointBC() {
+void BoundaryCondition::CaptureGlobalControlPointBC(const Grid &grid) {
+    const Mesh &mesh = grid.mesh;
+    const ControlMesh &cmesh = grid.cmesh;
 
     std::vector<int> local_global_ids(this->ibc);
     for (int m = 0; m < this->ibc; ++m) {
         const int nid = this->nbc[m];
-        const int iz = nid / (xynodec[0] * xynodec[1]);
-        const int iy = (nid - iz * xynodec[0] * xynodec[1]) / xynodec[0];
-        const int ix = nid - iz * xynodec[0] * xynodec[1] - iy * xynodec[0];
+        const int iz = nid / (cmesh.xynodec[0] * cmesh.xynodec[1]);
+        const int iy = (nid - iz * cmesh.xynodec[0] * cmesh.xynodec[1]) / cmesh.xynodec[0];
+        const int ix = nid - iz * cmesh.xynodec[0] * cmesh.xynodec[1] - iy * cmesh.xynodec[0];
 
-        const int gx = ix + aelemmin[0];
-        const int gy = iy + aelemmin[1];
-        const int gz = iz + aelemmin[2];
-        local_global_ids[m] = gx + xynodecw[0] * gy + xynodecw[0] * xynodecw[1] * gz;
+        const int gx = ix + mesh.aelemmin[0];
+        const int gy = iy + mesh.aelemmin[1];
+        const int gz = iz + mesh.aelemmin[2];
+        local_global_ids[m] = gx + cmesh.xynodecw[0] * gy + cmesh.xynodecw[0] * cmesh.xynodecw[1] * gz;
     }
 
     this->CacheGlobalEntries(local_global_ids, true);
@@ -133,7 +133,9 @@ void BoundaryCondition::CaptureGlobalControlPointBC() {
     return;
 }
 
-void BoundaryCondition::RebuildLocalControlPointBC() {
+void BoundaryCondition::RebuildLocalControlPointBC(const Grid &grid) {
+    const Mesh &mesh = grid.mesh;
+    const ControlMesh &cmesh = grid.cmesh;
 
     this->nbc.clear();
     this->fbc.clear();
@@ -142,20 +144,20 @@ void BoundaryCondition::RebuildLocalControlPointBC() {
 
     for (int m = 0; m < int(this->global_nbc.size()); ++m) {
         const int gid = this->global_nbc[m];
-        const int gz = gid / (xynodecw[0] * xynodecw[1]);
-        const int gy = (gid - gz * xynodecw[0] * xynodecw[1]) / xynodecw[0];
-        const int gx = gid - gz * xynodecw[0] * xynodecw[1] - gy * xynodecw[0];
+        const int gz = gid / (cmesh.xynodecw[0] * cmesh.xynodecw[1]);
+        const int gy = (gid - gz * cmesh.xynodecw[0] * cmesh.xynodecw[1]) / cmesh.xynodecw[0];
+        const int gx = gid - gz * cmesh.xynodecw[0] * cmesh.xynodecw[1] - gy * cmesh.xynodecw[0];
 
-        if (gx < aelemmin[0] || gx > aelemmax[0] + idimc[0] || //
-            gy < aelemmin[1] || gy > aelemmax[1] + idimc[1] || //
-            gz < aelemmin[2] || gz > aelemmax[2] + idimc[2]) {
+        if (gx < mesh.aelemmin[0] || gx > mesh.aelemmax[0] + cmesh.idimc[0] || //
+            gy < mesh.aelemmin[1] || gy > mesh.aelemmax[1] + cmesh.idimc[1] || //
+            gz < mesh.aelemmin[2] || gz > mesh.aelemmax[2] + cmesh.idimc[2]) {
             continue;
         }
 
-        const int ix = gx - aelemmin[0];
-        const int iy = gy - aelemmin[1];
-        const int iz = gz - aelemmin[2];
-        this->nbc.push_back(ix + xynodec[0] * iy + xynodec[0] * xynodec[1] * iz);
+        const int ix = gx - mesh.aelemmin[0];
+        const int iy = gy - mesh.aelemmin[1];
+        const int iz = gz - mesh.aelemmin[2];
+        this->nbc.push_back(ix + cmesh.xynodec[0] * iy + cmesh.xynodec[0] * cmesh.xynodec[1] * iz);
         this->fbc.push_back(this->global_fbc[m]);
     }
     this->ibc = int(this->nbc.size());
@@ -163,19 +165,19 @@ void BoundaryCondition::RebuildLocalControlPointBC() {
     return;
 }
 
-void BoundaryCondition::CaptureGlobalElementBC() {
+void BoundaryCondition::CaptureGlobalElementBC(const Mesh &mesh) {
 
     std::vector<int> local_global_ids(this->ibc);
     for (int m = 0; m < this->ibc; ++m) {
         const int eid = this->nbc[m];
-        const int iz = eid / (xyelem[0] * xyelem[1]);
-        const int iy = (eid - iz * xyelem[0] * xyelem[1]) / xyelem[0];
-        const int ix = eid - iz * xyelem[0] * xyelem[1] - iy * xyelem[0];
+        const int iz = eid / (mesh.xyelem[0] * mesh.xyelem[1]);
+        const int iy = (eid - iz * mesh.xyelem[0] * mesh.xyelem[1]) / mesh.xyelem[0];
+        const int ix = eid - iz * mesh.xyelem[0] * mesh.xyelem[1] - iy * mesh.xyelem[0];
 
-        const int gx = ix + aelemmin[0];
-        const int gy = iy + aelemmin[1];
-        const int gz = iz + aelemmin[2];
-        local_global_ids[m] = gx + xyelemw[0] * gy + xyelemw[0] * xyelemw[1] * gz;
+        const int gx = ix + mesh.aelemmin[0];
+        const int gy = iy + mesh.aelemmin[1];
+        const int gz = iz + mesh.aelemmin[2];
+        local_global_ids[m] = gx + mesh.xyelemw[0] * gy + mesh.xyelemw[0] * mesh.xyelemw[1] * gz;
     }
 
     this->CacheGlobalEntries(local_global_ids, false);
@@ -183,25 +185,25 @@ void BoundaryCondition::CaptureGlobalElementBC() {
     return;
 }
 
-void BoundaryCondition::RebuildLocalElementBC() {
+void BoundaryCondition::RebuildLocalElementBC(const Mesh &mesh) {
 
     this->nbc.clear();
     this->nbc.reserve(this->global_nbc.size());
     for (int gid : this->global_nbc) {
-        const int gz = gid / (xyelemw[0] * xyelemw[1]);
-        const int gy = (gid - gz * xyelemw[0] * xyelemw[1]) / xyelemw[0];
-        const int gx = gid - gz * xyelemw[0] * xyelemw[1] - gy * xyelemw[0];
+        const int gz = gid / (mesh.xyelemw[0] * mesh.xyelemw[1]);
+        const int gy = (gid - gz * mesh.xyelemw[0] * mesh.xyelemw[1]) / mesh.xyelemw[0];
+        const int gx = gid - gz * mesh.xyelemw[0] * mesh.xyelemw[1] - gy * mesh.xyelemw[0];
 
-        if (gx < aelemmin[0] || gx > aelemmax[0] || //
-            gy < aelemmin[1] || gy > aelemmax[1] || //
-            gz < aelemmin[2] || gz > aelemmax[2]) {
+        if (gx < mesh.aelemmin[0] || gx > mesh.aelemmax[0] || //
+            gy < mesh.aelemmin[1] || gy > mesh.aelemmax[1] || //
+            gz < mesh.aelemmin[2] || gz > mesh.aelemmax[2]) {
             continue;
         }
 
-        const int ix = gx - aelemmin[0];
-        const int iy = gy - aelemmin[1];
-        const int iz = gz - aelemmin[2];
-        this->nbc.push_back(ix + xyelem[0] * iy + xyelem[0] * xyelem[1] * iz);
+        const int ix = gx - mesh.aelemmin[0];
+        const int iy = gy - mesh.aelemmin[1];
+        const int iz = gz - mesh.aelemmin[2];
+        this->nbc.push_back(ix + mesh.xyelem[0] * iy + mesh.xyelem[0] * mesh.xyelem[1] * iz);
     }
     this->ibc = int(this->nbc.size());
 

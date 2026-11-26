@@ -1,8 +1,5 @@
 #pragma once
 
-#include <cmath>
-#include <optional>
-#include <string>
 #include <vector>
 
 #include "module/bc.h"
@@ -18,6 +15,18 @@ struct Region;
 
 class MaterialPoint {
   public:
+    const Grid &grid_;        // rank grid (read-only)
+    const RunParams &params_; // run parameters
+
+    /**
+     * @brief Bind the material-point set to this rank's grid and the run parameters.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run (time step, tolerances, body force).
+     */
+    MaterialPoint(const Grid &grid, const RunParams &params)
+        : grid_(grid), params_(params), flip(grid.cmesh, params), pic(grid.cmesh), apic(grid.cmesh),
+          tpic(grid.cmesh) {}
+
     // --- MPI part ---
     ParticleCommunication par_comm_;
     bool do_dlb = false; // enable dynamic load balance
@@ -53,8 +62,10 @@ class MaterialPoint {
      * Samples particles, repartitions MPI regions, redistributes particle data,
      * and rebuilds mesh, control-point, nodal-volume, and BC data.  Time-step
      * scheduling and solver-system rebuilds remain the responsibility of the caller.
+     * @param grid Writable view of the same grid this object observes through `grid_`;
+     *             it is repartitioned in place (aborts if it is a different object).
      */
-    virtual void ApplyDLB();
+    virtual void ApplyDLB(Grid &grid);
 
     /**
      * @brief Migrate all physics-specific particle state using the current particle communication plan.
@@ -79,11 +90,12 @@ class MaterialPoint {
     /**
      * @brief Apply prescribed Dirichlet boundary values to a velocity/displacement vector.
      * @param nvel Vector to be modified in-place at constrained DOFs.
+     * @param ts   Current time state; its load factor `facl` scales the prescribed values.
      */
-    virtual void ApplyVelocityBC(std::vector<double> &nvel) {
-        this->ubc.BCSetVal(nuc, nvel);
-        this->vbc.BCSetVal(nvc, nvel);
-        this->wbc.BCSetVal(nwc, nvel);
+    virtual void ApplyVelocityBC(std::vector<double> &nvel, const TimeState &ts) {
+        this->ubc.BCSetVal(this->grid_.cmesh.nuc, nvel, ts.facl);
+        this->vbc.BCSetVal(this->grid_.cmesh.nvc, nvel, ts.facl);
+        this->wbc.BCSetVal(this->grid_.cmesh.nwc, nvel, ts.facl);
 
         return;
     }
@@ -93,9 +105,9 @@ class MaterialPoint {
      * @param naccel Vector to be zeroed in-place at constrained DOFs.
      */
     virtual void ApplyAccelerationBC(std::vector<double> &naccel) {
-        this->ubc.BCSetZero(nuc, naccel);
-        this->vbc.BCSetZero(nvc, naccel);
-        this->wbc.BCSetZero(nwc, naccel);
+        this->ubc.BCSetZero(this->grid_.cmesh.nuc, naccel);
+        this->vbc.BCSetZero(this->grid_.cmesh.nvc, naccel);
+        this->wbc.BCSetZero(this->grid_.cmesh.nwc, naccel);
 
         return;
     }
@@ -103,11 +115,13 @@ class MaterialPoint {
     /**
      * @brief Apply prescribed Dirichlet values to a nodal displacement increment.
      * @param ndispl Displacement increment modified in-place at constrained DOFs.
+     * @param ts     Current time state; the increment is `facl * dt` times the prescribed velocity.
      */
-    virtual void ApplyDisplacementBC(std::vector<double> &ndispl) {
-        this->ubc.BCSetDispl(nuc, ndispl);
-        this->vbc.BCSetDispl(nvc, ndispl);
-        this->wbc.BCSetDispl(nwc, ndispl);
+    virtual void ApplyDisplacementBC(std::vector<double> &ndispl, const TimeState &ts) {
+        const double scale = ts.facl * this->params_.dt;
+        this->ubc.BCSetDispl(this->grid_.cmesh.nuc, ndispl, scale);
+        this->vbc.BCSetDispl(this->grid_.cmesh.nvc, ndispl, scale);
+        this->wbc.BCSetDispl(this->grid_.cmesh.nwc, ndispl, scale);
 
         return;
     }
@@ -123,8 +137,8 @@ class MaterialPoint {
                              const std::vector<int> &offsets) {
 
         VectorAssign(numerator.size(), result);
-        for (int n = 0; n < nodec; n++) {
-            if (weight[n] > mtol) {
+        for (int n = 0; n < this->grid_.cmesh.nodec; n++) {
+            if (weight[n] > this->params_.mtol) {
                 for (int offset : offsets) { result[n + offset] = numerator[n + offset] / weight[n]; }
             }
         }
@@ -140,8 +154,8 @@ class MaterialPoint {
      */
     void CutOffSmallNodalVar(std::vector<double> &var, const std::vector<double> &weight, const std::vector<int> &offsets) {
 
-        for (int n = 0; n < nodec; n++) {
-            if (weight[n] > mtol) {
+        for (int n = 0; n < this->grid_.cmesh.nodec; n++) {
+            if (weight[n] > this->params_.mtol) {
                 for (int offset : offsets) { var[n + offset] /= weight[n]; }
             }
         }
@@ -208,7 +222,12 @@ class MaterialPoint {
 
     virtual void RestartInput() {};
 
-    virtual void OutputPointDataVTKHDF(int iview) {};
+    /**
+     * @brief Write this material-point set to a VTK HDF5 file for view `iview`.
+     * @param iview Output view index.
+     * @param ts Current time state; its physical time is written with the data.
+     */
+    virtual void OutputPointDataVTKHDF(int iview, const TimeState &ts) {};
 
     virtual void RestartOutput() {};
 
@@ -246,10 +265,10 @@ class MaterialPoint {
     int GetInflowSign(int dir, int mesh_id) {
 
         int sign = 0;
-        int mid = mesh_id + aelemmin[dir];
+        int mid = mesh_id + this->grid_.mesh.aelemmin[dir];
         if (mid == 0) {
             sign = 1;
-        } else if (mid == xyelemw[dir] - 1) {
+        } else if (mid == this->grid_.mesh.xyelemw[dir] - 1) {
             sign = -1;
         }
 
@@ -350,8 +369,8 @@ class MaterialPoint {
     // ----------------------------------
 
     // ----- Control point variable -----
-    std::vector<double> nmass, nvel_old, nvel_older, nvof, nmome, nvel, //
-        ndispl, npres, npres_old, nphi, nnormal, nrigid_normal,         //
+    std::vector<double> nmass, nvof, nmome, nvel,   //
+        ndispl, npres, nphi, nnormal, nrigid_normal, //
         naccel, nforce, nvel_vtk, npres_vtk, nphi_vtk;
 
     // --- Mapping & Interpolation scheme ---
@@ -360,7 +379,11 @@ class MaterialPoint {
     APIC apic;
     TPIC tpic;
 
-    virtual void Particle2Node() {};
+    /**
+     * @brief Map particle quantities to the control points (P2G) and apply nodal BCs.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    virtual void Particle2Node(const TimeState &ts) {};
 
     void PICFamilyVelReset() {
         if (this->solswitch != MapScheme::FLIP) { VectorAssign(this->num, this->vel); }
@@ -422,7 +445,11 @@ class MaterialPoint {
     void PICFamilyAccelG2P(int pid, int ni, int nid, double sfi, //
                            const std::vector<std::array<double, 3>> &dsf);
 
-    virtual void Node2Particle() {};
+    /**
+     * @brief Map the nodal solution back to the particles (G2P) and update particle state.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    virtual void Node2Particle(const TimeState &ts) {};
 
     /**
      * @brief Map a per-particle scalar variable to control points without mass weighting.
@@ -483,9 +510,9 @@ void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vect
 template <typename T>
 void MaterialPoint::StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
                                    const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) const noexcept {
-    node_var[nid + nuc] += sfi * point_mass[pid] * point_var[pid][0];
-    node_var[nid + nvc] += sfi * point_mass[pid] * point_var[pid][1];
-    node_var[nid + nwc] += sfi * point_mass[pid] * point_var[pid][2];
+    node_var[nid + this->grid_.cmesh.nuc] += sfi * point_mass[pid] * point_var[pid][0];
+    node_var[nid + this->grid_.cmesh.nvc] += sfi * point_mass[pid] * point_var[pid][1];
+    node_var[nid + this->grid_.cmesh.nwc] += sfi * point_mass[pid] * point_var[pid][2];
 
     return;
 }

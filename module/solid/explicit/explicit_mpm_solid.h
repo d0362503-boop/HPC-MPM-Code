@@ -1,41 +1,48 @@
 #pragma once
 
-#include <cmath>
-#include <string>
 #include <vector>
 
 #include "module/dataset.h"
-#include "module/map_and_interpolate.h"
 #include "module/mesh.h"
-#include "module/mpi_data.h"
-#include "module/solver/crsmat.h"
 #include "module/solid/solid_material_point.h"
 
 namespace explicitmpm {
 
 class ExplicitSolidMPM : public SolidMaterialPointBase {
   public:
-    ExplicitSolidMPM() { this->do_dlb = false; }
+    /**
+     * @brief Bind the explicit solid solver to this rank's grid (DLB disabled).
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    ExplicitSolidMPM(const Grid &grid, const RunParams &params) : SolidMaterialPointBase(grid, params) {
+        this->do_dlb = false;
+    }
 
     /**
      * @brief Read and initialize standalone explicit-solid input data.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Map solid particle mass/volume/momentum/force to control points (P2G).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Particle2Node() override;
+    void Particle2Node(const TimeState &ts) override;
 
     /**
      * @brief Map updated nodal kinematics back to solid particles (G2P).
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void Node2Particle() override;
+    void Node2Particle(const TimeState &ts) override;
 
     /**
      * @brief Compute nodal acceleration from force/mass and apply BCs.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void SolveSolid() override;
+    void SolveSolid(const TimeState &ts) override;
 
   private:
     // Incremental deformation gradient for the current step.
@@ -48,8 +55,9 @@ class ExplicitSolidMPM : public SolidMaterialPointBase {
 
     /**
      * @brief MUSL velocity projection.
+     * @param ts Current time state of this step (load factor and physical time).
      */
-    void DoMUSL();
+    void DoMUSL(const TimeState &ts);
 
     /**
      * @brief Update particle deformation gradient.

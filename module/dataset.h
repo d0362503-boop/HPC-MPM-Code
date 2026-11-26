@@ -5,16 +5,31 @@
 #include <string>
 #include <vector>
 
-inline int ista, iend, iout, istep, nlstep, rstflag, nmat, npropmax;
-inline double dt, dti, real_time, dlstep, facl = 1.0e0;
-inline double mtol, dtol;
-inline std::string parafile, gridfile, outfile, pointfile;
-inline std::vector<int> npxye(3);
-inline std::vector<double> bb(3), matflag, iprop, nprop;
-inline std::vector<std::vector<double>> mat_prop;
-inline std::array<std::array<int, 3>, 3> idm = {{{{0, 5, 4}}, {{5, 1, 3}}, {{4, 3, 2}}}};
-inline std::array<std::array<double, 3>, 3> eye_mat = {
-    {{{1.0e0, 0.0e0, 0.0e0}}, {{0.0e0, 1.0e0, 0.0e0}}, {{0.0e0, 0.0e0, 1.0e0}}}};
+/// Run parameters read from file.dat and the parameter file; fixed during a run.
+struct RunParams {
+    int ista = 0, iend = 0, iout = 0;                    // step range and output interval
+    int nlstep = 0, rstflag = 0;                         // load-ramp steps, restart mode
+    double dt = 0.0, dti = 0.0, dlstep = 0.0;            // time step, 1/dt, 1/nlstep
+    double mtol = 0.0;                                   // small-mass tolerance
+    std::string parafile, gridfile, outfile, pointfile; // input / output prefixes
+    std::array<int, 3> npxye{};                         // points per element direction
+    std::array<double, 3> bb{};                         // body force
+};
+
+/// Time-step state advanced by the driver loop.
+struct TimeState {
+    int istep = 0;          // current time step
+    double real_time = 0.0; // current physical time
+    double facl = 1.0e0;    // load ramp factor
+};
+
+/// Solid material table read from the parameter file.
+struct MaterialTable {
+    int nmat = 0, npropmax = 0;                  // material count, max properties
+    std::vector<double> matflag, iprop, nprop;   // per-material model ids / counts
+    std::vector<std::vector<double>> mat_prop;   // per-material properties
+};
+
 
 enum class MapScheme { PIC, FLIP, TPIC, APIC };
 

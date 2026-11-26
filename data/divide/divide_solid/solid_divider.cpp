@@ -59,11 +59,12 @@ void SolidDivider::PartitionPoints(int rank_id) {
     return;
 }
 
-void SolidDivider::PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max) {
+void SolidDivider::PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max) {
+    ControlMesh &cmesh = this->grid_.cmesh;
 
-    this->BCRenumber(this->partition_points_.ubc, this->points_.ubc, xynodec, xynodecw, cp_min, cp_max);
-    this->BCRenumber(this->partition_points_.vbc, this->points_.vbc, xynodec, xynodecw, cp_min, cp_max);
-    this->BCRenumber(this->partition_points_.wbc, this->points_.wbc, xynodec, xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.ubc, this->points_.ubc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.vbc, this->points_.vbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.wbc, this->points_.wbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
 
     return;
 }

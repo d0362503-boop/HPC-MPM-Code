@@ -3,8 +3,6 @@
 #include <vector>
 
 #include "module/cal_mat.h"
-#include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
@@ -14,21 +12,24 @@ using namespace explicitmpm;
 
 void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array<double, 3>, 3>> &delta_def_grad,
                                          const std::vector<double> &det_delta_def_grad) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
     // --- Step 1: project uncorrected new Jacobian (weighted by particle volume) to control points ---
-    std::vector<double> nJbar(nodec, 0.0e0);
-    for (int m = 0; m < nelem; m++) {
+    std::vector<double> nJbar(cmesh.nodec, 0.0e0);
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             const double J_new = this->det_def_grad_bar[pid] * det_delta_def_grad[pid];
             const double J_new_vol = J_new * this->mass[pid];
 
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 const int nid = ncm[ni];
                 const double sfi = sf[ni];
@@ -38,16 +39,16 @@ void ExplicitSolidMPM::ComputeDefGradBar(const std::vector<std::array<std::array
         }
     }
 
-    NodeVarComm(nJbar, 0);
+    NodeVarComm(this->grid_.part, nJbar, 0);
 
     this->CutOffSmallNodalVar(nJbar, this->nmass, {0});
 
     // --- Step 2: interpolate corrected Jacobian and update F-bar deformation gradient ---
-    for (int m = 0; m < nelem; m++) {
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             double Jbar = 0.0e0;
             for (int ni = 0; ni < nenode; ni++) {

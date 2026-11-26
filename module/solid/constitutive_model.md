@@ -41,7 +41,7 @@ public:
 | Variable | Type | Description |
 |----------|------|-------------|
 | `implicit_flag` | `bool` | Implicit solver flag. When `true`, each constitutive model assembles `stif_mat` after updating stress; when `false`, stiffness computation is skipped for efficiency. |
-| `stif_mat` | `std::array<std::array<double,6>,6>` | 6x6 material tangent stiffness matrix $\mathbf{C}$ in Voigt notation, used for tangent modulus assembly in implicit Newton-Raphson iterations. The index mapping follows the global array `idm[3][3]`. |
+| `stif_mat` | `std::array<std::array<double,6>,6>` | 6x6 material tangent stiffness matrix $\mathbf{C}$ in Voigt notation, used for tangent modulus assembly in implicit Newton-Raphson iterations. The index mapping follows `kVoigtIndex[3][3]` (`module/cal_mat.h`). |
 
 ### 2.2 Public Interface
 
@@ -301,9 +301,9 @@ $$
 
 ### 4.2 Stiffness Matrix Index Mapping
 
-The fourth-order tensor $C_{ijkl}$ is mapped to a $6\times6$ Voigt matrix via the global array `idm[3][3]`:
+The fourth-order tensor $C_{ijkl}$ is mapped to a $6\times6$ Voigt matrix via `kVoigtIndex[3][3]` (`module/cal_mat.h`):
 
-| $(i,j)$ | `idm[i][j]` |
+| $(i,j)$ | `kVoigtIndex[i][j]` |
 |:-----:|:---------:|
 | $(0,0)$ | 0 |
 | $(1,1)$ | 1 |
@@ -314,7 +314,7 @@ The fourth-order tensor $C_{ijkl}$ is mapped to a $6\times6$ Voigt matrix via th
 
 That is:
 $$
-\mathbf{C}_\mathrm{Voigt}\big[\,\mathrm{idm}[i][j]\,\big]\big[\,\mathrm{idm}[k][l]\,\big] = C_{ijkl}
+\mathbf{C}_\mathrm{Voigt}\big[\,\mathrm{kVoigtIndex}[i][j]\,\big]\big[\,\mathrm{kVoigtIndex}[k][l]\,\big] = C_{ijkl}
 $$
 
 ---

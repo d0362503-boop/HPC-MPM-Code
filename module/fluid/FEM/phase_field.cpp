@@ -4,26 +4,24 @@
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
 #include <array>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <mpi.h>
-#include <optional>
-#include <string>
 #include <vector>
 
 using namespace stabilizedfem;
 
 void StabilizedFEM::Particle2NodePhi() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
     VectorAssign(this->num, this->phi);
     for (int ip = 0; ip < this->num; ip++) { this->phi[ip] = (this->coord[ip][2] < fs_height) ? 1.0e0 : 0.0e0; }
 
-    double volp = (dxy[0] * dxy[1] * dxy[2]) / (npxye[0] * npxye[1] * npxye[2]);
+    double volp = (mesh.dxy[0] * mesh.dxy[1] * mesh.dxy[2]) / (params.npxye[0] * params.npxye[1] * params.npxye[2]);
 
-    VectorAssign(nodec, this->nvof);
-    VectorAssign(nodec, this->nphi);
-    for (int m = 0; m < nelem; m++) {
+    VectorAssign(cmesh.nodec, this->nvof);
+    VectorAssign(cmesh.nodec, this->nphi);
+    for (int m = 0; m < mesh.nelem; m++) {
 
         int nenode;
         std::vector<int> ncm;
@@ -33,7 +31,7 @@ void StabilizedFEM::Particle2NodePhi() {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
@@ -44,10 +42,10 @@ void StabilizedFEM::Particle2NodePhi() {
         }
     }
 
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->nphi, 0);
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->nphi, 0);
 
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         this->nphi[n] /= this->nvof[n];
         if (this->nphi[n] < 0.0e0) {
             this->nphi[n] = 0.0e0;
@@ -60,16 +58,18 @@ void StabilizedFEM::Particle2NodePhi() {
 }
 
 double StabilizedFEM::CalLiquidVol() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    int nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);
+    int nenode = (cmesh.idimc[0] + 1) * (cmesh.idimc[1] + 1) * (cmesh.idimc[2] + 1);
 
     double vol_liquid = 0.0e0;
-    for (int m = 0; m < nelem; m++) {
-        double mesh_vol = dxy[0] * dxy[1] * dxy[2];
+    for (int m = 0; m < mesh.nelem; m++) {
+        double mesh_vol = mesh.dxy[0] * mesh.dxy[1] * mesh.dxy[2];
 
         double mesh_phi = 0.0e0;
         for (int n = 0; n < nenode; n++) {
-            int nid = ncc[m][n];
+            int nid = cmesh.ncc[m][n];
             mesh_phi += this->nphi[nid] / double(nenode);
         }
         vol_liquid += mesh_phi * mesh_vol;
@@ -81,8 +81,10 @@ double StabilizedFEM::CalLiquidVol() {
 }
 
 void StabilizedFEM::SetPFDomain() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec; n++) {
+    for (int n = 0; n < cmesh.nodec; n++) {
         if (this->nphi[n] < 0.0e0) {
             this->nphi[n] = 0.0e0;
         } else if (this->nphi[n] > 1.0e0) {
@@ -90,13 +92,13 @@ void StabilizedFEM::SetPFDomain() {
         }
     }
 
-    int nenode = (idimc[0] + 1) * (idimc[1] + 1) * (idimc[2] + 1);
+    int nenode = (cmesh.idimc[0] + 1) * (cmesh.idimc[1] + 1) * (cmesh.idimc[2] + 1);
 
-    VectorAssign(nelem, this->rhoe);
-    VectorAssign(nelem, this->rmue);
-    for (int m = 0; m < nelem; m++) {
+    VectorAssign(mesh.nelem, this->rhoe);
+    VectorAssign(mesh.nelem, this->rmue);
+    for (int m = 0; m < mesh.nelem; m++) {
         for (int n = 0; n < nenode; n++) {
-            int nid = ncc[m][n];
+            int nid = cmesh.ncc[m][n];
             this->rhoe[m] += (this->nphi[nid] * this->rhol + (1.0e0 - this->nphi[nid]) * this->rhog) / double(nenode);
             this->rmue[m] += (this->nphi[nid] * this->rmul + (1.0e0 - this->nphi[nid]) * this->rmug) / double(nenode);
         }

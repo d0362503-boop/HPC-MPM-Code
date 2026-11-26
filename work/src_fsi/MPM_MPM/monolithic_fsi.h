@@ -3,7 +3,6 @@
 #include <array>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/implicit/newton_solver.h"
 #include "module/solid/implicit/implicit_mpm_solid.h"
@@ -30,8 +29,12 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     std::vector<double> column_scale; // linear increment scaling factors
 
     // Driver operations and physics callbacks.
-    /** @brief Configure ten coupled components and the 37 stored fluid-solid-multiplier blocks. */
-    MPMMPMMonolithicFSI();
+    /**
+     * @brief Configure ten coupled components and the 37 stored fluid-solid-multiplier blocks.
+     * @param grid   Grid of this rank, shared by fluid, solid and the coupled system.
+     * @param params Run parameters of this run.
+     */
+    MPMMPMMonolithicFSI(const Grid &grid, const RunParams &params);
 
     /** @brief Release the coupled PETSc solver and compact equation resources. */
     ~MPMMPMMonolithicFSI();
@@ -41,11 +44,16 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
      *
      * Loads shared global parameters, then dispatches fluid and solid
      * boundary-condition/particle input to the corresponding sub-solvers.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
-    /** @brief Solve the coupled fields with interface endpoint-velocity continuity. */
-    void SolveFSISystem();
+    /**
+     * @brief Solve the coupled fields with interface endpoint-velocity continuity.
+     * @param ts Current time state of this step (load factor and physical time).
+     */
+    void SolveFSISystem(const TimeState &ts);
 
     /**
      * @brief Apply one final-phase normal correction to penetrated fluid centres.
@@ -59,8 +67,11 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     /** @brief Build interface weights and active components, freeze stabilization and reset increments and scratch state. */
     void BeginNewtonStep() override;
 
-    /** @brief Apply iterate BCs and kinematics of both fields, then assemble the coupled system. */
-    void AssembleNewtonSystem() override;
+    /**
+     * @brief Apply iterate BCs and kinematics of both fields, then assemble the coupled system.
+     * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     */
+    void AssembleNewtonSystem(const TimeState &ts) override;
 
     /**
      * @brief Check the four coupled residuals.
@@ -73,9 +84,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Solve the coupled system for the physical increments.
      * @param NR_it Current Newton iteration.
+     * @param ts Current time state; its step index sets the preconditioner rebuild cadence.
      * @return Krylov iterations used.
      */
-    int SolveNewtonCorrection(int NR_it) override;
+    int SolveNewtonCorrection(int NR_it, const TimeState &ts) override;
 
     /** @brief Add physical Newton increments to fluid and solid displacements, fluid pressure and interface multipliers. */
     void UpdateNRIncrement() override;
@@ -111,17 +123,19 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
      * @brief Assemble the fluid field and its multiplier load into the coupled system.
      * @param nvel_k Fluid nodal velocity at the current endpoint iterate.
      * @param naccel_k Fluid nodal acceleration at the current endpoint iterate.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
     void AssembleFluidSystem(const std::vector<double> &nvel_k, //
-                             const std::vector<double> &naccel_k);
+                             const std::vector<double> &naccel_k, const TimeState &ts);
 
     /**
      * @brief Assemble the solid field and its multiplier load into the coupled system.
      * @param naccel_k Solid nodal acceleration at the current endpoint iterate.
      * @param stress_k Particle stress state for the current Newton iterate.
+     * @param ts Current time state; its load factor `facl` scales the body force.
      */
     void AssembleSolidSystem(const std::vector<double> &naccel_k, //
-                             std::vector<std::array<double, 6>> &stress_k);
+                             std::vector<std::array<double, 6>> &stress_k, const TimeState &ts);
 
     /**
      * @brief Constrain the fluid and solid nodal velocities to agree at the current time-step endpoint.
@@ -147,11 +161,12 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Apply residual constraints and solve for physical monolithic increments.
      * @param NR_it Newton iteration controlling preconditioner setup; each correction starts from zero.
+     * @param istep Current time step; sets the preconditioner rebuild cadence.
      * @return Number of Krylov iterations used by the coupled linear solve.
      * @note KSP divergence is currently logged by CrsMat but does not stop this
      * routine from rescaling and returning the computed increment.
      */
-    int SolveSystem(int NR_it);
+    int SolveSystem(int NR_it, int istep);
 
     // Nonlinear residuals.
     /**

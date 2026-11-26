@@ -2,11 +2,7 @@
 #include "module/cal_mat.h"
 #include "module/dataset.h"
 #include "module/material_point.h"
-#include "module/mesh.h"
 #include <array>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
 #include <vector>
 
 void MaterialPoint::VelP2G(int pid, int nid, double sfi) {

@@ -1,11 +1,10 @@
-#include <cmath>
+#include "module/cal_mat.h"
 #include <fstream>
 #include <string>
 #include <vector>
 
+#include "module/data_io.h"
 #include "module/dataset.h"
-#include "module/material_point.h"
-#include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/solid/solid_material_point.h"
 #include "module/vtk_hdf5.h"
@@ -18,9 +17,9 @@ void SolidMaterialPointBase::InputBCData(std::ifstream &infile) {
     this->wbc.BCInput(infile);
 
     if (this->do_dlb) {
-        this->ubc.CaptureGlobalControlPointBC();
-        this->vbc.CaptureGlobalControlPointBC();
-        this->wbc.CaptureGlobalControlPointBC();
+        this->ubc.CaptureGlobalControlPointBC(this->grid_);
+        this->vbc.CaptureGlobalControlPointBC(this->grid_);
+        this->wbc.CaptureGlobalControlPointBC(this->grid_);
     }
 
     return;
@@ -39,26 +38,28 @@ void SolidMaterialPointBase::InputPointData(std::ifstream &infile) {
         infile >> this->id[ip] >> this->matid[ip] >> this->surf_point[ip] >> this->mass[ip] >> this->vol0[ip];
         infile.ignore(1000, '\n');
     }
-    VectorAssign(this->num, this->def_grad, eye_mat);
+    VectorAssign(this->num, this->def_grad, kIdentity3);
     if (this->Fbar_flag) {
-        VectorAssign(this->num, this->def_grad_bar, eye_mat);
-        VectorAssign(this->num, this->delta_def_grad_bar, eye_mat);
+        VectorAssign(this->num, this->def_grad_bar, kIdentity3);
+        VectorAssign(this->num, this->delta_def_grad_bar, kIdentity3);
     }
     this->vol = this->vol0;
 
     return;
 }
 
-void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview) {
+void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview, const TimeState &ts) {
+    const RunParams &params = this->params_;
+
 #ifdef HAVE_HDF5
-    std::string filename = outfile + "-" + std::to_string(iview) + "-s.vtkhdf";
+    std::string filename = params.outfile + "-" + std::to_string(iview) + "-s.vtkhdf";
 
     std::vector<double> vm_stress(this->num);
     for (int i = 0; i < this->num; ++i) { vm_stress[i] = this->ComputeVMStress(i); }
 
     vtkhdf::VTKHDFWriter writer(filename);
     auto info = vtkhdf::WriteParticleTopology(writer, this->coord);
-    writer.SetTime(real_time);
+    writer.SetTime(ts.real_time);
 
     writer.CreatePointDataGroup();
     writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, this->vel);
@@ -72,7 +73,9 @@ void SolidMaterialPointBase::OutputPointDataVTKHDF(int iview) {
 }
 
 void SolidMaterialPointBase::RestartInput() {
-    std::string filename = pointfile + std::to_string(myrank) + "_s_re.txt";
+    const RunParams &params = this->params_;
+
+    std::string filename = params.pointfile + std::to_string(myrank) + "_s_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -114,7 +117,9 @@ void SolidMaterialPointBase::RestartInput() {
 }
 
 void SolidMaterialPointBase::RestartOutput() {
-    std::string filename = pointfile + std::to_string(myrank) + "_s_re.txt";
+    const RunParams &params = this->params_;
+
+    std::string filename = params.pointfile + std::to_string(myrank) + "_s_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);

@@ -11,22 +11,26 @@ int main(int argc, char *argv[]) {
     const double start_time = InitializeSimulation(argc, argv);
 
     {
-        MPMFEMBlockFSI fsi;
+        Grid grid;          // rank grid
+        RunParams params;   // run parameters
+        TimeState ts;       // time-step state
 
-        fsi.DataInput();
+        MPMFEMBlockFSI fsi(grid, params);
 
-        istep = ista - 1;
-        int iview = istep / iout;
-        real_time = dt * double(istep);
+        fsi.DataInput(grid, params);
 
-        if (rstflag == 1 || rstflag == 3) {
+        ts.istep = params.ista - 1;
+        int iview = ts.istep / params.iout;
+        ts.real_time = params.dt * double(ts.istep);
+
+        if (params.rstflag == 1 || params.rstflag == 3) {
             fsi.solid_.RestartInput();
             fsi.fluid_.RestartInput();
         }
 
-        BuildMesh();
+        BuildMesh(grid.mesh);
 
-        BuildControlPoint();
+        BuildControlPoint(grid.mesh, grid.cmesh);
 
         fsi.fluid_.BuildSubcellPoints();
 
@@ -40,7 +44,7 @@ int main(int argc, char *argv[]) {
 
         fsi.fluid_.NS_.BuildCrsMat(16);
 
-        ComputeNodalVol();
+        ComputeNodalVol(params, grid);
 
         fsi.solid_.MeshPointLinklist();
 
@@ -48,22 +52,22 @@ int main(int argc, char *argv[]) {
 
         fsi.fluid_.Cp2NodeVTK();
 
-        fsi.solid_.OutputPointDataVTKHDF(iview);
+        fsi.solid_.OutputPointDataVTKHDF(iview, ts);
 
-        fsi.fluid_.OutputMeshDataVTKHDF(iview);
+        fsi.fluid_.OutputMeshDataVTKHDF(iview, ts);
 
-        for (istep = ista; istep <= iend; istep++) {
+        for (ts.istep = params.ista; ts.istep <= params.iend; ts.istep++) {
             // -----------------------------------------------
-            real_time = dt * double(istep);
+            ts.real_time = params.dt * double(ts.istep);
             // if (real_time < 2.0e0) {
             //     facl = (1.0e0 - std::cos(M_PI * real_time / 2.0e0)) / 2.0e0;
             // } else {
             //     facl = 1.0e0;
             // }
-            if (istep <= nlstep) {
-                facl = dlstep * double(istep);
+            if (ts.istep <= params.nlstep) {
+                ts.facl = params.dlstep * double(ts.istep);
             } else {
-                facl = 1.0e0;
+                ts.facl = 1.0e0;
             }
             // -----------------------------------------------
 
@@ -71,27 +75,27 @@ int main(int argc, char *argv[]) {
 
             fsi.solid_.MeshPointLinklist();
 
-            fsi.solid_.Particle2Node();
+            fsi.solid_.Particle2Node(ts);
 
-            fsi.SolveFSISystem(); // --- Strong coupling: block iteration ---
+            fsi.SolveFSISystem(ts); // --- Strong coupling: block iteration ---
 
-            fsi.solid_.Node2Particle();
+            fsi.solid_.Node2Particle(ts);
 
             fsi.solid_.MoveParticle();
 
-            if (istep % iout == 0) {
+            if (ts.istep % params.iout == 0) {
                 iview++;
-                fsi.solid_.OutputPointDataVTKHDF(iview);
+                fsi.solid_.OutputPointDataVTKHDF(iview, ts);
                 fsi.fluid_.Cp2NodeVTK();
-                fsi.fluid_.OutputMeshDataVTKHDF(iview);
+                fsi.fluid_.OutputMeshDataVTKHDF(iview, ts);
 
-                if (rstflag == 2 || rstflag == 3) {
+                if (params.rstflag == 2 || params.rstflag == 3) {
                     fsi.solid_.RestartOutput();
                     fsi.fluid_.RestartOutput();
                 }
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (ts.istep % 100 == 0 && myrank == 0) { OutputMessage(iview, ts); }
         }
     }
 

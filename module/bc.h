@@ -1,9 +1,12 @@
 #pragma once
 
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <vector>
+
+struct Mesh;
+struct ControlMesh;
+struct Grid;
 
 class BoundaryCondition {
   public:
@@ -29,11 +32,12 @@ class BoundaryCondition {
     void BCOutput(std::ofstream &outfile, std::string bc_name, bool if_fbc = true);
 
     /**
-     * @brief Apply prescribed boundary values to `variable` at constrained DOFs.
+     * @brief Apply prescribed boundary values `scale * fbc` to `variable` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
      * @param variable Vector to be modified in-place.
+     * @param scale    Load factor applied to the prescribed values (the current `facl`).
      */
-    void BCSetVal(int nn, std::vector<double> &variable);
+    void BCSetVal(int nn, std::vector<double> &variable, double scale);
 
     /**
      * @brief Zero out `variable` at constrained DOFs.
@@ -43,45 +47,53 @@ class BoundaryCondition {
     void BCSetZero(int nn, std::vector<double> &variable);
 
     /**
-     * @brief Set the displacement increment `facl * dt * fbc` at constrained DOFs.
+     * @brief Set the displacement increment `scale * fbc` at constrained DOFs.
      * @param nn       Offset into `variable` for the component being constrained.
      * @param variable Displacement increment modified in-place.
+     * @param scale    Velocity-to-increment factor `facl * dt` of the current step.
      * @note Matches the Newmark endpoint velocity `facl * fbc` because the step-start
      * `nvel` and `naccel` already hold `facl * fbc` and zero there (ApplyVelocityBC / ApplyAccelerationBC in P2G).
      */
-    void BCSetDispl(int nn, std::vector<double> &variable);
+    void BCSetDispl(int nn, std::vector<double> &variable, double scale);
 
     /**
-     * @brief Apply prescribed displacement/velocity increments to `variable` at constrained DOFs.
-     * @param nn       Offset into `variable` for the component being constrained.
-     * @param variable Vector to be modified in-place.
+     * @brief Remove the wall-normal component of a nodal vector at constrained control points (free slip).
+     * @param variable Nodal vector field (x, y, z blocks) modified in-place.
+     * @param normal   Nodal unit normal field in the same block layout.
+     * @param cmesh    Control points of this rank (component offsets are used).
+     * @param tol      Normal magnitude below which the whole vector is zeroed instead.
      */
-    void BCSetFreeSlip(std::vector<double> &variable, const std::vector<double> &normal);
+    void BCSetFreeSlip(std::vector<double> &variable, const std::vector<double> &normal, const ControlMesh &cmesh,
+                       double tol);
 
     /**
      * @brief Cache this rank's control-point BCs as a global MPI-wide BC list.
      *
      * Local control-point IDs are converted to global IDs and gathered from all
      * ranks.  The resulting data remains valid after a DLB repartition.
+     * @param grid Grid of this rank (element window and control-point sizes).
      */
-    void CaptureGlobalControlPointBC();
+    void CaptureGlobalControlPointBC(const Grid &grid);
 
     /**
      * @brief Rebuild local control-point BC IDs for the current MPI region.
+     * @param grid Grid of this rank after the repartition.
      */
-    void RebuildLocalControlPointBC();
+    void RebuildLocalControlPointBC(const Grid &grid);
 
     /**
      * @brief Cache this rank's element BCs as a global MPI-wide BC list.
      *
      * This is used by fluid inflow BCs, whose IDs refer to background elements.
+     * @param mesh Background mesh of this rank (element window and counts).
      */
-    void CaptureGlobalElementBC();
+    void CaptureGlobalElementBC(const Mesh &mesh);
 
     /**
      * @brief Rebuild local background-element BC IDs for the current MPI region.
+     * @param mesh Background mesh of this rank after the repartition.
      */
-    void RebuildLocalElementBC();
+    void RebuildLocalElementBC(const Mesh &mesh);
 
   private:
     /**

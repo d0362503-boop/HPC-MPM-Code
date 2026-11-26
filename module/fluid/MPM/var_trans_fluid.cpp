@@ -1,4 +1,3 @@
-#include "module/bc.h"
 #include "module/dataset.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
 #include "module/map_and_interpolate.h"
@@ -9,35 +8,35 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
-#include <iomanip>
 #include <vector>
 
 using namespace stabilizedmpm;
 
-void StabilizedMPM::Particle2Node() {
+void StabilizedMPM::Particle2Node(const TimeState &ts) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(nodec, this->nmass);
-    VectorAssign(nodec, this->nvof);
-    VectorAssign(nodec, this->npres_old);
-    VectorAssign(nodec * 3, this->nmome);
-    VectorAssign(nodec * 3, this->nforce);
-    for (int m = 0; m < nelem; m++) {
+    VectorAssign(cmesh.nodec, this->nmass);
+    VectorAssign(cmesh.nodec, this->nvof);
+    VectorAssign(cmesh.nodec, this->npres);
+    VectorAssign(cmesh.nodec * 3, this->nmome);
+    VectorAssign(cmesh.nodec * 3, this->nforce);
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
             for (int ni = 0; ni < nenode; ni++) {
                 int nid = ncm[ni];
                 double sfi = sf[ni];
                 this->StandardVarP2G(pid, nid, sfi, this->mass, this->nmass);
                 this->StandardVarP2G(pid, nid, sfi, this->vol, this->nvof);
-                this->StandardVarP2G(pid, nid, sfi, this->mass, this->pres, this->npres_old);
+                this->StandardVarP2G(pid, nid, sfi, this->mass, this->pres, this->npres);
                 this->VelP2G(pid, nid, sfi);
                 this->AccelP2G(pid, nid, sfi);
             }
@@ -45,34 +44,38 @@ void StabilizedMPM::Particle2Node() {
         }
     }
 
-    NodeVarComm(this->nmass, 0);
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->npres_old, 0);
-    NodeVarComm(this->nmome, {nuc, nvc, nwc});
-    NodeVarComm(this->nforce, {nuc, nvc, nwc});
+    NodeVarComm(this->grid_.part, this->nmass, 0);
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->npres, 0);
+    NodeVarComm(this->grid_.part, this->nmome, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    NodeVarComm(this->grid_.part, this->nforce, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
-    VectorAssign(nodec, this->nphi);
-    for (int n = 0; n < nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / nvol[n], 0.0e0, 1.0e0); }
+    VectorAssign(cmesh.nodec, this->nphi);
+    for (int n = 0; n < cmesh.nodec; n++) { this->nphi[n] = std::clamp(this->nvof[n] / cmesh.nvol[n], 0.0e0, 1.0e0); }
 
-    this->CutOffSmallNodalVar(this->npres_old, this->nmass, {0});
-    this->pbc.BCSetVal(0, this->npres_old);
+    this->CutOffSmallNodalVar(this->npres, this->nmass, {0});
+    this->pbc.BCSetVal(0, this->npres, ts.facl);
 
-    this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {nuc, nvc, nwc});
-    this->ApplyVelocityBC(this->nvel);
+    this->CutOffSmallNodalVar(this->nvel, this->nmome, this->nmass, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
+    this->ApplyVelocityBC(this->nvel, ts);
 
-    this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {nuc, nvc, nwc});
+    this->CutOffSmallNodalVar(this->naccel, this->nforce, this->nmass, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
     this->ApplyAccelerationBC(this->naccel);
 
     return;
 }
 
-void StabilizedMPM::Node2Particle() {
+void StabilizedMPM::Node2Particle(const TimeState &ts) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    std::vector<double> nvel_k(nodec * 3), naccel_k(nodec * 3);
+    std::vector<double> nvel_k(cmesh.nodec * 3), naccel_k(cmesh.nodec * 3);
     // ---- Newmark beta velocity & acceleration ----
     this->implicit_.ComputeNodeVelAccelFromDispl(*this, nvel_k, naccel_k);
 
     this->implicit_.CommitNodalKinematics(*this, nvel_k, naccel_k);
+
+    this->CommitNodalPressure();
 
     std::vector<std::array<double, 3>> accel_old;
     VectorAssign(this->num, accel_old);
@@ -92,11 +95,11 @@ void StabilizedMPM::Node2Particle() {
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    for (int m = 0; m < nelem; m++) {
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             std::array<std::array<double, 3>, 3> ADp{};
             for (int ni = 0; ni < nenode; ni++) {

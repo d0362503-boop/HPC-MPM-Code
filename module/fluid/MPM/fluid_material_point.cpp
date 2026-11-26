@@ -1,14 +1,7 @@
-#include "module/DLB/mpm_dlb.h"
 #include "module/dataset.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
-#include "module/material_point.h"
-#include "module/mesh.h"
 #include "module/mpi_data.h"
-#include <array>
-#include <fstream>
-#include <iomanip>
 #include <mpi.h>
-#include <vector>
 
 using namespace stabilizedmpm;
 
@@ -38,13 +31,13 @@ void StabilizedMPM::InitializePointData() {
 
 void StabilizedMPM::RebuildBC() {
 
-    this->ubc.RebuildLocalControlPointBC();
-    this->vbc.RebuildLocalControlPointBC();
-    this->wbc.RebuildLocalControlPointBC();
-    this->pbc.RebuildLocalControlPointBC();
-    this->uinfbc.RebuildLocalElementBC();
-    this->vinfbc.RebuildLocalElementBC();
-    this->winfbc.RebuildLocalElementBC();
+    this->ubc.RebuildLocalControlPointBC(this->grid_);
+    this->vbc.RebuildLocalControlPointBC(this->grid_);
+    this->wbc.RebuildLocalControlPointBC(this->grid_);
+    this->pbc.RebuildLocalControlPointBC(this->grid_);
+    this->uinfbc.RebuildLocalElementBC(this->grid_.mesh);
+    this->vinfbc.RebuildLocalElementBC(this->grid_.mesh);
+    this->winfbc.RebuildLocalElementBC(this->grid_.mesh);
 
     this->InitializeInflowBC();
     this->infbc_isfilled = false;
@@ -53,8 +46,9 @@ void StabilizedMPM::RebuildBC() {
 }
 
 void StabilizedMPM::MoveParticle() {
+    const Partition &part = this->grid_.part;
 
-    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
+    this->DetermineParticleRank(part.regions);
 
     this->InflowParticles();
 

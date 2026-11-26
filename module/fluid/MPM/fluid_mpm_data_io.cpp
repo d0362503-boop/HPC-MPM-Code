@@ -1,13 +1,9 @@
-#include <cmath>
 #include <fstream>
 #include <string>
-#include <vector>
 
 #include "module/data_io.h"
 #include "module/dataset.h"
 #include "module/fluid/MPM/stabilized_mpm.h"
-#include "module/material_point.h"
-#include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/vtk_hdf5.h"
 
@@ -25,13 +21,13 @@ void StabilizedMPM::InputBCData(std::ifstream &infile) {
     this->winfbc.BCInput(infile, false);
 
     if (this->do_dlb) {
-        this->ubc.CaptureGlobalControlPointBC();
-        this->vbc.CaptureGlobalControlPointBC();
-        this->wbc.CaptureGlobalControlPointBC();
-        this->pbc.CaptureGlobalControlPointBC();
-        this->uinfbc.CaptureGlobalElementBC();
-        this->vinfbc.CaptureGlobalElementBC();
-        this->winfbc.CaptureGlobalElementBC();
+        this->ubc.CaptureGlobalControlPointBC(this->grid_);
+        this->vbc.CaptureGlobalControlPointBC(this->grid_);
+        this->wbc.CaptureGlobalControlPointBC(this->grid_);
+        this->pbc.CaptureGlobalControlPointBC(this->grid_);
+        this->uinfbc.CaptureGlobalElementBC(this->grid_.mesh);
+        this->vinfbc.CaptureGlobalElementBC(this->grid_.mesh);
+        this->winfbc.CaptureGlobalElementBC(this->grid_.mesh);
     }
 
     this->InitializeInflowBC();
@@ -56,13 +52,15 @@ void StabilizedMPM::InputPointData(std::ifstream &infile) {
     return;
 }
 
-void StabilizedMPM::OutputPointDataVTKHDF(int iview) {
+void StabilizedMPM::OutputPointDataVTKHDF(int iview, const TimeState &ts) {
+    const RunParams &params = this->params_;
+
 #ifdef HAVE_HDF5
-    std::string filename = outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
+    std::string filename = params.outfile + "-" + std::to_string(iview) + "-w.vtkhdf";
 
     vtkhdf::VTKHDFWriter writer(filename);
     auto info = vtkhdf::WriteParticleTopology(writer, this->coord);
-    writer.SetTime(real_time);
+    writer.SetTime(ts.real_time);
 
     writer.CreatePointDataGroup();
     writer.WritePointVector("Velocity", info.total_npts, info.local_npts, info.global_offset, this->vel);
@@ -74,8 +72,9 @@ void StabilizedMPM::OutputPointDataVTKHDF(int iview) {
 }
 
 void StabilizedMPM::RestartInput() {
+    const RunParams &params = this->params_;
 
-    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
+    std::string filename = params.pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ifstream reinfile;
     reinfile.open(filename);
@@ -113,8 +112,9 @@ void StabilizedMPM::RestartInput() {
 }
 
 void StabilizedMPM::RestartOutput() {
+    const RunParams &params = this->params_;
 
-    std::string filename = pointfile + std::to_string(myrank) + "_w_re.txt";
+    std::string filename = params.pointfile + std::to_string(myrank) + "_w_re.txt";
 
     std::ofstream reoutfile;
     reoutfile.flags(std::ios::right | std::ios::scientific);

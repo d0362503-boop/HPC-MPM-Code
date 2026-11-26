@@ -3,7 +3,6 @@
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>
-#include <vector>
 
 #include "module/cal_mat.h"
 #include "module/dataset.h"
@@ -14,7 +13,8 @@
 
 using namespace mpm_mpm_monolithic_fsi;
 
-MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
+MPMMPMMonolithicFSI::MPMMPMMonolithicFSI(const Grid &grid, const RunParams &params)
+    : MaterialPoint(grid, params), fluid_(grid, params), solid_(grid, params), fsi_sys(grid, params) {
     this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
     this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
     this->fluid_.rhs_start = 0;
@@ -32,14 +32,15 @@ MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
 
 MPMMPMMonolithicFSI::~MPMMPMMonolithicFSI() { this->fsi_sys.ResetPetscSolver(); }
 
-void MPMMPMMonolithicFSI::SolveFSISystem() {
+void MPMMPMMonolithicFSI::SolveFSISystem(const TimeState &ts) {
 
-    SolveNewton(*this, this->max_NR_it);
+    SolveNewton(*this, ts, this->max_NR_it);
 
     return;
 }
 
 void MPMMPMMonolithicFSI::BeginNewtonStep() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->LumpedLagrangeMultiplier();
 
@@ -49,33 +50,34 @@ void MPMMPMMonolithicFSI::BeginNewtonStep() {
 
     this->stress_k_ = this->solid_.InitializeNRStress();
 
-    this->nvel_f_.assign(nodec * 3, 0.0e0);
-    this->nvel_s_.assign(nodec * 3, 0.0e0);
-    this->naccel_f_.assign(nodec * 3, 0.0e0);
-    this->naccel_s_.assign(nodec * 3, 0.0e0);
+    this->nvel_f_.assign(cmesh.nodec * 3, 0.0e0);
+    this->nvel_s_.assign(cmesh.nodec * 3, 0.0e0);
+    this->naccel_f_.assign(cmesh.nodec * 3, 0.0e0);
+    this->naccel_s_.assign(cmesh.nodec * 3, 0.0e0);
     this->initial_norm_ = {};
 
-    VectorAssign(nodec * 3, this->fluid_.ndispl);
-    VectorAssign(nodec * 3, this->solid_.ndispl);
-    VectorAssign(nodec * 3, this->nlambda);
-    VectorAssign(nodec, this->fluid_.npres);
+    VectorAssign(cmesh.nodec * 3, this->fluid_.ndispl);
+    VectorAssign(cmesh.nodec * 3, this->solid_.ndispl);
+    VectorAssign(cmesh.nodec * 3, this->nlambda);
+    VectorAssign(cmesh.nodec, this->fluid_.npres_k);
 
     return;
 }
 
-void MPMMPMMonolithicFSI::AssembleNewtonSystem() {
+void MPMMPMMonolithicFSI::AssembleNewtonSystem(const TimeState &ts) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     VectorAssign(this->fsi_sys.nmata, this->fsi_sys.amat);
-    VectorAssign(nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
+    VectorAssign(cmesh.nodec * this->fsi_sys.ndof, this->fsi_sys.b_rhs);
 
-    this->fluid_.BCNRSet();
+    this->fluid_.BCNRSet(ts);
     this->fluid_.implicit_.ComputeNodeVelAccelFromDispl(this->fluid_, this->nvel_f_, this->naccel_f_);
 
-    this->solid_.BCNRSet();
+    this->solid_.BCNRSet(ts);
     this->solid_.implicit_.ComputeNodeVelAccelFromDispl(this->solid_, this->nvel_s_, this->naccel_s_);
 
-    this->AssembleFluidSystem(this->nvel_f_, this->naccel_f_);
-    this->AssembleSolidSystem(this->naccel_s_, this->stress_k_);
+    this->AssembleFluidSystem(this->nvel_f_, this->naccel_f_, ts);
+    this->AssembleSolidSystem(this->naccel_s_, this->stress_k_, ts);
     this->AssembleInterfaceSystem(this->nvel_f_, this->nvel_s_);
 
     return;
@@ -86,22 +88,24 @@ bool MPMMPMMonolithicFSI::CheckNewtonConvergence(int NR_it, int ksp_its) {
     return this->CheckNRConvergence(this->initial_norm_, NR_it, ksp_its);
 }
 
-int MPMMPMMonolithicFSI::SolveNewtonCorrection(int NR_it) { return this->SolveSystem(NR_it); }
+int MPMMPMMonolithicFSI::SolveNewtonCorrection(int NR_it, const TimeState &ts) { return this->SolveSystem(NR_it, ts.istep); }
 
 void MPMMPMMonolithicFSI::UpdateNRIncrement() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    for (int n = 0; n < nodec * 3; n++) {
+    for (int n = 0; n < cmesh.nodec * 3; n++) {
         this->fluid_.ndispl[n] += this->fsi_sys.x_lhs[n];
-        this->solid_.ndispl[n] += this->fsi_sys.x_lhs[n + nodec * 4];
-        this->nlambda[n] += this->fsi_sys.x_lhs[n + nodec * 7];
+        this->solid_.ndispl[n] += this->fsi_sys.x_lhs[n + cmesh.nodec * 4];
+        this->nlambda[n] += this->fsi_sys.x_lhs[n + cmesh.nodec * 7];
     }
 
-    for (int n = 0; n < nodec; n++) { this->fluid_.npres[n] += this->fsi_sys.x_lhs[n + npc]; }
+    for (int n = 0; n < cmesh.nodec; n++) { this->fluid_.npres_k[n] += this->fsi_sys.x_lhs[n + cmesh.npc]; }
 
     return;
 }
 
 std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     this->BCResidualSet(this->fsi_sys.b_rhs);
 
@@ -114,7 +118,7 @@ std::array<double, 4> MPMMPMMonolithicFSI::ComputeNRResidualNorms() {
 
     for (int n : this->fsi_sys.owned_natural_ids) {
         for (int d = 0; d < this->fsi_sys.ndof; d++) {
-            const int index = n + d * nodec;
+            const int index = n + d * cmesh.nodec;
             if (this->fixed_dof[index]) continue;
 
             int field;

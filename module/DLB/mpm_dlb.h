@@ -4,6 +4,10 @@
 #include <cstddef>
 #include <vector>
 
+struct Mesh;
+struct Partition;
+struct Grid;
+
 namespace mpm_dlb {
 
 /**
@@ -22,15 +26,11 @@ struct Region {
 void OuputDLBParticleRatio(int num);
 
 /**
- * @brief Collect and store the current MPI element regions from every rank.
+ * @brief Collect the current MPI element regions from every rank into `part.regions`.
+ * @param mesh Background mesh of this rank (its global element window is shared).
+ * @param part Partition of this rank; `part.regions` receives one region per rank, ordered by rank.
  */
-void CollectCurrentRegions();
-
-/**
- * @brief Return the current MPI element regions ordered by rank.
- * @return Current MPI element regions.
- */
-const std::vector<Region> &CurrentRegions();
+void CollectCurrentRegions(const Mesh &mesh, Partition &part);
 
 /**
  * @brief Compute the uniform local particle sampling interval for DLB.
@@ -75,18 +75,20 @@ std::vector<int> CutsFromSamples(const std::vector<std::array<double, 3>> &globa
 
 /**
  * @brief Compute rebalanced fixed-topology MPI regions from local particle samples.
+ * @param grid Grid of this rank (global box, element size and rank topology are used).
  * @param local_samples Coordinate samples selected on this MPI rank.
  * @return One inclusive background-element region per MPI rank, ordered by rank.
  */
-std::vector<Region> ComputeDLBRegions(const std::vector<std::array<double, 3>> &local_samples);
+std::vector<Region> ComputeDLBRegions(const Grid &grid, const std::vector<std::array<double, 3>> &local_samples);
 
 /**
  * @brief Update the MPI-region layout and rebuild its overlap communication metadata.
  * @param regions One inclusive background-element region per MPI rank, ordered by rank.
+ * @param grid    Grid of this rank; element window, local sizes, overlap tables and regions are rewritten.
  *
  * Updates the current rank's element bounds, local mesh dimensions, and node/control-point overlap
  * tables.  The caller remains responsible for rebuilding mesh storage and physics-specific BC data.
  */
-void UpdateDLBRegions(const std::vector<Region> &regions);
+void UpdateDLBRegions(const std::vector<Region> &regions, Grid &grid);
 
 } // namespace mpm_dlb

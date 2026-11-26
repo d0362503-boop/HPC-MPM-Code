@@ -2,13 +2,20 @@
 
 #include "data/divide/data_partitioner.h"
 
-#include "module/bc.h"
 #include "module/material_point.h"
 
 #include <string>
 
 class FluidDivider : public DataPartitioner {
   public:
+    /**
+     * @brief Bind the fluid partitioner and its particle sets to the grid being partitioned.
+     * @param grid   Grid being partitioned (global mesh, overwritten with each rank window).
+     * @param params Run parameters of the case.
+     */
+    FluidDivider(Grid &grid, RunParams &params)
+        : DataPartitioner(grid, params), points_(grid, params), partition_points_(grid, params) {}
+
     /**
      * @brief Partition fluid material points into this rank's local window.
      * @param rank_id Index of the MPI rank whose partition is being built.
@@ -25,7 +32,7 @@ class FluidDivider : public DataPartitioner {
      * Velocity/pressure BCs are control-point based; inflow BCs are element based.
      * Must be called after MeshPartition.
      */
-    void PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max);
+    void PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max);
 
     MaterialPoint points_;            // loaded fluid particles
     MaterialPoint partition_points_;  // partitioned fluid particles

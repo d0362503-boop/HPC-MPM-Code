@@ -32,25 +32,51 @@ for velocity/pressure constraints through two default hooks in
 - `BuildPetscBCList(CrsMat&)`: collects global IDs from `ubc/vbc/wbc/pbc`
   for PETSc row/column elimination.
 - `BCResidualSet(std::vector<double>&)`: zeros constrained residual entries.
+- `BCNRSet()` (virtual): writes Dirichlet values into the n+1 iterate
+  `nvel_k` / `npres_k` before each assembly. Accelerations get no separate
+  BC; they follow from the generalized-α velocity relation.
 
-Derived owners can extend these hooks.
+Derived owners can extend these hooks (e.g. `FSIFluid::BCNRSet` adds the
+solid interface velocity).
 
 ## Numerical Method
 
-`SolveNS` calls the phase helpers below: `ComputeAdvectionVel`,
-`MakeNSStabCoeff`, and `AssembleSystem`.
+`SolveNS` runs `SolveNewton()` over the `NonlinearProblem` hooks:
 
-### 1. Generalized-α Predictor
-```cpp
-adv_vel = (1 + α_f) · nvel_old  –  α_f · nvel_older
 ```
-This advection velocity is frozen during the nonlinear/linear solve of the current time step.
+BeginNewtonStep        nvel_k ← nvel, npres_k ← npres   (same-velocity predictor)
+loop:
+  AssembleNewtonSystem BCNRSet → ComputeAdvectionVel → ComputeNodeAccelFromVel
+                       → MakeNSStabCoeff → AssembleSystem
+  CheckNewtonConvergence
+  SolveNewtonCorrection
+  UpdateNRIncrement    nvel_k += Δv, npres_k += Δp
+EndNewtonStep
+```
+
+`SolveNS` does not commit; the owner calls `CommitNodalSolution` once the
+time step is accepted.
+
+### 1. Generalized-α Time Levels
+`nvel` / `npres` / `naccel` hold time level n; `nvel_k` / `npres_k` / `naccel_k` hold the
+n+1 Newton iterate. The advection velocity is evaluated at n+α_f:
+```cpp
+adv_vel  = (1 - α_f) · nvel   +  α_f · nvel_k     // v^{n+α_f}
+p_af     = (1 - α_f) · npres  +  α_f · npres_k    // p^{n+α_f}
+accel_am = (1 - α_m) · naccel +  α_m · naccel_k   // a^{n+α_m}
+```
+Only ∂v/∂t is evaluated at n+α_m; convection, viscosity, pressure, and the
+stabilization terms are evaluated at n+α_f (pressure follows Scheme-2 of
+Liu et al. 2020).
 
 ### 2. SUPG/PSPG Stabilization Coefficients
-Per-element values `tau1` (SUPG/PSPG) and `tau2` (shock capturing) are computed from:
+Per-element values `tau_supg` (SUPG/PSPG, Tezduyar type) and `tau_lsic` (LSIC) are
+recomputed from v^{n+α_f} at every nonlinear iteration, using:
 - Element size `he`
 - Local advection velocity magnitude
 - Kinematic viscosity `rnue = rmue / rhoe`
+
+Their derivatives are not included in the tangent (as in Bazilevs et al. 2008).
 
 ### 3. System Assembly (`AssembleSystem`)
 For each particle inside each element, shape functions are evaluated and the following matrices are accumulated into `NS_.amat`:
@@ -62,22 +88,38 @@ For each particle inside each element, shape functions are evaluated and the fol
 | Diffusion | `su/v/w`, cross terms (viscous stress) |
 | Pressure | `esgu/v/w` (SUPG), `elt` (PSPG) |
 | Continuity | `Cowu/v/w` (divergence) |
-| Shock Capturing | `sc` (artificial diffusion) |
+| LSIC | `sc` (grad-div, `tau_lsic`) |
 
-The RHS `NS_.b_rhs` is built from the old velocity, old acceleration, and body-force terms consistent with the generalized-α scheme.
+Tangent coefficients (unknowns Δv^{n+1}, Δp^{n+1}):
 
-### 4. Linear Solve (`SolveNSSystem`)
+| Term | Coefficient |
+|------|-------------|
+| Mass `emd`, PSPG mass `egt*` | α_m / (γΔt) |
+| Convection, diffusion, LSIC, continuity, PSPG convection | α_f |
+| Pressure `esg*`, `elt` | α_f |
+
+The convection tangent is Picard: only (v·∇)δv is kept; (δv·∇)v and the
+velocity derivatives of the SUPG/PSPG weights are omitted.
+
+The RHS `NS_.b_rhs` is the negative residual, evaluated with `accel_am`,
+`adv_vel`, `p_af`, and the body force.
+
+### 4. Linear Solve (`SolveNewtonCorrection`)
 ```cpp
 if (NS_.use_petsc)  →  PETSc KSP
 else                 →  GPBiCGAR (custom iterative solver)
 ```
-After convergence, the solution vector `NS_.x_lhs` is unpacked back into `nvel` (u, v, w) and `npres` (p).
+`NS_.x_lhs` is the Newton correction; `UpdateNRIncrement` adds it to `nvel_k`
+(u, v, w) and `npres_k` (p).
 
 `ConfigurePreconditioner()` selects `PCFIELDSPLIT` directly for `NS_`, applying a lower
 Schur field split to the four-component stabilized fluid system: components 0--2 form the
-velocity block and component 3 forms the pressure block. Both child blocks use
-HYPRE/BoomerAMG with PETSc's unshifted SELFP pressure Pmat and default scalar
-diagonal inverse approximation and no additional pressure shift.
+velocity block and component 3 forms the pressure block. The velocity block uses
+ASM (overlap 1) with local ILU(0); the pressure block uses HYPRE/BoomerAMG (two
+V-cycles) on PETSc's unshifted SELFP pressure Pmat, with the default scalar
+diagonal inverse approximation and no additional pressure shift. These child
+options are defaults only: `-fieldsplit_velocity_*` / `-fieldsplit_pressure_*`
+given on the command line take precedence.
 The scalar `PF_` system delegates PC selection to the base BoomerAMG callback;
 the four-component NS system uses the velocity/pressure split. `PF_` remains
 reserved rather than advanced by the current module workflow.
@@ -88,13 +130,12 @@ matrix values update while the numerical PC can be reused; FieldSplit groups
 are preserved by checking the actual PC type. See the
 [shared solver guide](../../solver/README.md).
 
-### 5. Time-History Update (`UpdateNodalVar`)
-At the end of each time step, the velocity / pressure history levels are moved down
-one level to prepare for the next step:
+### 5. Time-History Update (`CommitNodalSolution`)
+Called once per accepted time step (after FSI block convergence, not inside `SolveNS`):
 ```
-nvel_older ← nvel_old
-nvel_old   ← nvel
-npres_old  ← npres
+naccel ← (nvel_k − nvel)/(γΔt) − (1−γ)/γ · naccel
+nvel   ← nvel_k
+npres  ← npres_k
 ```
 
 ## Phase-Field / Two-Fluid Treatment
@@ -105,6 +146,6 @@ npres_old  ← npres
 
 | Routine | Format | Content |
 |---------|--------|---------|
-| `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`) | `naccel`, `nvel`, `nvel_old`, `nvel_older`, `npres`, `nphi` |
+| `RestartOutput` / `RestartInput` | Plain text, per-rank (`*_re.txt`) | `naccel`, `nvel`, `npres`, `nphi` |
 | `OutputMeshDataVTKHDF` | VTK HDF5, single shared file per view (`*-w.vtkhdf`) | Global `Points`, hexahedron cells, `Velocity`, `Pressure`, `Phi` written collectively over `MPI_COMM_WORLD` |
 | `Cp2NodeVTK` | Internal interpolation | Copies cell-corner data to nodes for VTK output, with clipping of `nphi_vtk` near 0 or 1 |

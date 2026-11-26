@@ -11,54 +11,58 @@ int main(int argc, char *argv[]) {
     const double start_time = InitializeSimulation(argc, argv);
 
     {
-        ExplicitSolidMPM sp;
+        Grid grid;          // rank grid
+        RunParams params;   // run parameters
+        TimeState ts;       // time-step state
 
-        sp.DataInput();
+        ExplicitSolidMPM sp(grid, params);
 
-        if (rstflag == 1 || rstflag == 3) sp.RestartInput();
+        sp.DataInput(grid, params);
 
-        BuildMesh();
+        if (params.rstflag == 1 || params.rstflag == 3) sp.RestartInput();
 
-        BuildControlPoint();
+        BuildMesh(grid.mesh);
 
-        ComputeNodalVol();
+        BuildControlPoint(grid.mesh, grid.cmesh);
 
-        istep = ista - 1;
-        int iview = istep / iout;
-        real_time = dt * double(istep);
+        ComputeNodalVol(params, grid);
 
-        sp.OutputPointDataVTKHDF(iview);
+        ts.istep = params.ista - 1;
+        int iview = ts.istep / params.iout;
+        ts.real_time = params.dt * double(ts.istep);
 
-        for (istep = ista; istep <= iend; istep++) {
+        sp.OutputPointDataVTKHDF(iview, ts);
+
+        for (ts.istep = params.ista; ts.istep <= params.iend; ts.istep++) {
 
             // -----------------------------------------------
-            real_time = dt * double(istep);
-            if (istep <= nlstep) {
-                facl = dlstep * double(istep);
+            ts.real_time = params.dt * double(ts.istep);
+            if (ts.istep <= params.nlstep) {
+                ts.facl = params.dlstep * double(ts.istep);
             } else {
-                facl = 1.0e0;
+                ts.facl = 1.0e0;
             }
             // -----------------------------------------------
 
             sp.MeshPointLinklist();
 
-            sp.Particle2Node();
+            sp.Particle2Node(ts);
 
-            sp.SolveSolid();
+            sp.SolveSolid(ts);
 
-            sp.Node2Particle();
+            sp.Node2Particle(ts);
 
             sp.MoveParticle();
 
-            if (istep % iout == 0) {
+            if (ts.istep % params.iout == 0) {
                 iview++;
-                sp.OutputPointDataVTKHDF(iview);
+                sp.OutputPointDataVTKHDF(iview, ts);
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (ts.istep % 100 == 0 && myrank == 0) { OutputMessage(iview, ts); }
         }
 
-        if (rstflag == 2 || rstflag == 3) sp.RestartOutput();
+        if (params.rstflag == 2 || params.rstflag == 3) sp.RestartOutput();
     }
 
     FinalizeSimulation(start_time);

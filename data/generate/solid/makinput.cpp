@@ -2,7 +2,11 @@
 
 int main() {
 
-  SolidGenerator generator;
+  Grid grid;
+
+  RunParams params;
+
+  SolidGenerator generator(grid, params);
 
   return generator.Run();
 }

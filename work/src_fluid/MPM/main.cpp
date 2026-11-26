@@ -11,57 +11,61 @@ int main(int argc, char *argv[]) {
     const double start_time = InitializeSimulation(argc, argv);
 
     {
-        StabilizedMPM wp;
+        Grid grid;          // rank grid
+        RunParams params;   // run parameters
+        TimeState ts;       // time-step state
 
-        wp.DataInput();
+        StabilizedMPM wp(grid, params);
 
-        if (rstflag == 1 || rstflag == 3) wp.RestartInput();
+        wp.DataInput(grid, params);
 
-        BuildMesh();
+        if (params.rstflag == 1 || params.rstflag == 3) wp.RestartInput();
 
-        BuildControlPoint();
+        BuildMesh(grid.mesh);
+
+        BuildControlPoint(grid.mesh, grid.cmesh);
 
         wp.NS_.BuildCrsMat(16);
 
-        ComputeNodalVol();
+        ComputeNodalVol(params, grid);
 
-        istep = ista - 1;
-        int iview = istep / iout;
-        real_time = dt * double(istep);
+        ts.istep = params.ista - 1;
+        int iview = ts.istep / params.iout;
+        ts.real_time = params.dt * double(ts.istep);
 
-        wp.OutputPointDataVTKHDF(iview);
+        wp.OutputPointDataVTKHDF(iview, ts);
 
-        for (istep = ista; istep <= iend; istep++) {
+        for (ts.istep = params.ista; ts.istep <= params.iend; ts.istep++) {
 
             // -----------------------------------------------
-            real_time = dt * double(istep);
-            if (istep <= nlstep) {
-                facl = dlstep * double(istep);
+            ts.real_time = params.dt * double(ts.istep);
+            if (ts.istep <= params.nlstep) {
+                ts.facl = params.dlstep * double(ts.istep);
             } else {
-                facl = 1.0e0;
+                ts.facl = 1.0e0;
             }
             // -----------------------------------------------
 
             wp.MeshPointLinklist();
 
-            wp.Particle2Node();
+            wp.Particle2Node(ts);
 
-            wp.SolveNS();
+            wp.SolveNS(ts);
 
-            wp.Node2Particle();
+            wp.Node2Particle(ts);
 
-            const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
+            const bool is_dlb_step = wp.do_dlb && (ts.istep % params.iout == 0);
 
-            (nprocs != 1 && is_dlb_step) ? wp.ApplyDLB() : wp.MoveParticle();
+            (nprocs != 1 && is_dlb_step) ? wp.ApplyDLB(grid) : wp.MoveParticle();
 
-            if (istep % iout == 0) {
+            if (ts.istep % params.iout == 0) {
                 iview++;
-                wp.OutputPointDataVTKHDF(iview);
+                wp.OutputPointDataVTKHDF(iview, ts);
 
-                if (rstflag == 2 || rstflag == 3) wp.RestartOutput();
+                if (params.rstflag == 2 || params.rstflag == 3) wp.RestartOutput();
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, istep); }
+            if (ts.istep % 100 == 0 && myrank == 0) { OutputMessage(iview, ts); }
         }
     }
 

@@ -114,8 +114,8 @@ to create maps, the full matrix/vectors and the KSP.
 
 For each assembled correction:
 
-1. `SolveSystem(NR_it)` calls `AssemblePetscMat()`, delegated to the owner.
-2. `SolveWithPetsc(NR_it)` collects current BC IDs and copies the full native RHS.
+1. `SolveSystem(NR_it, istep)` calls `AssemblePetscMat()`, delegated to the owner.
+2. `SolveWithPetsc(NR_it, istep)` collects current BC IDs and copies the full native RHS.
 3. Eliminate inactive and physical boundary rows/columns with prescribed values.
 4. For MPM, compress directly from the full matrix, drop explicit zeros from the compact copy, solve from zero
    and expand into the full PETSc vector. FEM solves the full matrix.
@@ -318,7 +318,7 @@ The owner supplies the actual PETSc PC type; no separate field-split switch is s
 |--------------|------------|
 | Base `MaterialPoint` callback | HYPRE/BoomerAMG |
 | `StabilizedMPM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
-| `StabilizedFEM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; child PREONLY + BoomerAMG |
+| `StabilizedFEM::NS_` | Velocity/pressure lower Schur, PETSc SELFP; velocity PREONLY + ASM/ILU(0), pressure PREONLY + BoomerAMG |
 | `ImplicitSolidMPM::SM_` | ASM overlap 1; local PREONLY + ILU(1), nonzero shift `1e-3` |
 
 ### 5.1 Stabilized fluid
@@ -334,7 +334,8 @@ The full outer operator remains the assembled physical matrix.
 
 Pure-fluid child options use `-fieldsplit_velocity_*` and
 `-fieldsplit_pressure_*`. These owners set child defaults with
-`PetscOptionsSetValue()`.
+`PetscOptionsSetValue()` only when an option is not already given, so
+command-line values override them.
 
 ### 5.2 Implicit solid
 
@@ -363,7 +364,7 @@ ASM/FieldSplit. It does not delay assembly or compact-matrix value updates.
 | Implicit solid `SM_` | Every step; force next rebuild after more than 2x iteration growth |
 | FEM fluid `NS_` / `PF_` | Every 20 steps; iteration-growth policy enabled |
 
-`NeedsPreconditionerRebuild(NR_it)` consumes a pending forced rebuild. Without
+`NeedsPreconditionerRebuild(NR_it, istep)` consumes a pending forced rebuild. Without
 one, later Newton iterations (`NR_it>0`) do not request scheduled
 reconfiguration; the first correction follows the step cadence.
 

@@ -61,19 +61,21 @@ void FluidDivider::PartitionPoints(int rank_id) {
     return;
 }
 
-void FluidDivider::PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max) {
+void FluidDivider::PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max) {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
 
-    this->BCRenumber(this->partition_points_.ubc, this->points_.ubc, xynodec, xynodecw, cp_min, cp_max);
-    this->BCRenumber(this->partition_points_.vbc, this->points_.vbc, xynodec, xynodecw, cp_min, cp_max);
-    this->BCRenumber(this->partition_points_.wbc, this->points_.wbc, xynodec, xynodecw, cp_min, cp_max);
-    this->BCRenumber(this->partition_points_.pbc, this->points_.pbc, xynodec, xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.ubc, this->points_.ubc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.vbc, this->points_.vbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.wbc, this->points_.wbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
+    this->BCRenumber(this->partition_points_.pbc, this->points_.pbc, cmesh.xynodec, cmesh.xynodecw, cp_min, cp_max);
 
     // Inflow BCs are indexed by background element, not control point.
-    this->BCRenumber(this->partition_points_.uinfbc, this->points_.uinfbc, xyelem, xyelemw, aelemmin, aelemmax,
+    this->BCRenumber(this->partition_points_.uinfbc, this->points_.uinfbc, mesh.xyelem, mesh.xyelemw, mesh.aelemmin, mesh.aelemmax,
                      false);
-    this->BCRenumber(this->partition_points_.vinfbc, this->points_.vinfbc, xyelem, xyelemw, aelemmin, aelemmax,
+    this->BCRenumber(this->partition_points_.vinfbc, this->points_.vinfbc, mesh.xyelem, mesh.xyelemw, mesh.aelemmin, mesh.aelemmax,
                      false);
-    this->BCRenumber(this->partition_points_.winfbc, this->points_.winfbc, xyelem, xyelemw, aelemmin, aelemmax,
+    this->BCRenumber(this->partition_points_.winfbc, this->points_.winfbc, mesh.xyelem, mesh.xyelemw, mesh.aelemmin, mesh.aelemmax,
                      false);
 
     return;

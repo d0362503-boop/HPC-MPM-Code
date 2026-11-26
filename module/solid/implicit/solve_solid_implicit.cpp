@@ -1,19 +1,13 @@
 #include <mpi.h>
 
 #include <array>
-#include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "module/bc.h"
 #include "module/cal_mat.h"
 #include "module/dataset.h"
 #include "module/implicit/newton_solver.h"
-#include "module/map_and_interpolate.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
@@ -40,7 +34,9 @@ void ImplicitSolidMPM::ConfigurePreconditioner(CrsMat &mat, PC pc) {
 }
 
 void ImplicitSolidMPM::UpdateNRIncrement() {
-    for (int n = 0; n < nodec * 3; n++) { this->ndispl[n] += this->SM_.x_lhs[n]; }
+    const ControlMesh &cmesh = this->grid_.cmesh;
+
+    for (int n = 0; n < cmesh.nodec * 3; n++) { this->ndispl[n] += this->SM_.x_lhs[n]; }
 
     return;
 }
@@ -50,7 +46,7 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
                                                                              const std::array<double, 6> &sts_af) {
     double stsmat[3][3];
     for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[idm[i][j]]; }
+        for (int j = 0; j < 3; j++) { stsmat[i][j] = sts_af[kVoigtIndex[i][j]]; }
     }
 
     double ce[3][3][3][3] = {};
@@ -58,7 +54,7 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
         for (int j = 0; j < 3; j++) {
             for (int k = 0; k < 3; k++) {
                 for (int l = 0; l < 3; l++) {
-                    ce[i][j][k][l] = this->cm_.stif_mat[idm[i][j]][idm[k][l]];
+                    ce[i][j][k][l] = this->cm_.stif_mat[kVoigtIndex[i][j]][kVoigtIndex[k][l]];
                     if (NR_flag) ce[i][j][k][l] += stsmat[j][l] * (i == k);
                 }
             }
@@ -77,39 +73,41 @@ std::array<std::array<double, 3>, 3> ImplicitSolidMPM::ComputeTangentModulus(int
     return K_mat;
 }
 
-void ImplicitSolidMPM::SolveSolid() {
+void ImplicitSolidMPM::SolveSolid(const TimeState &ts) {
 
     // --- NR_flag true for nonlinear elasticity and false for linear elasticity ---
     this->max_NR_it = (NR_flag) ? 100 : 0;
 
-    SolveNewton(*this, this->max_NR_it);
+    SolveNewton(*this, ts, this->max_NR_it);
 
     return;
 }
 
 void ImplicitSolidMPM::BeginNewtonStep() {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    this->nvel_k_.assign(nodec * 3, 0.0e0);
-    this->naccel_k_.assign(nodec * 3, 0.0e0);
+    this->nvel_k_.assign(cmesh.nodec * 3, 0.0e0);
+    this->naccel_k_.assign(cmesh.nodec * 3, 0.0e0);
 
     this->stress_k_ = this->InitializeNRStress(); // --- Reset stress for NR ---
 
-    VectorAssign(nodec * 3, this->ndispl); // ---- Reset displacement ----
+    VectorAssign(cmesh.nodec * 3, this->ndispl); // ---- Reset displacement ----
     this->r0r_ = 0.0e0;
 
     return;
 }
 
-void ImplicitSolidMPM::AssembleNewtonSystem() {
+void ImplicitSolidMPM::AssembleNewtonSystem(const TimeState &ts) {
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
-    this->BCNRSet();
+    this->BCNRSet(ts);
 
     this->implicit_.ComputeNodeVelAccelFromDispl(*this, this->nvel_k_, this->naccel_k_); // ---- Newmark beta velocity & acceleration ----
 
     VectorAssign(this->SM_.nmata, this->SM_.amat);
-    VectorAssign(nodec * 3, this->SM_.b_rhs);
-    VectorAssign(nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
-    this->AssembleSystem(this->SM_, this->naccel_k_, this->stress_k_);
+    VectorAssign(cmesh.nodec * 3, this->SM_.b_rhs);
+    VectorAssign(cmesh.nodec * 3, this->SM_.x_lhs); // ---- Initialize LHS x value ----
+    this->AssembleSystem(this->SM_, this->naccel_k_, this->stress_k_, ts);
 
     return;
 }
@@ -124,7 +122,7 @@ bool ImplicitSolidMPM::CheckNewtonConvergence(int NR_it, int ksp_its) {
     return this->SM_.CheckNRConvergence(NR_it, this->max_NR_it, ksp_its, this->r0r_);
 }
 
-int ImplicitSolidMPM::SolveNewtonCorrection(int NR_it) { return this->SM_.SolveSystem(NR_it); }
+int ImplicitSolidMPM::SolveNewtonCorrection(int NR_it, const TimeState &ts) { return this->SM_.SolveSystem(NR_it, ts.istep); }
 
 void ImplicitSolidMPM::EndNewtonStep() {
 
@@ -138,7 +136,9 @@ void ImplicitSolidMPM::EndNewtonStep() {
 }
 
 void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &naccel_k, //
-                                      std::vector<std::array<double, 6>> &stress_k) {
+                                      std::vector<std::array<double, 6>> &stress_k, const TimeState &ts) {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
 
     const std::vector<int> offsets = this->RHSOffsets();
 
@@ -155,11 +155,11 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
 
     VectorAssign(this->num, delta_def_grad);
     VectorAssign(this->num, def_grad_NR);
-    for (int m = 0; m < nelem; m++) {
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
             std::array<double, 3> xyp = this->coord[pid];
-            MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+            MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
 
             this->UpdateDefGrad(pid, nenode, af, ncm, sf, dsf, delta_def_grad, def_grad_NR);
 
@@ -215,7 +215,7 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
                 // --- For Generalized-α (if α_f = 1, back to Newmark-β) ---
                 std::array<double, 3> nfint, nfext;
                 nfint = this->ComputeInternalForce(ni, pid, dsf, sts_af);
-                nfext = this->ComputeExternalForce(pid, sfi);
+                nfext = this->ComputeExternalForce(pid, sfi, ts);
 
                 mat.b_rhs[nid + offsets[0]] += nfint[0] + nfext[0];
                 mat.b_rhs[nid + offsets[1]] += nfint[1] + nfext[1];
@@ -225,11 +225,11 @@ void ImplicitSolidMPM::AssembleSystem(CrsMat &mat, const std::vector<double> &na
         }
     }
 
-    NodeVarComm(mat.b_rhs, offsets);
+    NodeVarComm(this->grid_.part, mat.b_rhs, offsets);
 
-    std::vector<double> naccel_am(nodec * 3);
+    std::vector<double> naccel_am(cmesh.nodec * 3);
     // --- Transfer acceleration to (n+α_m) time interlevel, if α_m = 1, back to Newmark-β) ---
-    for (int n = 0; n < nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
+    for (int n = 0; n < cmesh.nodec * 3; n++) { naccel_am[n] = am * naccel_k[n] + am0 * this->naccel[n]; }
     // --------------------------------------
 
     this->AddInertialForceToRHS(mat, naccel_am, offsets);

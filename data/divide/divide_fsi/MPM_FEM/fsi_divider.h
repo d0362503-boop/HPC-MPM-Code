@@ -3,10 +3,11 @@
 #include "data/divide/divide_solid/solid_divider.h"
 
 #include <string>
-#include <vector>
 
 class MPMFEMFSISolidDivider : public SolidDivider {
   public:
+    using SolidDivider::SolidDivider;
+
     // Expose the base hook implementations for the FSI coordinator.
     using SolidDivider::LoadBoundaryData;
     using SolidDivider::LoadPointData;
@@ -16,6 +17,17 @@ class MPMFEMFSISolidDivider : public SolidDivider {
 
 class MPMFEMFSIFluidDivider {
   public:
+    /**
+     * @brief Bind the FEM-fluid BC sets to the grid being partitioned.
+     * @param grid   Grid being partitioned (global mesh, overwritten with each rank window).
+     * @param params Run parameters of the case.
+     */
+    MPMFEMFSIFluidDivider(Grid &grid, RunParams &params)
+        : grid_(grid), params_(params), mesh_(grid, params), partition_mesh_(grid, params) {}
+
+    Grid &grid_;        // grid being partitioned
+    RunParams &params_; // run parameters of the case
+
     /** @brief Load FEM-fluid velocity/pressure BCs (uwbc/vwbc/wwbc/hpbc). */
     void LoadBoundaryData(std::ifstream &infile);
 
@@ -26,7 +38,7 @@ class MPMFEMFSIFluidDivider {
      *
      * Must be called after the coordinator's MeshPartition.
      */
-    void PartitionBCs(const std::vector<int> &cp_min, const std::vector<int> &cp_max);
+    void PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max);
 
     /** @brief Write partitioned FEM-fluid BCs (uwbc/vwbc/wwbc/hpbc). */
     void WriteBoundaryData(std::ofstream &outfile);
@@ -36,6 +48,15 @@ class MPMFEMFSIFluidDivider {
 };
 
 class MPMFEMFSIDivider : public DataPartitioner {
+  public:
+    /**
+     * @brief Build the coupled partitioner; solid and FEM fluid share `grid` and `params`.
+     * @param grid   Grid being partitioned (global mesh, overwritten with each rank window).
+     * @param params Run parameters of the case.
+     */
+    MPMFEMFSIDivider(Grid &grid, RunParams &params)
+        : DataPartitioner(grid, params), solid_(grid, params), fluid_(grid, params) {}
+
   protected:
     /** @brief Return the MPM-FEM FSI case label. */
     std::string CaseName() const override;

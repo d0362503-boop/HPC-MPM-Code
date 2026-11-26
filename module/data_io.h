@@ -1,11 +1,12 @@
 #pragma once
 
-#include "module/material_point.h"
+#include "module/dataset.h"
+#include "module/mesh.h"
+
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 /**
@@ -98,19 +99,20 @@ void OutputVector(std::ofstream &outfile, const int size0, std::vector<std::arra
 /**
  * @brief Read per-rank MPI domain-decomposition data from a partitioned grid file.
  * @param infile Input file stream positioned at the grid-data header.
+ * @param grid   Grid of this rank; mesh sizes, control-point sizes and partition are written.
  */
-void InputParaGriddata(std::ifstream &infile);
+void InputParaGriddata(std::ifstream &infile, Grid &grid);
 
 /**
  * @brief Print a progress message to stdout showing current step and view index.
  * @param iview Output view index.
- * @param istep Current time step.
+ * @param ts    Current time state (step index and physical time are printed).
  */
-inline void OutputMessage(int iview, int istep) {
+inline void OutputMessage(int iview, const TimeState &ts) {
 
     std::cout << " ===== Now Computing ===== " << "\n";
-    std::cout << "istep:" << std::setw(10) << istep << "\n";
-    std::cout << "time:" << std::setw(15) << real_time << " s" << std::setw(10) //
+    std::cout << "istep:" << std::setw(10) << ts.istep << "\n";
+    std::cout << "time:" << std::setw(15) << ts.real_time << " s" << std::setw(10) //
               << "iview:" << std::setw(10) << iview << "\n";
     std::cout << "========================== " << "\n";
 

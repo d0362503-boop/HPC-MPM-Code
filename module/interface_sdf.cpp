@@ -11,7 +11,8 @@
 
 namespace interface_geometry {
 
-InterfaceSDF::InterfaceSDF(std::vector<double> solid_phi) : solid_phi_(std::move(solid_phi)) {}
+InterfaceSDF::InterfaceSDF(const Grid &grid, std::vector<double> solid_phi)
+    : grid_(grid), solid_phi_(std::move(solid_phi)) {}
 
 double InterfaceSDF::Evaluate(const std::array<double, 3> &point, std::array<double, 3> &gradient) const {
     gradient = {};
@@ -20,13 +21,13 @@ double InterfaceSDF::Evaluate(const std::array<double, 3> &point, std::array<dou
     }
 
     int cell;
-    if (!LocateLocalElement(point, cell)) return 0.0;
+    if (!LocateLocalElement(this->grid_.mesh, point, cell)) return 0.0;
 
     int count;
     std::vector<int> nodes;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
-    MakeSF(cell, point, idimc, xynodec, nodes, count, sf, dsf);
+    MakeSF(this->grid_, cell, point, nodes, count, sf, dsf);
 
     // Subtract the target before interpolation to preserve constant levels.
     double level = 0.0;
@@ -45,13 +46,14 @@ bool InterfaceSDF::FindSurfacePoint(const std::array<double, 3> &point,
     if (!(level > 0.0)) return false;
 
     const double gradient_squared = DotVec3(gradient, gradient);
-    const double min_spacing = *std::min_element(dxy.begin(), dxy.end());
+    const Mesh &mesh = this->grid_.mesh;
+    const double min_spacing = *std::min_element(mesh.dxy.begin(), mesh.dxy.end());
     const double min_gradient = 1.0e-12 / min_spacing;
     if (!std::isfinite(gradient_squared) || gradient_squared <= min_gradient * min_gradient) return false;
 
     const double scale = level / gradient_squared;
     for (int d = 0; d < 3; ++d) {
-        surface_point[d] = std::clamp(point[d] - scale * gradient[d], xyminw[d], xymaxw[d]);
+        surface_point[d] = std::clamp(point[d] - scale * gradient[d], mesh.xyminw[d], mesh.xymaxw[d]);
     }
     return true;
 }

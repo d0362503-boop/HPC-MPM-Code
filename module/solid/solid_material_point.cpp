@@ -2,14 +2,9 @@
 
 #include <array>
 #include <cmath>
-#include <fstream>
-#include <string>
 #include <vector>
 
-#include "module/DLB/mpm_dlb.h"
-#include "module/bc.h"
 #include "module/dataset.h"
-#include "module/material_point.h"
 #include "module/mesh.h"
 #include "module/mpi_data.h"
 #include "module/shape_function.h"
@@ -49,16 +44,17 @@ void SolidMaterialPointBase::InitializePointData() {
 
 void SolidMaterialPointBase::RebuildBC() {
 
-    this->ubc.RebuildLocalControlPointBC();
-    this->vbc.RebuildLocalControlPointBC();
-    this->wbc.RebuildLocalControlPointBC();
+    this->ubc.RebuildLocalControlPointBC(this->grid_);
+    this->vbc.RebuildLocalControlPointBC(this->grid_);
+    this->wbc.RebuildLocalControlPointBC(this->grid_);
 
     return;
 }
 
 void SolidMaterialPointBase::MoveParticle() {
+    const Partition &part = this->grid_.part;
 
-    this->DetermineParticleRank(mpm_dlb::CurrentRegions());
+    this->DetermineParticleRank(part.regions);
 
     if (this->par_comm_.nmps + this->par_comm_.nrps + this->par_comm_.nrmp == 0) return;
 
@@ -117,20 +113,23 @@ void SolidMaterialPointBase::MigrateParticleData() {
 }
 
 void SolidMaterialPointBase::DetermineRigidBC() {
+    const Mesh &mesh = this->grid_.mesh;
+    const ControlMesh &cmesh = this->grid_.cmesh;
+    const RunParams &params = this->params_;
 
     int nenode;
     std::vector<int> ncm;
     std::vector<double> sf;
     std::vector<std::array<double, 3>> dsf;
 
-    VectorAssign(nodec, this->nvof);
-    VectorAssign(nodec * 3, this->nrigid_normal);
-    for (int m = 0; m < nelem; m++) {
+    VectorAssign(cmesh.nodec, this->nvof);
+    VectorAssign(cmesh.nodec * 3, this->nrigid_normal);
+    for (int m = 0; m < mesh.nelem; m++) {
         int pid = this->idepf[m];
         while (pid != -1) {
-            if (iprop[this->matid[pid]] == -1) {
+            if (this->materials_.iprop[this->matid[pid]] == -1) {
                 std::array<double, 3> xyp = {this->coord[pid][0], this->coord[pid][1], this->coord[pid][2]};
-                MakeSF(m, xyp, idimc, xynodec, ncm, nenode, sf, dsf);
+                MakeSF(this->grid_, m, xyp, ncm, nenode, sf, dsf);
                 for (int ni = 0; ni < nenode; ni++) {
                     int nid = ncm[ni];
                     double sfi = sf[ni];
@@ -138,37 +137,37 @@ void SolidMaterialPointBase::DetermineRigidBC() {
                     double dsfi2 = dsf[ni][1];
                     double dsfi3 = dsf[ni][2];
                     this->nvof[nid] += sfi * this->vol[pid];
-                    this->nrigid_normal[nid + nuc] += dsfi1 * this->mass[pid];
-                    this->nrigid_normal[nid + nvc] += dsfi2 * this->mass[pid];
-                    this->nrigid_normal[nid + nwc] += dsfi3 * this->mass[pid];
+                    this->nrigid_normal[nid + cmesh.nuc] += dsfi1 * this->mass[pid];
+                    this->nrigid_normal[nid + cmesh.nvc] += dsfi2 * this->mass[pid];
+                    this->nrigid_normal[nid + cmesh.nwc] += dsfi3 * this->mass[pid];
                 }
             }
             pid = this->idp2p[pid];
         }
     }
 
-    NodeVarComm(this->nvof, 0);
-    NodeVarComm(this->nrigid_normal, {nuc, nvc, nwc});
+    NodeVarComm(this->grid_.part, this->nvof, 0);
+    NodeVarComm(this->grid_.part, this->nrigid_normal, {cmesh.nuc, cmesh.nvc, cmesh.nwc});
 
-    VectorAssign(nodec, this->rigid_bc.nbc);
-    VectorAssign(nodec, this->rigid_bc.fbc);
-    for (int n = 0; n < nodec; n++) {
+    VectorAssign(cmesh.nodec, this->rigid_bc.nbc);
+    VectorAssign(cmesh.nodec, this->rigid_bc.fbc);
+    for (int n = 0; n < cmesh.nodec; n++) {
         if (this->nvof[n] > 0.0e0) {
             this->rigid_bc.nbc[this->rigid_bc.ibc] = n;
             this->rigid_bc.fbc[this->rigid_bc.ibc] = 0.0e0;
             this->rigid_bc.ibc++;
         }
-        const double norm = std::sqrt(std::pow(this->nrigid_normal[n + nuc], 2) + //
-                                      std::pow(this->nrigid_normal[n + nvc], 2) + //
-                                      std::pow(this->nrigid_normal[n + nwc], 2));
-        if (norm > mtol) {
-            this->nrigid_normal[n + nuc] /= norm;
-            this->nrigid_normal[n + nvc] /= norm;
-            this->nrigid_normal[n + nwc] /= norm;
+        const double norm = std::sqrt(std::pow(this->nrigid_normal[n + cmesh.nuc], 2) + //
+                                      std::pow(this->nrigid_normal[n + cmesh.nvc], 2) + //
+                                      std::pow(this->nrigid_normal[n + cmesh.nwc], 2));
+        if (norm > params.mtol) {
+            this->nrigid_normal[n + cmesh.nuc] /= norm;
+            this->nrigid_normal[n + cmesh.nvc] /= norm;
+            this->nrigid_normal[n + cmesh.nwc] /= norm;
         } else {
-            this->nrigid_normal[n + nuc] = 0.0e0;
-            this->nrigid_normal[n + nvc] = 0.0e0;
-            this->nrigid_normal[n + nwc] = 0.0e0;
+            this->nrigid_normal[n + cmesh.nuc] = 0.0e0;
+            this->nrigid_normal[n + cmesh.nvc] = 0.0e0;
+            this->nrigid_normal[n + cmesh.nwc] = 0.0e0;
         }
     }
 
@@ -207,9 +206,9 @@ void SolidMaterialPointBase::UpdateConstitutiveModel(int pid, std::vector<std::a
     std::array<std::array<double, 3>, 3> F = def_grad[pid];
     std::array<std::array<double, 3>, 3> dF = delta_def_grad[pid];
 
-    int ipp = iprop[this->matid[pid]];
+    int ipp = this->materials_.iprop[this->matid[pid]];
 
-    cm_.UpdateStress(ipp, stress[pid], F, dF, mat_prop[this->matid[pid]], //
+    cm_.UpdateStress(ipp, stress[pid], F, dF, this->materials_.mat_prop[this->matid[pid]], //
                      this->det_def_grad[pid], det_def_grad_bar[pid]);
 
     return;

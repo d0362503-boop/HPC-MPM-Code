@@ -5,7 +5,6 @@
 
 #include "data/generate/output_util.h"
 #include "module/data_io.h"
-#include "module/dataset.h"
 #include "module/mesh.h"
 
 int DataGenerator::Run() {
@@ -28,12 +27,14 @@ int DataGenerator::Run() {
 }
 
 void DataGenerator::BuildData() {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
 
     this->InitializeGridGeometry();
 
-    BuildMesh();
+    BuildMesh(mesh);
 
-    BuildControlPoint();
+    BuildControlPoint(mesh, cmesh);
 
     this->CreateBCs();
 
@@ -47,17 +48,19 @@ void DataGenerator::CreateBCs() { throw std::logic_error("DataGenerator requires
 void DataGenerator::CreateParticles() { throw std::logic_error("DataGenerator requires a CreateParticles override."); }
 
 void DataGenerator::InitializeGridGeometry() {
+    Mesh &mesh = this->grid_.mesh;
+    ControlMesh &cmesh = this->grid_.cmesh;
 
     for (int i = 0; i < 3; ++i) {
-        dxy[i] = (xymax[i] - xymin[i]) / static_cast<double>(xyelem[i]);
-        aelemmin[i] = 0;
-        aelemmax[i] = xyelem[i] - 1;
-        xynode[i] = xyelem[i] + 1;
-        xynodec[i] = xyelem[i] + idimc[i];
+        mesh.dxy[i] = (mesh.xymax[i] - mesh.xymin[i]) / static_cast<double>(mesh.xyelem[i]);
+        mesh.aelemmin[i] = 0;
+        mesh.aelemmax[i] = mesh.xyelem[i] - 1;
+        mesh.xynode[i] = mesh.xyelem[i] + 1;
+        cmesh.xynodec[i] = mesh.xyelem[i] + cmesh.idimc[i];
     }
-    nelem = xyelem[0] * xyelem[1] * xyelem[2];
-    node = xynode[0] * xynode[1] * xynode[2];
-    nodec = xynodec[0] * xynodec[1] * xynodec[2];
+    mesh.nelem = mesh.xyelem[0] * mesh.xyelem[1] * mesh.xyelem[2];
+    mesh.node = mesh.xynode[0] * mesh.xynode[1] * mesh.xynode[2];
+    cmesh.nodec = cmesh.xynodec[0] * cmesh.xynodec[1] * cmesh.xynodec[2];
 
     return;
 }
@@ -65,7 +68,7 @@ void DataGenerator::InitializeGridGeometry() {
 void DataGenerator::WriteGridDataFile(const std::string &filename) {
 
     std::ofstream outfile = OpenOutputFile(filename);
-    WriteGlobalMeshHeader(outfile);
+    WriteGlobalMeshHeader(outfile, this->grid_);
     this->WriteBCData(outfile);
 
     return;

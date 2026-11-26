@@ -1,6 +1,8 @@
 #include "data/divide/divide_fluid/fluid_divider.h"
 
 int main() {
-    FluidDivider divider;
+    Grid grid;
+    RunParams params;
+    FluidDivider divider(grid, params);
     return divider.Run();
 }
