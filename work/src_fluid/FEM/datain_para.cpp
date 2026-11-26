@@ -13,46 +13,46 @@
 
 using namespace stabilizedfem;
 
-void StabilizedFEM::DataInput() {
+void StabilizedFEM::DataInput(Grid &grid, RunParams &params) {
 
     std::ifstream infile = OpenInputFile("file.dat");
-    getline(infile, parafile);
-    getline(infile, gridfile);
-    getline(infile, pointfile);
-    getline(infile, outfile);
+    getline(infile, params.parafile);
+    getline(infile, params.gridfile);
+    getline(infile, params.pointfile);
+    getline(infile, params.outfile);
     infile.close();
 
-    infile = OpenInputFile(parafile);
+    infile = OpenInputFile(params.parafile);
     infile.ignore(1000, '\n');
-    infile >> rstflag >> nlstep;
-    infile.ignore(1000, '\n');
-
-    infile.ignore(1000, '\n');
-    infile >> ista >> iend >> iout;
+    infile >> params.rstflag >> params.nlstep;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->integrator_.spec_rad;
+    infile >> params.ista >> params.iend >> params.iout;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xyminw[i];
+    infile >> params.dt >> params.mtol >> this->integrator_.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xymaxw[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xyminw[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xyelemw[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xymaxw[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> idimc[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xyelemw[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> npxye[i];
+    for (int i = 0; i < 3; i++) infile >> grid.cmesh.idimc[i];
+    infile.ignore(1000, '\n');
+
+    infile.ignore(1000, '\n');
+    for (int i = 0; i < 3; i++) infile >> params.npxye[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -60,27 +60,27 @@ void StabilizedFEM::DataInput() {
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> bb[i];
+    for (int i = 0; i < 3; i++) infile >> params.bb[i];
     infile.ignore(1000, '\n');
 
     infile.close();
 
-    InitializeMeshAndTimeParameters(g_params, g_grid);
+    InitializeMeshAndTimeParameters(params, grid);
 
     // --- Generalized α parameter Init ---
     this->integrator_.GeneralizedAlphaParaSet();
     // --------------------------------
 
-    std::string filename = gridfile + std::to_string(myrank) + ".txt";
+    std::string filename = params.gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);
 
-    InputParaGriddata(infile, g_grid);
+    InputParaGriddata(infile, grid);
     // --- Input Fluid BC ---
     this->InputBCData(infile);
 
     infile.close();
 
-    if (rstflag == 0 || rstflag == 2) { this->InitializeMeshData(); }
+    if (params.rstflag == 0 || params.rstflag == 2) { this->InitializeMeshData(); }
 
     return;
 }

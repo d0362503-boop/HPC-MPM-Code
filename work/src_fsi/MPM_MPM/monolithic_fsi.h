@@ -30,8 +30,12 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
     std::vector<double> column_scale; // linear increment scaling factors
 
     // Driver operations and physics callbacks.
-    /** @brief Configure ten coupled components and the 37 stored fluid-solid-multiplier blocks. */
-    MPMMPMMonolithicFSI();
+    /**
+     * @brief Configure ten coupled components and the 37 stored fluid-solid-multiplier blocks.
+     * @param grid   Grid of this rank, shared by fluid, solid and the coupled system.
+     * @param params Run parameters of this run.
+     */
+    MPMMPMMonolithicFSI(const Grid &grid, const RunParams &params);
 
     /** @brief Release the coupled PETSc solver and compact equation resources. */
     ~MPMMPMMonolithicFSI();
@@ -41,8 +45,10 @@ class MPMMPMMonolithicFSI : public MaterialPoint, public NonlinearProblem {
      *
      * Loads shared global parameters, then dispatches fluid and solid
      * boundary-condition/particle input to the corresponding sub-solvers.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Solve the coupled fields with interface endpoint-velocity continuity.

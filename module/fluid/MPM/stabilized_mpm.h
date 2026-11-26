@@ -33,7 +33,12 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
     std::vector<int> blocks; // target scalar block indices
     int rhs_start;           // first target component index
 
-    StabilizedMPM() {
+    /**
+     * @brief Configure the MPM Navier-Stokes system and inflow buffer on this rank's grid.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    StabilizedMPM(const Grid &grid, const RunParams &params) : MaterialPoint(grid, params), ifp(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->do_dlb = false;
@@ -49,8 +54,12 @@ class StabilizedMPM : public MaterialPoint, public NonlinearProblem {
         this->NS_.owner_ = this;
     }
 
-    /** @brief Read fluid parameters and initialize state. */
-    void DataInput();
+    /**
+     * @brief Read fluid parameters and initialize state.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
+     */
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Read fluid boundary-condition data from input stream.

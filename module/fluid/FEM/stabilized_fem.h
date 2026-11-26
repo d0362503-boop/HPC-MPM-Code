@@ -40,7 +40,12 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
      */
     void ConfigurePreconditioner(CrsMat &mat, PC pc) override;
 
-    StabilizedFEM() {
+    /**
+     * @brief Configure the four-component Navier-Stokes system on this rank's grid.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    StabilizedFEM(const Grid &grid, const RunParams &params) : MaterialPoint(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         this->rhs_start = 0;
         this->integrator_.ode_order = 1;
@@ -63,8 +68,10 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Read `file.dat`, the fluid parameter file and this rank's grid data for a
      *        stand-alone FEM fluid run (defined by the `work/src_fluid/FEM` driver).
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Read fluid boundary-condition data from input stream.

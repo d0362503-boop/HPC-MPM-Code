@@ -13,6 +13,13 @@
 
 class SolidMaterialPointBase : public MaterialPoint {
   public:
+    /**
+     * @brief Bind the solid material-point set to this rank's grid.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    SolidMaterialPointBase(const Grid &grid, const RunParams &params) : MaterialPoint(grid, params) {}
+
     bool Fbar_flag = false;
     MaterialTable materials_; // solid material models and properties
     // --- Data Initialize ---

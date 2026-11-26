@@ -24,8 +24,12 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
     std::vector<int> blocks;      // target scalar block indices
     int rhs_start;           // first target component index
 
-    /** @brief Initialize the three-component implicit solid system and its PETSc owner. */
-    ImplicitSolidMPM() {
+    /**
+     * @brief Initialize the three-component implicit solid system and its PETSc owner.
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    ImplicitSolidMPM(const Grid &grid, const RunParams &params) : SolidMaterialPointBase(grid, params) {
         this->blocks = {0, 1, 2, 3, 4, 5, 6, 7, 8};
         this->rhs_start = 0;
         this->NR_flag = true;
@@ -45,8 +49,10 @@ class ImplicitSolidMPM : public SolidMaterialPointBase, public NonlinearProblem 
 
     /**
      * @brief Read and initialize standalone implicit-solid input data.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Map solid particle mass/volume/momentum/force to control points (P2G).

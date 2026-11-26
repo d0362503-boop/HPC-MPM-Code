@@ -15,48 +15,48 @@
 
 using namespace implicitmpm;
 
-void ImplicitSolidMPM::DataInput() {
+void ImplicitSolidMPM::DataInput(Grid &grid, RunParams &params) {
 
     std::ifstream infile = OpenInputFile("file.dat");
-    getline(infile, parafile);
-    getline(infile, gridfile);
-    getline(infile, pointfile);
-    getline(infile, outfile);
+    getline(infile, params.parafile);
+    getline(infile, params.gridfile);
+    getline(infile, params.pointfile);
+    getline(infile, params.outfile);
     infile.close();
 
-    infile = OpenInputFile(parafile);
+    infile = OpenInputFile(params.parafile);
     infile.ignore(1000, '\n');
     std::string solswitch_str;
-    infile >> solswitch_str >> rstflag >> nlstep;
+    infile >> solswitch_str >> params.rstflag >> params.nlstep;
     this->solswitch = ParseMapScheme(solswitch_str);
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> ista >> iend >> iout;
+    infile >> params.ista >> params.iend >> params.iout;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    infile >> dt >> mtol >> this->implicit_.integrator_.spec_rad;
+    infile >> params.dt >> params.mtol >> this->implicit_.integrator_.spec_rad;
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xyminw[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xyminw[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xymaxw[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xymaxw[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> xyelemw[i];
+    for (int i = 0; i < 3; i++) infile >> grid.mesh.xyelemw[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> idimc[i];
+    for (int i = 0; i < 3; i++) infile >> grid.cmesh.idimc[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> npxye[i];
+    for (int i = 0; i < 3; i++) infile >> params.npxye[i];
     infile.ignore(1000, '\n');
 
     infile.ignore(1000, '\n');
@@ -75,28 +75,28 @@ void ImplicitSolidMPM::DataInput() {
     }
 
     infile.ignore(1000, '\n');
-    for (int i = 0; i < 3; i++) infile >> bb[i];
+    for (int i = 0; i < 3; i++) infile >> params.bb[i];
     infile.ignore(1000, '\n');
     infile.close();
 
-    InitializeMeshAndTimeParameters(g_params, g_grid);
+    InitializeMeshAndTimeParameters(params, grid);
 
     // --- Generalized α & Newmark β parameter Init ---
     this->implicit_.integrator_.GeneralizedAlphaParaSet();
-    this->implicit_.integrator_.NewmarkBetaParaSet(dt);
+    this->implicit_.integrator_.NewmarkBetaParaSet(params.dt);
     // --------------------------------
 
-    std::string filename = gridfile + std::to_string(myrank) + ".txt";
+    std::string filename = params.gridfile + std::to_string(myrank) + ".txt";
     infile = OpenInputFile(filename);
 
-    InputParaGriddata(infile, g_grid);
+    InputParaGriddata(infile, grid);
     // --- solid boundary condition ---
     this->InputBCData(infile);
 
     infile.close();
 
-    if (rstflag == 0 || rstflag == 2) {
-        filename = pointfile + std::to_string(myrank) + ".txt";
+    if (params.rstflag == 0 || params.rstflag == 2) {
+        filename = params.pointfile + std::to_string(myrank) + ".txt";
         infile = OpenInputFile(filename);
 
         this->InputPointData(infile);

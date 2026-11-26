@@ -15,7 +15,11 @@ class FSIFluid : public stabilizedfem::StabilizedFEM {
   public:
     MPMFEMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSIFluid(MPMFEMBlockFSI &fsi) : fsi_(fsi) {}
+    /**
+     * @brief Bind to the FSI coordinator and share its grid and run parameters.
+     * @param fsi Coordinator owning this sub-solver.
+     */
+    explicit FSIFluid(MPMFEMBlockFSI &fsi);
 
     // ---- Boundary Condition Overrides ----
     // --- For PETSc ---
@@ -36,7 +40,11 @@ class FSISolid : public implicitmpm::ImplicitSolidMPM {
   public:
     MPMFEMBlockFSI &fsi_; // Reference back to the FSI coordinator
 
-    FSISolid(MPMFEMBlockFSI &fsi) : fsi_(fsi) {}
+    /**
+     * @brief Bind to the FSI coordinator and share its grid and run parameters.
+     * @param fsi Coordinator owning this sub-solver.
+     */
+    explicit FSISolid(MPMFEMBlockFSI &fsi);
 
     double ComputeNRLumpedMassMat(int pid, double sfi) const noexcept override;
 
@@ -80,7 +88,13 @@ class MPMFEMBlockFSI {
     // -----------------------------------------------------------------
     // Constructor: pass *this to sub-solvers
     // -----------------------------------------------------------------
-    MPMFEMBlockFSI() : grid_(g_grid), params_(g_params), fluid_(*this), solid_(*this) {}
+    /**
+     * @brief Build the coupled solver; both sub-solvers share `grid` and `params`.
+     * @param grid   Grid of this rank, shared by fluid and solid.
+     * @param params Run parameters of this run.
+     */
+    MPMFEMBlockFSI(const Grid &grid, const RunParams &params)
+        : grid_(grid), params_(params), fluid_(*this), solid_(*this) {}
 
     std::vector<double> added_mass;
     std::vector<double> nfsi_force;
@@ -90,8 +104,10 @@ class MPMFEMBlockFSI {
      *
      * Loads shared global parameters, then dispatches fluid and solid
      * boundary-condition/particle input to the corresponding sub-solvers.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     void DetectFSIInterface();
 

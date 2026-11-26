@@ -14,7 +14,8 @@
 
 using namespace mpm_mpm_monolithic_fsi;
 
-MPMMPMMonolithicFSI::MPMMPMMonolithicFSI() {
+MPMMPMMonolithicFSI::MPMMPMMonolithicFSI(const Grid &grid, const RunParams &params)
+    : MaterialPoint(grid, params), fluid_(grid, params), solid_(grid, params) {
     this->fluid_.blocks = {0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18};
     this->solid_.blocks = {19, 20, 21, 23, 24, 25, 27, 28, 29};
     this->fluid_.rhs_start = 0;

@@ -15,12 +15,21 @@ namespace explicitmpm {
 
 class ExplicitSolidMPM : public SolidMaterialPointBase {
   public:
-    ExplicitSolidMPM() { this->do_dlb = false; }
+    /**
+     * @brief Bind the explicit solid solver to this rank's grid (DLB disabled).
+     * @param grid   Grid of this rank (background mesh, control points and partition).
+     * @param params Run parameters of this run.
+     */
+    ExplicitSolidMPM(const Grid &grid, const RunParams &params) : SolidMaterialPointBase(grid, params) {
+        this->do_dlb = false;
+    }
 
     /**
      * @brief Read and initialize standalone explicit-solid input data.
+     * @param grid   Grid of this rank; mesh, control-point and partition data are read into it.
+     * @param params Run parameters; filled from file.dat and the parameter file.
      */
-    void DataInput();
+    void DataInput(Grid &grid, RunParams &params);
 
     /**
      * @brief Map solid particle mass/volume/momentum/force to control points (P2G).

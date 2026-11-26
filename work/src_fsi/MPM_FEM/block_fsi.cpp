@@ -25,6 +25,10 @@
 
 using namespace mpmfemblockfsi;
 
+FSIFluid::FSIFluid(MPMFEMBlockFSI &fsi) : StabilizedFEM(fsi.grid_, fsi.params_), fsi_(fsi) {}
+
+FSISolid::FSISolid(MPMFEMBlockFSI &fsi) : ImplicitSolidMPM(fsi.grid_, fsi.params_), fsi_(fsi) {}
+
 void MPMFEMBlockFSI::DetectFSIInterface() {
     const ControlMesh &cmesh = this->grid_.cmesh;
 

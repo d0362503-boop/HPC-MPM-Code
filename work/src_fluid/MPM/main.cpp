@@ -11,57 +11,63 @@ int main(int argc, char *argv[]) {
     const double start_time = InitializeSimulation(argc, argv);
 
     {
-        StabilizedMPM wp;
+        // Transitional: CrsMat still reads the global grid, run parameters and step index, so the
+        // driver works on the global instances until CrsMat takes them explicitly.
+        Grid &grid = g_grid;
+        RunParams &params = g_params;
+        TimeState &ts = g_time;
 
-        wp.DataInput();
+        StabilizedMPM wp(grid, params);
 
-        if (rstflag == 1 || rstflag == 3) wp.RestartInput();
+        wp.DataInput(grid, params);
 
-        BuildMesh(g_grid.mesh);
+        if (params.rstflag == 1 || params.rstflag == 3) wp.RestartInput();
 
-        BuildControlPoint(g_grid.mesh, g_grid.cmesh);
+        BuildMesh(grid.mesh);
+
+        BuildControlPoint(grid.mesh, grid.cmesh);
 
         wp.NS_.BuildCrsMat(16);
 
-        ComputeNodalVol(g_params, g_grid);
+        ComputeNodalVol(params, grid);
 
-        istep = ista - 1;
-        int iview = istep / iout;
-        real_time = dt * double(istep);
+        ts.istep = params.ista - 1;
+        int iview = ts.istep / params.iout;
+        ts.real_time = params.dt * double(ts.istep);
 
-        wp.OutputPointDataVTKHDF(iview, g_time);
+        wp.OutputPointDataVTKHDF(iview, ts);
 
-        for (istep = ista; istep <= iend; istep++) {
+        for (ts.istep = params.ista; ts.istep <= params.iend; ts.istep++) {
 
             // -----------------------------------------------
-            real_time = dt * double(istep);
-            if (istep <= nlstep) {
-                facl = dlstep * double(istep);
+            ts.real_time = params.dt * double(ts.istep);
+            if (ts.istep <= params.nlstep) {
+                ts.facl = params.dlstep * double(ts.istep);
             } else {
-                facl = 1.0e0;
+                ts.facl = 1.0e0;
             }
             // -----------------------------------------------
 
             wp.MeshPointLinklist();
 
-            wp.Particle2Node(g_time);
+            wp.Particle2Node(ts);
 
-            wp.SolveNS(g_time);
+            wp.SolveNS(ts);
 
-            wp.Node2Particle(g_time);
+            wp.Node2Particle(ts);
 
-            const bool is_dlb_step = wp.do_dlb && (istep % iout == 0);
+            const bool is_dlb_step = wp.do_dlb && (ts.istep % params.iout == 0);
 
-            (nprocs != 1 && is_dlb_step) ? wp.ApplyDLB(g_grid) : wp.MoveParticle();
+            (nprocs != 1 && is_dlb_step) ? wp.ApplyDLB(grid) : wp.MoveParticle();
 
-            if (istep % iout == 0) {
+            if (ts.istep % params.iout == 0) {
                 iview++;
-                wp.OutputPointDataVTKHDF(iview, g_time);
+                wp.OutputPointDataVTKHDF(iview, ts);
 
-                if (rstflag == 2 || rstflag == 3) wp.RestartOutput();
+                if (params.rstflag == 2 || params.rstflag == 3) wp.RestartOutput();
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, g_time); }
+            if (ts.istep % 100 == 0 && myrank == 0) { OutputMessage(iview, ts); }
         }
     }
 

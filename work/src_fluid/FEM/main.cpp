@@ -11,15 +11,21 @@ int main(int argc, char *argv[]) {
     const double start_time = InitializeSimulation(argc, argv);
 
     {
-        StabilizedFEM fluid;
+        // Transitional: CrsMat still reads the global grid, run parameters and step index, so the
+        // driver works on the global instances until CrsMat takes them explicitly.
+        Grid &grid = g_grid;
+        RunParams &params = g_params;
+        TimeState &ts = g_time;
 
-        fluid.DataInput();
+        StabilizedFEM fluid(grid, params);
 
-        if (rstflag == 1 || rstflag == 3) fluid.RestartInput();
+        fluid.DataInput(grid, params);
 
-        BuildMesh(g_grid.mesh);
+        if (params.rstflag == 1 || params.rstflag == 3) fluid.RestartInput();
 
-        BuildControlPoint(g_grid.mesh, g_grid.cmesh);
+        BuildMesh(grid.mesh);
+
+        BuildControlPoint(grid.mesh, grid.cmesh);
 
         fluid.BuildSubcellPoints();
 
@@ -29,41 +35,41 @@ int main(int argc, char *argv[]) {
 
         fluid.NS_.BuildCrsMat(16);
 
-        ComputeNodalVol(g_params, g_grid);
+        ComputeNodalVol(params, grid);
 
-        istep = ista - 1;
-        int iview = istep / iout;
-        real_time = dt * double(istep);
+        ts.istep = params.ista - 1;
+        int iview = ts.istep / params.iout;
+        ts.real_time = params.dt * double(ts.istep);
 
         fluid.Cp2NodeVTK();
-        fluid.OutputMeshDataVTKHDF(iview, g_time);
+        fluid.OutputMeshDataVTKHDF(iview, ts);
 
-        for (istep = ista; istep <= iend; istep++) {
+        for (ts.istep = params.ista; ts.istep <= params.iend; ts.istep++) {
 
             // -----------------------------------------------
-            real_time = dt * double(istep);
-            if (istep <= nlstep) {
-                facl = dlstep * double(istep);
+            ts.real_time = params.dt * double(ts.istep);
+            if (ts.istep <= params.nlstep) {
+                ts.facl = params.dlstep * double(ts.istep);
             } else {
-                facl = 1.0e0;
+                ts.facl = 1.0e0;
             }
             // -----------------------------------------------
 
             fluid.SetPFDomain();
 
-            fluid.SolveNS(g_time);
+            fluid.SolveNS(ts);
 
             fluid.CommitNodalSolution();
 
-            if (istep % iout == 0) {
+            if (ts.istep % params.iout == 0) {
                 iview++;
                 fluid.Cp2NodeVTK();
-                fluid.OutputMeshDataVTKHDF(iview, g_time);
+                fluid.OutputMeshDataVTKHDF(iview, ts);
 
-                if (rstflag == 2 || rstflag == 3) fluid.RestartOutput();
+                if (params.rstflag == 2 || params.rstflag == 3) fluid.RestartOutput();
             }
 
-            if (istep % 100 == 0 && myrank == 0) { OutputMessage(iview, g_time); }
+            if (ts.istep % 100 == 0 && myrank == 0) { OutputMessage(iview, ts); }
         }
     }
 
