@@ -89,11 +89,11 @@ Per-rank files append the rank number to the input prefix, for example `griddata
 ### Background Launcher and Logging
 
 The host-local, gitignored `build/run.sh` launches a driver in the background. Pass the driver directory as `RUN_DIR`;
-the script runs the executable it finds there with that directory's `file.dat`. When the directory holds several executables (for example the validation programs next to `MPM_MPM_FSI`), choose one with `EXE=<name>`:
+the script runs that directory's driver with its `file.dat`. The driver is the CMake target named in the directory's `driver.txt`, which `mpm_add_driver()` generates at configure time:
 
 ```bash
 # from build/, with matching four-rank input
-EXE=MPM_MPM_FSI sh run.sh 4 work/src_fsi/MPM_MPM
+sh run.sh 4 work/src_fsi/MPM_MPM
 ```
 
 The process count is required, as the first argument or `NP`, and must match the input partition count. An optional `CPU_LIST` (for example `0-15`, default `auto`) selects the CPUs: `auto` picks idle physical cores, one rank per core, and the script stops if not enough are idle. Cluster copies may use different CPU-binding policies, so inspect the installed script.

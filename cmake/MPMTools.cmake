@@ -88,7 +88,8 @@ endfunction()
 # ----------------------------------------------------------------------------
 # Add one solver driver executable built from all .cpp files in the calling
 # directory. The executable is written to the driver's own build directory,
-# for example build/work/src_fsi/MPM_MPM/MPM_MPM_FSI, next to its file.dat.
+# for example build/work/src_fsi/MPM_MPM/MPM_MPM_FSI, next to its file.dat and
+# a generated driver.txt that holds the executable name.
 #
 # Usage:
 #   mpm_add_driver(<target>)
@@ -100,6 +101,8 @@ function(mpm_add_driver target)
     target_link_libraries(${target} PRIVATE mpm_modules)
     set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     set_property(GLOBAL APPEND PROPERTY MPM_DRIVERS ${target})
+    # driver.txt names this directory's driver executable for build/run.sh.
+    file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/driver.txt CONTENT "$<TARGET_FILE_NAME:${target}>\n")
 endfunction()
 
 # ----------------------------------------------------------------------------
