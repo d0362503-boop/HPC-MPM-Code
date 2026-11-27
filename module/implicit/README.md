@@ -6,9 +6,9 @@ physics-specific Newton steps stay in each solver; linear algebra stays in
 
 | File | Contents | Used by |
 |------|----------|---------|
-| `generalized_alpha_integrator.h/.cpp` | `GeneralizedAlphaIntegrator`: generalized-α / Newmark-β coefficients and displacement-to-velocity/acceleration relations | `ImplicitMPM`, `StabilizedFEM` |
+| `generalized_alpha_integrator.h/.cpp` | `GeneralizedAlphaIntegrator`: generalized-α / Newmark-β coefficients, first-order velocity-to-acceleration update, and second-order displacement-to-velocity/acceleration update | `ImplicitMPM`, `StabilizedFEM` |
 | `implicit_mpm.h/.cpp` | `ImplicitMPM` component (owned as `implicit_`): endpoint kinematics, lumped mass, inertial force, nodal and particle commits | `ImplicitSolidMPM`, `StabilizedMPM` |
-| `newton_solver.h/.cpp` | `NonlinearProblem` interface and `SolveNewton()` loop | `ImplicitSolidMPM`, `StabilizedMPM`, `MPMMPMMonolithicFSI` |
+| `newton_solver.h/.cpp` | `NonlinearProblem` interface and `SolveNewton()` loop | `ImplicitSolidMPM`, `StabilizedMPM`, `StabilizedFEM`, `MPMMPMMonolithicFSI` |
 
 `ImplicitMPM` holds only implicit state; each function takes the owning
 `MaterialPoint` and reads (`const`) or writes its arrays.

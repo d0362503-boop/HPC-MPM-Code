@@ -41,10 +41,16 @@ class MPMMPMFSIDivider : public DataPartitioner {
     /** @brief Return the MPM-MPM FSI case label. */
     std::string CaseName() const override;
 
-    /** @brief Load solid then fluid boundary conditions (file block order). */
+    /**
+     * @brief Load solid then fluid boundary conditions (file block order).
+     * @param infile Input stream positioned at the first solid boundary-condition block.
+     */
     void LoadBoundaryData(std::ifstream &infile) override;
 
-    /** @brief Load solid then fluid particle records (file block order). */
+    /**
+     * @brief Load solid then fluid particle records (file block order).
+     * @param infile Input stream positioned at the global solid particle section.
+     */
     void LoadPointData(std::ifstream &infile) override;
 
     /**
@@ -56,10 +62,16 @@ class MPMMPMFSIDivider : public DataPartitioner {
      */
     void PartitionProcess(int rank_id) override;
 
-    /** @brief Write solid then fluid partitioned boundary conditions. */
+    /**
+     * @brief Write solid then fluid partitioned boundary conditions.
+     * @param outfile Output stream for this rank's solid and fluid boundary-condition blocks.
+     */
     void WriteBoundaryData(std::ofstream &outfile) override;
 
-    /** @brief Write solid then fluid partitioned particle records. */
+    /**
+     * @brief Write solid then fluid partitioned particle records.
+     * @param outfile Output stream for this rank's solid and fluid particle records.
+     */
     void WritePointData(std::ofstream &outfile) override;
 
   private:

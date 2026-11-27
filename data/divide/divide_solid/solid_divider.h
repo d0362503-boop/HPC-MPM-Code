@@ -40,18 +40,33 @@ class SolidDivider : public DataPartitioner {
     /** @brief Return the solid case label. */
     std::string CaseName() const override;
 
-    /** @brief Load solid velocity boundary conditions (usbc/vsbc/wsbc). */
+    /**
+     * @brief Load solid velocity boundary conditions (usbc/vsbc/wsbc).
+     * @param infile Input stream positioned at the global solid boundary-condition blocks.
+     */
     void LoadBoundaryData(std::ifstream &infile) override;
 
-    /** @brief Load solid particle records (id, material, surface flag, mass, volume). */
+    /**
+     * @brief Load solid particle records (id, material, surface flag, mass, volume).
+     * @param infile Input stream positioned at the global solid particle records.
+     */
     void LoadPointData(std::ifstream &infile) override;
 
-    /** @brief Run point partitioning, mesh windowing, and BC renumbering for one rank. */
+    /**
+     * @brief Run point partitioning, mesh windowing, and BC renumbering for one rank.
+     * @param rank_id MPI rank whose solid partition is being built.
+     */
     void PartitionProcess(int rank_id) override;
 
-    /** @brief Write partitioned solid boundary conditions (usbc/vsbc/wsbc). */
+    /**
+     * @brief Write partitioned solid boundary conditions (usbc/vsbc/wsbc).
+     * @param outfile Output stream for this rank's solid boundary-condition blocks.
+     */
     void WriteBoundaryData(std::ofstream &outfile) override;
 
-    /** @brief Write partitioned solid particle records. */
+    /**
+     * @brief Write partitioned solid particle records.
+     * @param outfile Output stream for this rank's solid particle records.
+     */
     void WritePointData(std::ofstream &outfile) override;
 };

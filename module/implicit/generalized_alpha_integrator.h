@@ -23,7 +23,7 @@ class GeneralizedAlphaIntegrator {
     /**
      * @brief Compute alpha and Newmark weights from the spectral radius and equation order.
      * @pre ode_order is 1 or 2 and spec_rad is in [0, 1].
-     * @note Call NewmarkBetaParaSet after this method to refresh time-step coefficients.
+     * @note Call NewmarkBetaParaSet after this method when recovering kinematics from a displacement increment.
      */
     void GeneralizedAlphaParaSet();
 
@@ -34,7 +34,7 @@ class GeneralizedAlphaIntegrator {
     void NewmarkBetaParaSet(double dt);
 
     /**
-     * @brief Recover endpoint acceleration from the Newmark velocity relation.
+     * @brief Recover endpoint acceleration from the first-order generalized-alpha velocity update.
      * @param velocity Endpoint velocity components.
      * @param old_velocity Previous-step velocity components.
      * @param old_acceleration Previous-step acceleration components.

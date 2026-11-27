@@ -27,10 +27,10 @@ SolidMaterialPointBase
 
 ### Public Interface
 
-- `DataInput()` — loads the standalone implicit-solid case input (orchestration file, parameter file, mesh/time scalars, BC data, particle data).
-- `Particle2Node()` — P2G transfer for mass, volume, momentum, and force.
-- `Node2Particle()` — G2P transfer and particle kinematic update.
-- `SolveSolid()` — driver for one implicit time step.
+- `DataInput(grid, params)` — loads the standalone implicit-solid case input (orchestration file, parameter file, mesh/time scalars, BC data, particle data).
+- `Particle2Node(ts)` — P2G transfer for mass, volume, momentum, and force.
+- `Node2Particle(ts)` — G2P transfer and particle kinematic update.
+- `SolveSolid(ts)` — driver for one implicit time step.
 
 ### Assembly Helpers / Overrides
 
@@ -38,7 +38,7 @@ The following overrides are invoked polymorphically through the `MaterialPoint` 
 
 - `BuildPetscBCList(CrsMat& mat)` — collects 3-DOF BC global IDs (`ubc`, `vbc`, `wbc`, `rigid_bc`) for PETSc.
 - `BCResidualSet(std::vector<double>& rr)` — zeroes constrained DOFs in a residual vector.
-- `BCNRSet()` — sets Dirichlet values for the current NR iteration.
+- `BCNRSet(ts)` — sets Dirichlet values for the current NR iteration.
 - `UpdateNRIncrement()` — applies the converged Newton correction `SM_.x_lhs` to `ndispl`.
 - `AssembleSystem(...)` — assembles the tangent matrix `SM_.amat` and residual `SM_.b_rhs`.
 - `ConfigurePreconditioner(CrsMat &mat, PC pc)` — selects standalone solid ASM/ILU(1).
@@ -110,7 +110,7 @@ Then, for each node pair `(ni, nj)`:
 The assembled matrix is stored in `SM_.amat`, RHS in `SM_.b_rhs`.
 
 The stiffness contribution is multiplied by `alpha_f * vol`. Inertia in the RHS
-uses `alpha_m * a_trial + (1-alpha_m) * a_n`. `Node2Particle()` later evaluates
+uses `alpha_m * a_trial + (1-alpha_m) * a_n`. `Node2Particle(ts)` later evaluates
 the endpoint deformation gradient with coefficient 1 and commits particle state.
 Assembly writes the member determinant and volume even while deformation-gradient
 and stress outputs are temporary; these members are not isolated trial-state storage.

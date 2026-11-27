@@ -184,10 +184,10 @@ the trial deformation gradient.
 `LumpedLagrangeMultiplier()` interpolates the step-start solid and fluid volume
 fractions and their gradients with `MakeSF()` at quadrature points. It integrates
 `||phi_s * grad(phi_f) - phi_f * grad(phi_s)||` against the shape functions
-to form `nlm_lump_local`. `NodeVarComm(..., 0)` sums the local contributions
-into `nlm_lump` at shared control points. The constraint-row Jacobian uses
-the local weight. The endpoint-velocity RHS and activation use the synchronized
-weight.
+to form `nlm_lump_local`. After copying those weights to `nlm_lump`,
+`NodeVarComm(grid_.part, nlm_lump, 0)` sums contributions at shared control
+points. The constraint-row Jacobian uses the local weight. The endpoint-velocity
+RHS and activation use the synchronized weight.
 
 `BuildActiveDOFs()` uses the absolute nodal-mass threshold directly:
 
@@ -215,14 +215,14 @@ alone does not establish particle nonpenetration.
 The driver calls the following sequence after the coupled solve:
 
 ```cpp
-fsi.solid_.Node2Particle();
-fsi.fluid_.Node2Particle();
+fsi.solid_.Node2Particle(ts);
+fsi.fluid_.Node2Particle(ts);
 fsi.solid_.MoveParticle();
 fsi.CorrectFluidPenetration();
 fsi.fluid_.MoveParticle();
 ```
 
-`Node2Particle()` commits coordinates and kinematics, including the existing
+`Node2Particle(ts)` commits coordinates and kinematics, including the existing
 particle shifting. `MoveParticle()` determines particle ownership and migrates
 data; the fluid version also handles inflow. Correcting between the two migration
 calls makes the final solid particles available on their owning ranks and lets
@@ -230,8 +230,9 @@ fluid ownership be determined from corrected coordinates.
 
 After solid migration, `CorrectFluidPenetration()` maps the final solid particle
 volumes to control points with `LocateLocalElement()`, `MakeSF()` and
-`StandardVarP2G()`. It sums shared contributions with `NodeVarComm(..., 0)`,
-divides by `nvol`, and clamps the temporary solid phase coefficients to `[0, 1]`.
+`StandardVarP2G()`. It sums shared contributions with
+`NodeVarComm(grid_.part, final_phi, 0)`, divides by `nvol`, and clamps the
+solid phase coefficients to `[0, 1]`.
 This field represents the solid after the particle update and supplies the
 geometric interface at `phi_s = 0.5`.
 

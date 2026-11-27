@@ -68,7 +68,7 @@ The interface residual compares `v_s` with the fluid iterate `fluid_.nvel_k`.
 
 ### Fluid Side (`FSIFluid`)
 
-`BCNRSet()` applies the regular fluid BCs to the n+1 iterate, then sets
+`BCNRSet(ts)` applies the regular fluid BCs to the n+1 iterate, then sets
 `nvel_k` at the interface nodes to the relaxed interface velocity `fsi_intf.fbc`. `BuildPetscBCList()` and
 `BCResidualSet()` add the interface velocity components to the constrained
 rows, so the PETSc and native paths treat them as Dirichlet values.

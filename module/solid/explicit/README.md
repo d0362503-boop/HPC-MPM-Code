@@ -23,8 +23,8 @@ The class supports the same interpolation family as the fluid MPM path (PIC, FLI
 
 ## Entry Points
 
-`DataInput()` reads the case; `Particle2Node()`, `SolveSolid()`, and
-`Node2Particle()` perform the cycle above. `DoMUSL()` reprojects particle
+`DataInput(grid, params)` reads the case. `Particle2Node(ts)`, `SolveSolid(ts)`,
+and `Node2Particle(ts)` perform the cycle above. `DoMUSL(ts)` reprojects particle
 momentum after the velocity update, before updating position and deformation.
 
 ## F-bar Projection

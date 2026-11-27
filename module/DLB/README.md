@@ -2,7 +2,7 @@
 
 > Runtime repartitioning of the background mesh across MPI ranks, driven by the
 > material-point distribution. The calling material owner selects whether and
-> when to enable repartitioning through `do_dlb` and `ApplyDLB()`.
+> when to enable repartitioning through `do_dlb` and `ApplyDLB(grid)`.
 
 ## Purpose
 
@@ -32,21 +32,21 @@ void UpdateDLBRegions(const std::vector<Region> &, Grid &);          // apply + 
 ## Activation and Call Sites
 
 - The caller sets `do_dlb` and selects a collective repartitioning cadence.
-- One possible caller policy replaces ordinary migration at output steps
-  when DLB is enabled and more than one rank participates:
+- The standalone fluid MPM driver repartitions at output steps when DLB is
+  enabled and more than one rank participates. All other steps call `MoveParticle()`:
 
 ```cpp
 const bool is_dlb_step = wp.do_dlb && (ts.istep % params.iout == 0);
-if (nprocs != 1) is_dlb_step ? wp.ApplyDLB() : wp.MoveParticle();
+(nprocs != 1 && is_dlb_step) ? wp.ApplyDLB(grid) : wp.MoveParticle();
 ```
 
-- `StabilizedMPM::ApplyDLB()` calls `MaterialPoint::ApplyDLB()` and then rebuilds the
-  Navier–Stokes matrix structure (`NS_.BuildCrsMat(16)`); the implicit solid override
+- The fluid override calls `MaterialPoint::ApplyDLB(grid)` and then rebuilds the
+  Navier–Stokes matrix structure (`NS_.BuildCrsMat(16)`). The implicit solid override
   does the same with `SM_.BuildCrsMat(9)`.
 
 ## The `ApplyDLB()` Pipeline
 
-`MaterialPoint::ApplyDLB()` (`module/mpi_data.cpp`) runs six stages in order:
+`MaterialPoint::ApplyDLB(grid)` (`module/mpi_data.cpp`) runs six stages in order:
 
 ```text
 MoveParticle()                       // 1. ordinary neighbor migration + inflow,
@@ -56,8 +56,10 @@ SelectSamples(coord)                 // 2. strided local samples; the interval
 ComputeDLBRegions(grid, local_samples)  // 3. root cuts new regions, MPI_Bcast
 RebalanceDLBParticles(regions)          // 4. global particle migration to new owners
 UpdateDLBRegions(regions, grid)         // 5. new mesh sizes + overlap tables + weights
-BuildMesh(); BuildControlPoint();
-ComputeNodalVol(); RebuildBC();         // 6. partition-dependent data
+BuildMesh(grid.mesh)
+BuildControlPoint(grid.mesh, grid.cmesh)
+ComputeNodalVol(params, grid)
+RebuildBC()                            // 6. rebuild grid and BC data
 ```
 
 The physics class then rebuilds its solver system after these six stages.
@@ -99,8 +101,8 @@ sampling, not random sampling; particle ordering can bias the sample distributio
 
 ## Repartitioning: Recursive Coordinate Bisection
 
-`ComputeDLBRegions` (root only) cuts the fixed rank grid `nxyr = (nx, ny, nz)` in z,
-then y, then x:
+`ComputeDLBRegions` is collective. The root rank cuts the fixed rank grid
+`nxyr = (nx, ny, nz)` in z, then y, then x:
 
 ```text
 z_cuts = CutsFromSamples(all samples, dir=z, 0 .. xyelemw[2]-1, nz)

@@ -78,9 +78,9 @@ to or below it produces an inactive local indicator. FEM control points remain
 active without a mass test.
 
 The function first evaluates the mass test on all `nodec` control points,
-including ghosts. It then calls `NodeVarComm(local_row_active, 0)` to add the
-integer indicators across overlaps and sets `active_row_mask[nid]` from whether
-the synchronized sum is positive. A shared control point is therefore active
+including ghosts. It then calls `NodeVarComm(grid_.part, local_row_active, 0)`
+to add the integer indicators across overlaps. It sets `active_row_mask[nid]`
+when the synchronized sum is positive. A shared control point is therefore active
 if any overlapping rank marks it active. This is an OR decision; the indicator
 is not multiplied by `dbc` or averaged.
 

@@ -17,6 +17,7 @@ class DataPartitioner {
      */
     DataPartitioner(Grid &grid, RunParams &params) : grid_(grid), params_(params) {}
 
+    /** @brief Destroy the partitioner through the base type. */
     virtual ~DataPartitioner() = default;
 
     /**

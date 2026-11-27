@@ -127,8 +127,9 @@ class StabilizedFEM : public MaterialPoint, public NonlinearProblem {
     /**
      * @brief Apply BCs to the n+1 iterate, update the n+1 acceleration and the
      *        SUPG/PSPG/LSIC coefficients at n+α_f, then assemble the Picard tangent
-     *        and residual (derivatives of τ are neglected).
+     *        and residual.
      * @param ts Current time state; its load factor `facl` scales BCs and body forces.
+     * @note The tangent freezes the advecting velocity and stabilization weights.
      */
     void AssembleNewtonSystem(const TimeState &ts) override;
 

@@ -28,7 +28,10 @@ class MPMFEMFSIFluidDivider {
     Grid &grid_;        // grid being partitioned
     RunParams &params_; // run parameters of the case
 
-    /** @brief Load FEM-fluid velocity/pressure BCs (uwbc/vwbc/wwbc/hpbc). */
+    /**
+     * @brief Load FEM-fluid velocity/pressure BCs (uwbc/vwbc/wwbc/hpbc).
+     * @param infile Input stream positioned at the FEM-fluid boundary-condition blocks.
+     */
     void LoadBoundaryData(std::ifstream &infile);
 
     /**
@@ -40,7 +43,10 @@ class MPMFEMFSIFluidDivider {
      */
     void PartitionBCs(const std::array<int, 3> &cp_min, const std::array<int, 3> &cp_max);
 
-    /** @brief Write partitioned FEM-fluid BCs (uwbc/vwbc/wwbc/hpbc). */
+    /**
+     * @brief Write partitioned FEM-fluid BCs (uwbc/vwbc/wwbc/hpbc).
+     * @param outfile Output stream for this rank's FEM-fluid boundary-condition blocks.
+     */
     void WriteBoundaryData(std::ofstream &outfile);
 
     MaterialPoint mesh_;           // loaded FEM-fluid mesh BCs
@@ -61,10 +67,16 @@ class MPMFEMFSIDivider : public DataPartitioner {
     /** @brief Return the MPM-FEM FSI case label. */
     std::string CaseName() const override;
 
-    /** @brief Load solid then FEM-fluid boundary conditions (file block order). */
+    /**
+     * @brief Load solid then FEM-fluid boundary conditions (file block order).
+     * @param infile Input stream positioned at the first solid boundary-condition block.
+     */
     void LoadBoundaryData(std::ifstream &infile) override;
 
-    /** @brief Load solid particle records (the FEM fluid has no particles). */
+    /**
+     * @brief Load solid particle records (the FEM fluid has no particles).
+     * @param infile Input stream positioned at the global solid particle records.
+     */
     void LoadPointData(std::ifstream &infile) override;
 
     /**
@@ -76,10 +88,16 @@ class MPMFEMFSIDivider : public DataPartitioner {
      */
     void PartitionProcess(int rank_id) override;
 
-    /** @brief Write solid then FEM-fluid partitioned boundary conditions. */
+    /**
+     * @brief Write solid then FEM-fluid partitioned boundary conditions.
+     * @param outfile Output stream for this rank's solid and FEM-fluid boundary-condition blocks.
+     */
     void WriteBoundaryData(std::ofstream &outfile) override;
 
-    /** @brief Write partitioned solid particle records. */
+    /**
+     * @brief Write partitioned solid particle records.
+     * @param outfile Output stream for this rank's solid particle records.
+     */
     void WritePointData(std::ofstream &outfile) override;
 
   private:

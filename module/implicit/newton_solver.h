@@ -11,6 +11,7 @@
  */
 class NonlinearProblem {
   public:
+    /** @brief Destroy a nonlinear problem through the shared solver interface. */
     virtual ~NonlinearProblem() = default;
 
     /** @brief Prepare the step: reset increments and Newton scratch state before the first iteration. */

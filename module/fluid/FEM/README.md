@@ -15,7 +15,7 @@ The solver uses a **SUPG/PSPG stabilized formulation** with **generalized-α tim
 
 | File | Responsibility |
 |------|----------------|
-| `stabilized_fem.h` | Class declaration and inline default constructor |
+| `stabilized_fem.h` | Class declaration and constructor taking `Grid` and `RunParams` |
 | `solve_ns_fem.cpp` | Time integration, stabilization-coefficient calculation, system assembly, and linear solve |
 | `phase_field.cpp`  | Phase-field initialization, volume-fraction projection (`Particle2NodePhi`), material-property blending (`SetPFDomain`), liquid-volume calculation (`CalLiquidVol`) |
 | `fluid_fem_data_io.cpp` | Restart I/O (`RestartInput` / `RestartOutput`), per-step field output (`OutputMeshDataVTKHDF`), VTK nodal interpolation (`Cp2NodeVTK`) |
@@ -32,7 +32,7 @@ for velocity/pressure constraints through two default hooks in
 - `BuildPetscBCList(CrsMat&)`: collects global IDs from `ubc/vbc/wbc/pbc`
   for PETSc row/column elimination.
 - `BCResidualSet(std::vector<double>&)`: zeros constrained residual entries.
-- `BCNRSet()` (virtual): writes Dirichlet values into the n+1 iterate
+- `BCNRSet(ts)` (virtual): writes Dirichlet values into the n+1 iterate
   `nvel_k` / `npres_k` before each assembly. Accelerations get no separate
   BC; they follow from the generalized-α velocity relation.
 
@@ -65,9 +65,10 @@ adv_vel  = (1 - α_f) · nvel   +  α_f · nvel_k     // v^{n+α_f}
 p_af     = (1 - α_f) · npres  +  α_f · npres_k    // p^{n+α_f}
 naccel_am = (1 - α_m) · naccel + α_m · naccel_k   // a^{n+α_m}
 ```
-Only ∂v/∂t is evaluated at n+α_m; convection, viscosity, pressure, and the
-stabilization terms are evaluated at n+α_f (pressure follows Scheme-2 of
-Liu et al. 2020).
+The velocity time derivative uses n+α_m in the Galerkin, SUPG, and PSPG terms.
+Convection, viscosity, continuity, pressure, and the velocity used for the
+stabilization weights use n+α_f. The pressure treatment follows Scheme 2 of
+Liu et al. (2020).
 
 ### SUPG/PSPG Stabilization Coefficients
 Per-element values `tau_supg` (SUPG/PSPG, Tezduyar type) and `tau_lsic` (LSIC) are

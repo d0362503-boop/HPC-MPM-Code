@@ -46,18 +46,31 @@ class FluidDivider : public DataPartitioner {
      *
      * Reads the four control-point BC blocks (ubc/vbc/wbc/pbc) followed by the
      * three inflow BC blocks (uinfbc/vinfbc/winfbc, element IDs without values).
+     * @param infile Input stream positioned at the global fluid boundary-condition blocks.
      */
     void LoadBoundaryData(std::ifstream &infile) override;
 
-    /** @brief Load fluid particle records (id, material, mass, volume). */
+    /**
+     * @brief Load fluid particle records (id, material, mass, volume).
+     * @param infile Input stream positioned at the global fluid particle records.
+     */
     void LoadPointData(std::ifstream &infile) override;
 
-    /** @brief Run point partitioning, mesh windowing, and BC renumbering for one rank. */
+    /**
+     * @brief Run point partitioning, mesh windowing, and BC renumbering for one rank.
+     * @param rank_id MPI rank whose fluid partition is being built.
+     */
     void PartitionProcess(int rank_id) override;
 
-    /** @brief Write partitioned fluid boundary conditions, inflow blocks included. */
+    /**
+     * @brief Write partitioned fluid boundary conditions, inflow blocks included.
+     * @param outfile Output stream for this rank's fluid boundary-condition blocks.
+     */
     void WriteBoundaryData(std::ofstream &outfile) override;
 
-    /** @brief Write partitioned fluid particle records. */
+    /**
+     * @brief Write partitioned fluid particle records.
+     * @param outfile Output stream for this rank's fluid particle records.
+     */
     void WritePointData(std::ofstream &outfile) override;
 };

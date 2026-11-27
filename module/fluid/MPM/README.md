@@ -8,11 +8,11 @@ This directory contains the **stabilized Material Point Method (MPM) fluid solve
 
 | File                       | Responsibility                                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `stabilized_mpm.h`         | `StabilizedMPM` class declaration, inflow buffer `ifp`, NS system owner, stabilization selector             |
+| `stabilized_mpm.h`         | `StabilizedMPM` class, inflow buffer `ifp`, NS system, stabilization selector, `ApplyDLB` override |
 | `var_trans_fluid.cpp`      | `Particle2Node` (P2G) and `Node2Particle` (G2P), including APIC `inv_Dmat` / `InvDmatG2P` and particle-shifting call |
 | `solve_ns_mpm.cpp`         | Newton–Raphson loop, VMS/PSPG stabilization coefficients, NS assembly/solve                                 |
 | `fluid_point_inflow.cpp`   | Empty-mesh and filled-mesh inflow particle generation                                                       |
-| `fluid_material_point.cpp` | `InitializePointData`, `MoveParticle` (migration + inflow), `MigrateParticleData`, `ApplyDLB`, `RebuildBC`  |
+| `fluid_material_point.cpp` | `InitializePointData`, `MoveParticle` (migration + inflow), `MigrateParticleData`, `RebuildBC`  |
 | `fluid_mpm_data_io.cpp`    | Input/output of BC/point data and plain-text restart; captures global BC IDs when `do_dlb` is on            |
 
 Shared helpers live outside this directory:
@@ -53,14 +53,14 @@ for ts.istep = ista .. iend
     Particle2Node(ts)
     SolveNS(ts)
     Node2Particle(ts)       (commits nodal kinematics and npres <- npres_k first)
-    if (wp.do_dlb && ts.istep % params.iout == 0)
-        ApplyDLB(grid)      (if nprocs > 1: MoveParticle + repartition + rebuilds)
+    if (nprocs != 1 && wp.do_dlb && ts.istep % params.iout == 0)
+        ApplyDLB(grid)      (MoveParticle + repartition + rebuilds)
     else
-        MoveParticle()      (if nprocs > 1)
+        MoveParticle()
     output / restart    (if ts.istep % params.iout == 0)
 ```
 
-`ApplyDLB()` redistributes the background mesh across ranks from the particle
+`ApplyDLB(grid)` redistributes the background mesh across ranks from the particle
 distribution and rebuilds the partition-dependent data (mesh, `nvol`, BCs, `NS_`).
 See the [DLB guide](../../DLB/README.md) for the pipeline and its invariants.
 
@@ -183,7 +183,7 @@ Inflow generation follows a three-layer dispatch (`InflowMeshisFilled` → `Gene
 - `GenerateInflowParticlesFilledMesh` clones particles that moved one cell inward; it copies the scheme-specific state (velocity/acceleration gradients or APIC B-matrices) by G2P interpolation.
 - `MoveParticle` communicates the scheme-specific state for both regular migration and inflow appending.
 
-> **Calling-order note:** `MeshPointLinklist()` is called **before** `SolveNS()`/`Node2Particle()`, while inflow runs inside `MoveParticle()` **after** particle advection.  The linked list is therefore intentionally one step behind; the filled-mesh generator relies on this.
+> **Calling-order note:** `MeshPointLinklist()` is called **before** `SolveNS(ts)`/`Node2Particle(ts)`, while inflow runs inside `MoveParticle()` **after** particle advection.  The linked list is therefore intentionally one step behind; the filled-mesh generator relies on this.
 
 ## Data I/O
 

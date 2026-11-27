@@ -74,6 +74,7 @@ class MaterialPoint {
      */
     virtual void MigrateParticleData() {}
 
+    /** @brief Transfer particles to their owning ranks after their positions change. */
     virtual void MoveParticle() {};
     // ------------------------------
 
@@ -179,6 +180,10 @@ class MaterialPoint {
     // ---------------
 
     // --- Linear-system callbacks used by CrsMat ---
+    /**
+     * @brief Hook to register constrained control-point components for matrix elimination.
+     * @param mat Linear system receiving the constrained equation IDs.
+     */
     virtual void BuildPetscBCList(CrsMat &mat) {};
 
     /**
@@ -199,6 +204,10 @@ class MaterialPoint {
         return;
     }
 
+    /**
+     * @brief Hook to zero residual entries at constrained control-point components.
+     * @param rr Control-point residual vector in the solver's component layout.
+     */
     virtual void BCResidualSet(std::vector<double> &rr) {};
     // ------------------------------------------
 
@@ -216,10 +225,16 @@ class MaterialPoint {
     std::array<std::array<double, 6>, 6> stif_mat;
     std::vector<std::array<std::array<double, 3>, 3>> def_grad, def_grad_bar, delta_def_grad_bar;
 
+    /**
+     * @brief Read this field's initial material points and their properties.
+     * @param infile Input stream positioned at this field's particle records.
+     */
     virtual void InputPointData(std::ifstream &infile) {};
 
+    /** @brief Initialize state arrays for the loaded material points. */
     virtual void InitializePointData() {};
 
+    /** @brief Restore this field's state from its per-rank checkpoint. */
     virtual void RestartInput() {};
 
     /**
@@ -229,6 +244,7 @@ class MaterialPoint {
      */
     virtual void OutputPointDataVTKHDF(int iview, const TimeState &ts) {};
 
+    /** @brief Write this field's state to its per-rank checkpoint. */
     virtual void RestartOutput() {};
 
     bool infbc_isfilled = false;
@@ -260,7 +276,7 @@ class MaterialPoint {
      * @brief Determine the inward/outward sign for an inflow boundary cell.
      * @param dir     Inflow direction index (0=x, 1=y, 2=z).
      * @param mesh_id Local element index along direction `dir`.
-     * @return +1 for the lower domain boundary, -1 for the upper domain boundary.
+     * @return +1 at the lower domain boundary, -1 at the upper boundary, or 0 in the interior.
      */
     int GetInflowSign(int dir, int mesh_id) {
 
@@ -296,10 +312,23 @@ class MaterialPoint {
      */
     void AssignUniqueInflowIds(MaterialPoint &ifp) const;
 
+    /** @brief Prepare new particles for insertion at the active inflow boundaries. */
     virtual void InflowParticles() {};
 
+    /**
+     * @brief Generate particles in unfilled inflow boundary cells.
+     * @param dir Inflow direction index (0=x, 1=y, 2=z).
+     * @param ifp Buffer receiving the new inflow particles.
+     * @param infbc Inflow boundary cells for direction `dir`.
+     */
     virtual void GenerateInflowParticlesEmptyMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {};
 
+    /**
+     * @brief Replenish filled inflow cells from particles that moved into the domain.
+     * @param dir Inflow direction index (0=x, 1=y, 2=z).
+     * @param ifp Buffer receiving the new inflow particles.
+     * @param infbc Inflow boundary cells for direction `dir`.
+     */
     virtual void GenerateInflowParticlesFilledMesh(int dir, MaterialPoint &ifp, const BoundaryCondition &infbc) {};
 
     /**
@@ -363,6 +392,8 @@ class MaterialPoint {
      * IEEE Transactions on Visualization and Computer Graphics, 2012,
      * Sec. 5.2, Eq. (18).
      *
+     * @param displ Physical displacement of each particle over the step, before shifting.
+     *              Each shift is capped at one tenth of this displacement's magnitude.
      * @return Correction displacement vector for each particle.
      */
     std::vector<std::array<double, 3>> PairwiseRepulsivePST(const std::vector<std::array<double, 3>> &displ);
@@ -385,6 +416,7 @@ class MaterialPoint {
      */
     virtual void Particle2Node(const TimeState &ts) {};
 
+    /** @brief Clear particle velocity accumulators for G2P, preserving the FLIP velocity history. */
     void PICFamilyVelReset() {
         if (this->solswitch != MapScheme::FLIP) { VectorAssign(this->num, this->vel); }
         if (this->solswitch == MapScheme::TPIC) {
@@ -405,16 +437,17 @@ class MaterialPoint {
     void VelP2G(int pid, int nid, double sfi);
 
     /**
-     * @brief Gather velocity from control points to a particle using FLIP/PIC/TPIC/APIC.
+     * @brief Gather velocity and scheme-specific state for PIC, TPIC, or APIC.
      * @param pid Particle index.
      * @param ni  Local node index within the element.
-     * @param nid Global control-point index.
+     * @param nid Control-point index local to this MPI rank.
      * @param sfi Shape-function value at the control point.
-     * @param dsf Shape-function gradients at the control point (used by TPIC/APIC).
+     * @param dsf Element shape-function gradients at the particle (used by TPIC).
      */
     void PICFamilyVelG2P(int pid, int ni, int nid, double sfi, //
                          const std::vector<std::array<double, 3>> &dsf);
 
+    /** @brief Clear particle acceleration and scheme-specific accumulators before G2P. */
     void PICFamilyAccelReset() {
         VectorAssign(this->num, this->accel);
         if (this->solswitch == MapScheme::TPIC) {
@@ -438,9 +471,9 @@ class MaterialPoint {
      * @brief Gather acceleration from control points to a particle using FLIP/PIC/TPIC/APIC.
      * @param pid Particle index.
      * @param ni  Local node index within the element.
-     * @param nid Global control-point index.
+     * @param nid Control-point index local to this MPI rank.
      * @param sfi Shape-function value at the control point.
-     * @param dsf Shape-function gradients at the control point (used by TPIC/APIC).
+     * @param dsf Element shape-function gradients at the particle (used by TPIC).
      */
     void PICFamilyAccelG2P(int pid, int ni, int nid, double sfi, //
                            const std::vector<std::array<double, 3>> &dsf);
@@ -454,7 +487,7 @@ class MaterialPoint {
     /**
      * @brief Map a per-particle scalar variable to control points without mass weighting.
      * @param pid       Particle index.
-     * @param nid       Global control-point index.
+     * @param nid       Control-point index local to this MPI rank.
      * @param sfi       Shape-function value at the control point.
      * @param point_var Per-particle scalar values.
      * @param node_var  Nodal/control-point accumulator vector.
@@ -465,7 +498,7 @@ class MaterialPoint {
     /**
      * @brief Map a per-particle scalar variable to control points with mass weighting.
      * @param pid        Particle index.
-     * @param nid        Global control-point index.
+     * @param nid        Control-point index local to this MPI rank.
      * @param sfi        Shape-function value at the control point.
      * @param point_mass Per-particle mass values.
      * @param point_var  Per-particle scalar values.
@@ -476,9 +509,9 @@ class MaterialPoint {
                         std::vector<T> &node_var) const noexcept;
 
     /**
-     * @brief Map a per-particle vector variable (one component) to control points with mass weighting.
+     * @brief Map all three components of a particle vector to control points with mass weighting.
      * @param pid        Particle index.
-     * @param nid        Global control-point index.
+     * @param nid        Control-point index local to this MPI rank.
      * @param sfi        Shape-function value at the control point.
      * @param point_mass Per-particle mass values.
      * @param point_var  Per-particle vector values.
@@ -488,6 +521,7 @@ class MaterialPoint {
     void StandardVarP2G(int pid, int nid, double sfi, const std::vector<T> &point_mass,
                         const std::vector<std::array<T, 3>> &point_var, std::vector<T> &node_var) const noexcept;
     // -----------------------------------
+    /** @brief Destroy the material-point state through the base type. */
     virtual ~MaterialPoint() = default;
 };
 
